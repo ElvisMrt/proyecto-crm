@@ -109,6 +109,11 @@ const InvoiceDetail = () => {
 
   const statusBadge = getStatusBadge(invoice.status);
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  
+  // Calculate days overdue if applicable
+  const daysOverdue = invoice.dueDate && invoice.status === 'OVERDUE'
+    ? Math.floor((new Date().getTime() - new Date(invoice.dueDate).getTime()) / (1000 * 60 * 60 * 24))
+    : null;
 
   return (
     <div className="space-y-6">
@@ -235,7 +240,77 @@ const InvoiceDetail = () => {
               <p className="text-lg font-semibold text-gray-900">{invoice.branch.name}</p>
             </div>
           )}
+          {invoice.user && (
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Creado por</p>
+              <p className="text-lg font-semibold text-gray-900">{invoice.user.name}</p>
+            </div>
+          )}
+          {invoice.cancelledAt && (
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Fecha de Anulación</p>
+              <p className="text-lg font-semibold text-gray-900">{formatDate(invoice.cancelledAt)}</p>
+            </div>
+          )}
+          {invoice.cancelledByUser && (
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Anulado por</p>
+              <p className="text-lg font-semibold text-gray-900">{invoice.cancelledByUser.name || '-'}</p>
+            </div>
+          )}
         </div>
+
+        {/* Información de Cliente */}
+        {invoice.client && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-md border border-blue-200">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Información del Cliente</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Nombre</p>
+                <p className="text-sm font-medium text-gray-900">{invoice.client.name}</p>
+              </div>
+              {invoice.client.identification && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Identificación</p>
+                  <p className="text-sm font-medium text-gray-900">{invoice.client.identification}</p>
+                </div>
+              )}
+              {invoice.client.phone && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Teléfono</p>
+                  <p className="text-sm font-medium text-gray-900">{invoice.client.phone}</p>
+                </div>
+              )}
+              {invoice.client.email && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Email</p>
+                  <p className="text-sm font-medium text-gray-900">{invoice.client.email}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Alerta de Vencimiento */}
+        {daysOverdue !== null && daysOverdue > 0 && (
+          <div className="mb-6 p-4 bg-red-50 rounded-md border border-red-200">
+            <div className="flex items-center">
+              <HiX className="w-5 h-5 text-red-600 mr-2" />
+              <div>
+                <p className="text-sm font-semibold text-red-900">Factura Vencida</p>
+                <p className="text-xs text-red-700">Esta factura está vencida hace {daysOverdue} día{daysOverdue !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Motivo de Anulación */}
+        {invoice.cancellationReason && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+            <p className="text-sm font-medium text-gray-700 mb-1">Motivo de Anulación</p>
+            <p className="text-sm text-gray-600">{invoice.cancellationReason}</p>
+          </div>
+        )}
 
         {invoice.observations && (
           <div className="mb-6 p-4 bg-gray-50 rounded-md">

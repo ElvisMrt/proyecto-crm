@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { salesApi, inventoryApi, clientsApi, cashApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { HiSearch } from 'react-icons/hi';
@@ -26,11 +26,23 @@ const POSTab = () => {
   const [clients, setClients] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [includeTax, setIncludeTax] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashStatus, setCashStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [amountReceived, setAmountReceived] = useState<number>(0);
+  const [saleResult, setSaleResult] = useState<any>(null); // Store sale result for success screen
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounced(search);
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     fetchProducts();
@@ -108,7 +120,7 @@ const POSTab = () => {
     }
   };
 
-  const addToCart = (product: Product) => {
+  const addToCart = useCallback((product: Product) => {
     const existingItem = cart.find((item) => item.productId === product.id);
     
     if (existingItem) {
@@ -136,9 +148,9 @@ const POSTab = () => {
         },
       ]);
     }
-  };
+  }, [cart]);
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
       setCart(cart.filter((item) => item.productId !== productId));
       return;
@@ -150,9 +162,9 @@ const POSTab = () => {
           : item
       )
     );
-  };
+  }, [cart]);
 
-  const updateDiscount = (productId: string, discount: number) => {
+  const updateDiscount = useCallback((productId: string, discount: number) => {
     setCart(
       cart.map((item) =>
         item.productId === productId
@@ -160,24 +172,37 @@ const POSTab = () => {
           : item
       )
     );
-  };
+  }, [cart]);
 
-  const calculateTotal = () => {
+  const calculateTotal = useCallback(() => {
     return cart.reduce((sum, item) => sum + item.subtotal, 0);
-  };
+  }, [cart]);
 
-  const calculateTotalDiscount = () => {
+  const calculateTotalDiscount = useCallback(() => {
     return cart.reduce((sum, item) => sum + item.discount, 0);
-  };
+  }, [cart]);
 
-  const calculateTax = () => {
+  const calculateTax = useCallback(() => {
     if (!includeTax) return 0;
     return calculateTotal() * 0.18;
-  };
+  }, [includeTax, calculateTotal]);
 
-  const calculateFinalTotal = () => {
+  const calculateFinalTotal = useCallback(() => {
     return calculateTotal() + calculateTax();
-  };
+  }, [calculateTotal, calculateTax]);
+
+  // Memoize calculated values for performance
+  const total = useMemo(() => calculateTotal(), [calculateTotal]);
+  const totalDiscount = useMemo(() => calculateTotalDiscount(), [calculateTotalDiscount]);
+  const tax = useMemo(() => calculateTax(), [calculateTax]);
+  const finalTotal = useMemo(() => calculateFinalTotal(), [calculateFinalTotal]);
+
+  // Update amountReceived when total changes (for cash payments)
+  useEffect(() => {
+    if (paymentMethod === 'CASH' && (amountReceived === 0 || amountReceived < finalTotal)) {
+      setAmountReceived(finalTotal);
+    }
+  }, [finalTotal, paymentMethod]);
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -187,6 +212,11 @@ const POSTab = () => {
 
     if (paymentMethod === 'CASH' && !cashStatus) {
       showToast('La caja debe estar abierta para realizar ventas en efectivo', 'error');
+      return;
+    }
+
+    if (paymentMethod === 'CASH' && amountReceived < finalTotal) {
+      showToast('El monto recibido debe ser mayor o igual al total', 'error');
       return;
     }
 
@@ -211,13 +241,26 @@ const POSTab = () => {
         requestData.clientId = selectedClient;
       }
 
-      await salesApi.createPOSSale(requestData);
+      // Include amountReceived for cash payments
+      if (paymentMethod === 'CASH' && amountReceived > 0) {
+        requestData.amountReceived = amountReceived;
+      }
 
-      showToast('Venta realizada exitosamente', 'success');
-      setCart([]);
-      setSelectedClient('');
-      setIncludeTax(false);
-      checkCashStatus();
+      const response = await salesApi.createPOSSale(requestData);
+
+      // If response has invoice property, it's the new format with full invoice
+      if (response.invoice) {
+        setSaleResult(response);
+        showToast('Venta realizada exitosamente', 'success');
+      } else {
+        // Fallback for old format
+        showToast('Venta realizada exitosamente', 'success');
+        setCart([]);
+        setSelectedClient('');
+        setIncludeTax(false);
+        setAmountReceived(0);
+        checkCashStatus();
+      }
     } catch (error: any) {
       console.error('Error creating POS sale:', error);
       showToast(error.response?.data?.error?.message || 'Error al procesar la venta', 'error');
@@ -227,11 +270,134 @@ const POSTab = () => {
   };
 
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.code.toLowerCase().includes(search.toLowerCase())
-  );
+  // Memoize filtered products for performance
+  const filteredProducts = useMemo(() => {
+    if (!searchDebounced.trim()) {
+      // Show most frequently used products first (could be enhanced with actual usage tracking)
+      return products.slice(0, 50); // Limit initial display
+    }
+    const searchLower = searchDebounced.toLowerCase();
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchLower) ||
+        p.code.toLowerCase().includes(searchLower)
+    );
+  }, [products, searchDebounced]);
+
+  const handleNewSale = () => {
+    setSaleResult(null);
+    setCart([]);
+    setSelectedClient('');
+    setIncludeTax(false);
+    setAmountReceived(0);
+    setPaymentMethod('CASH');
+    checkCashStatus();
+  };
+
+  const handlePrint = () => {
+    if (saleResult?.invoice) {
+      printInvoice(saleResult.invoice);
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (saleResult?.invoice) {
+      try {
+        if (!saleResult.invoice.client?.phone) {
+          showToast('El cliente no tiene número de teléfono registrado', 'error');
+          return;
+        }
+        await sendInvoiceWhatsApp(saleResult.invoice);
+        showToast('Factura enviada por WhatsApp', 'success');
+      } catch (error) {
+        console.error('Error sending WhatsApp:', error);
+        showToast('Error al enviar por WhatsApp', 'error');
+      }
+    }
+  };
+
+  // Success screen after sale
+  if (saleResult?.invoice) {
+    const invoice = saleResult.invoice;
+    const change = saleResult.change || 0;
+    const amountReceived = saleResult.amountReceived || invoice.total;
+
+    return (
+      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Venta Realizada Exitosamente!</h2>
+          <p className="text-gray-600">Factura: {invoice.number}</p>
+          {invoice.ncf && <p className="text-gray-600">NCF: {invoice.ncf}</p>}
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-6 mb-6">
+          <div className="space-y-3">
+            <div className="flex justify-between text-lg">
+              <span className="font-medium text-gray-700">Total:</span>
+              <span className="font-bold text-gray-900">
+                RD$ {Number(invoice.total).toLocaleString()}
+              </span>
+            </div>
+            {invoice.paymentMethod === 'CASH' && (
+              <>
+                <div className="flex justify-between text-lg">
+                  <span className="font-medium text-gray-700">Monto Recibido:</span>
+                  <span className="font-bold text-gray-900">
+                    RD$ {Number(amountReceived).toLocaleString()}
+                  </span>
+                </div>
+                {change > 0 && (
+                  <div className="flex justify-between text-xl border-t pt-3 mt-3">
+                    <span className="font-bold text-gray-900">Vuelto:</span>
+                    <span className="font-bold text-green-600">
+                      RD$ {change.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={handlePrint}
+            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Imprimir Ticket
+          </button>
+          {invoice.client?.phone && (
+            <button
+              onClick={handleSendWhatsApp}
+              className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Enviar por WhatsApp
+            </button>
+          )}
+          <button
+            onClick={handleNewSale}
+            className="px-6 py-3 bg-gray-600 text-white rounded-md hover:bg-gray-700 font-medium flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Venta
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -339,7 +505,14 @@ const POSTab = () => {
           <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pago</label>
           <select
             value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
+            onChange={(e) => {
+              setPaymentMethod(e.target.value);
+              if (e.target.value !== 'CASH') {
+                setAmountReceived(0);
+              } else {
+                setAmountReceived(finalTotal);
+              }
+            }}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="CASH">Efectivo</option>
@@ -347,6 +520,39 @@ const POSTab = () => {
             <option value="MIXED">Mixto</option>
           </select>
         </div>
+
+        {paymentMethod === 'CASH' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Monto Recibido
+            </label>
+            <input
+              type="number"
+              min={finalTotal}
+              step="0.01"
+              value={amountReceived || ''}
+              onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)}
+              onFocus={(e) => {
+                if (!amountReceived || amountReceived === 0) {
+                  e.target.value = finalTotal.toString();
+                  setAmountReceived(finalTotal);
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              placeholder={finalTotal.toLocaleString()}
+            />
+            {amountReceived > 0 && amountReceived < finalTotal && (
+              <p className="text-xs text-red-600 mt-1">
+                El monto recibido es menor que el total
+              </p>
+            )}
+            {amountReceived > finalTotal && (
+              <p className="text-xs text-green-600 mt-1">
+                Vuelto: RD$ {(amountReceived - finalTotal).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-gray-200 pt-4 mb-4">
           <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -420,29 +626,34 @@ const POSTab = () => {
         <div className="border-t border-gray-200 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span>Subtotal:</span>
-            <span className="font-medium">RD$ {calculateTotal().toLocaleString()}</span>
+            <span className="font-medium">RD$ {total.toLocaleString()}</span>
           </div>
-          {calculateTotalDiscount() > 0 && (
+          {totalDiscount > 0 && (
             <div className="flex justify-between text-sm text-red-600">
               <span>Descuentos:</span>
-              <span>-RD$ {calculateTotalDiscount().toLocaleString()}</span>
+              <span>-RD$ {totalDiscount.toLocaleString()}</span>
             </div>
           )}
           {includeTax && (
             <div className="flex justify-between text-sm">
               <span>ITBIS (18%):</span>
-              <span className="font-medium">RD$ {calculateTax().toLocaleString()}</span>
+              <span className="font-medium">RD$ {tax.toLocaleString()}</span>
             </div>
           )}
           <div className="flex justify-between text-lg font-bold border-t pt-2">
             <span>Total:</span>
-            <span>RD$ {calculateFinalTotal().toLocaleString()}</span>
+            <span>RD$ {finalTotal.toLocaleString()}</span>
           </div>
         </div>
 
         <button
           onClick={handleCheckout}
-          disabled={loading || cart.length === 0 || (paymentMethod === 'CASH' && !cashStatus)}
+          disabled={
+            loading || 
+            cart.length === 0 || 
+            (paymentMethod === 'CASH' && !cashStatus) ||
+            (paymentMethod === 'CASH' && amountReceived < finalTotal)
+          }
           className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Procesando...' : 'Procesar Venta'}

@@ -24,6 +24,7 @@ const createInvoiceSchema = z.object({
   discount: z.number().nonnegative().default(0),
   observations: z.string().optional(),
   saveAsDraft: z.boolean().optional().default(false),
+  amountReceived: z.number().nonnegative().optional(), // For POS: amount received in cash
 });
 
 export const getInvoices = async (req: AuthRequest, res: Response) => {
@@ -34,7 +35,13 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
 
     const where: any = {};
 
-    if (req.query.status) {
+    // Handle OVERDUE status filter - need to check dueDate and balance
+    if (req.query.status === 'OVERDUE') {
+      const now = new Date();
+      where.status = InvoiceStatus.ISSUED; // Only issued invoices can be overdue
+      where.dueDate = { lt: now }; // Due date has passed
+      where.balance = { gt: 0 }; // Still has balance
+    } else if (req.query.status) {
       where.status = req.query.status;
     }
 
@@ -108,20 +115,40 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
       prisma.invoice.count({ where }),
     ]);
 
+    const now = new Date();
+    
     res.json({
-      data: invoices.map((invoice) => ({
-        id: invoice.id,
-        number: invoice.number,
-        ncf: invoice.ncf,
-        client: invoice.client,
-        branch: invoice.branch,
-        status: invoice.status,
-        type: invoice.type,
-        paymentMethod: invoice.paymentMethod,
-        total: Number(invoice.total),
-        balance: Number(invoice.balance),
-        issueDate: invoice.issueDate,
-      })),
+      data: invoices.map((invoice) => {
+        // Calculate dynamic status: OVERDUE if dueDate has passed and balance > 0
+        let calculatedStatus = invoice.status;
+        if (
+          invoice.status === InvoiceStatus.ISSUED &&
+          invoice.dueDate &&
+          invoice.dueDate < now &&
+          Number(invoice.balance) > 0
+        ) {
+          calculatedStatus = InvoiceStatus.OVERDUE;
+        }
+        // If fully paid, mark as PAID
+        else if (Number(invoice.balance) === 0 && invoice.status === InvoiceStatus.ISSUED) {
+          calculatedStatus = InvoiceStatus.PAID;
+        }
+        
+        return {
+          id: invoice.id,
+          number: invoice.number,
+          ncf: invoice.ncf,
+          client: invoice.client,
+          branch: invoice.branch,
+          status: calculatedStatus,
+          type: invoice.type,
+          paymentMethod: invoice.paymentMethod,
+          total: Number(invoice.total),
+          balance: Number(invoice.balance),
+          issueDate: invoice.issueDate,
+          dueDate: invoice.dueDate,
+        };
+      }),
       pagination: {
         page,
         limit,
@@ -202,6 +229,12 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
             name: true,
           },
         },
+        cancelledByUser: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -214,8 +247,39 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Get cancelled by user if exists
+    let cancelledByUser = null;
+    if (invoice.cancelledBy) {
+      const cancelledBy = await prisma.user.findUnique({
+        where: { id: invoice.cancelledBy },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+      cancelledByUser = cancelledBy;
+    }
+
+    // Calculate dynamic status: OVERDUE if dueDate has passed and balance > 0
+    const now = new Date();
+    let calculatedStatus = invoice.status;
+    if (
+      invoice.status === InvoiceStatus.ISSUED &&
+      invoice.dueDate &&
+      invoice.dueDate < now &&
+      Number(invoice.balance) > 0
+    ) {
+      calculatedStatus = InvoiceStatus.OVERDUE;
+    }
+    // If fully paid, mark as PAID
+    else if (Number(invoice.balance) === 0 && invoice.status === InvoiceStatus.ISSUED) {
+      calculatedStatus = InvoiceStatus.PAID;
+    }
+
     res.json({
       ...invoice,
+      status: calculatedStatus,
+      cancelledByUser,
       subtotal: Number(invoice.subtotal),
       tax: Number(invoice.tax),
       discount: Number(invoice.discount),
@@ -549,6 +613,82 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
       return newInvoice;
     });
+
+    // Check if this is a POS sale (has amountReceived) - return full invoice with change
+    const requestData = req.body;
+    if (requestData.amountReceived !== undefined) {
+      // Get full invoice data for response
+      const fullInvoice = await prisma.invoice.findUnique({
+        where: { id: invoice.id },
+        include: {
+          client: {
+            select: {
+              id: true,
+              name: true,
+              identification: true,
+              email: true,
+              phone: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                },
+              },
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Calculate change if cash payment and amountReceived provided
+      let change = 0;
+      if (requestData.paymentMethod === 'CASH' && requestData.amountReceived !== undefined) {
+        change = Math.max(0, Number(requestData.amountReceived) - Number(invoice.total));
+      }
+
+      return res.status(201).json({
+        invoice: {
+          id: fullInvoice!.id,
+          number: fullInvoice!.number,
+          ncf: fullInvoice!.ncf,
+          type: fullInvoice!.type,
+          status: fullInvoice!.status,
+          issueDate: fullInvoice!.issueDate,
+          dueDate: fullInvoice!.dueDate,
+          subtotal: Number(fullInvoice!.subtotal),
+          tax: Number(fullInvoice!.tax),
+          discount: Number(fullInvoice!.discount),
+          total: Number(fullInvoice!.total),
+          balance: Number(fullInvoice!.balance),
+          paymentMethod: fullInvoice!.paymentMethod,
+          observations: fullInvoice!.observations,
+          client: fullInvoice!.client,
+          items: fullInvoice!.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            product: item.product,
+            description: item.description,
+            quantity: Number(item.quantity),
+            price: Number(item.price),
+            discount: Number(item.discount),
+            subtotal: Number(item.subtotal),
+          })),
+          user: fullInvoice!.user,
+        },
+        change: change,
+        amountReceived: requestData.amountReceived || Number(invoice.total),
+      });
+    }
 
     res.status(201).json({
       id: invoice.id,
@@ -1081,13 +1221,14 @@ export const duplicateInvoice = async (req: AuthRequest, res: Response) => {
         ncf: null, // No NCF for draft
         clientId: originalInvoice.clientId,
         type: originalInvoice.type,
-        status: InvoiceStatus.ISSUED, // We'll keep it as ISSUED but user can edit before finalizing
+        status: InvoiceStatus.DRAFT, // Create as draft so it doesn't affect inventory/cash
         paymentMethod: originalInvoice.paymentMethod,
         subtotal: originalInvoice.subtotal,
         tax: originalInvoice.tax,
         discount: originalInvoice.discount,
         total: originalInvoice.total,
         balance: originalInvoice.paymentMethod === 'CREDIT' ? originalInvoice.total : 0,
+        issueDate: new Date(), // Set current date as issue date
         dueDate: originalInvoice.dueDate,
         userId: req.user.id,
         branchId: originalInvoice.branchId,
@@ -1154,6 +1295,12 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
       include: {
         items: true,
         branch: true,
+        payments: {
+          select: {
+            id: true,
+            amount: true,
+          },
+        },
       },
     });
 
@@ -1173,6 +1320,21 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
           message: 'Invoice is already cancelled',
         },
       });
+    }
+
+    // Check if invoice has payments - cannot cancel if it has partial payments
+    if (invoice.payments && invoice.payments.length > 0) {
+      const totalPaid = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      if (totalPaid > 0) {
+        return res.status(400).json({
+          error: {
+            code: 'HAS_PAYMENTS',
+            message: 'No se puede anular una factura que ya tiene pagos registrados. Use una Nota de Crédito para revertir parcialmente la factura.',
+            totalPaid,
+            invoiceTotal: Number(invoice.total),
+          },
+        });
+      }
     }
 
     // Cancel invoice in transaction
@@ -1252,6 +1414,64 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error cancelling invoice',
+      },
+    });
+  }
+};
+
+export const deleteInvoice = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Not authenticated',
+        },
+      });
+    }
+
+    const { id } = req.params;
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Invoice not found',
+        },
+      });
+    }
+
+    // Only allow deletion of DRAFT invoices
+    if (invoice.status !== InvoiceStatus.DRAFT) {
+      return res.status(400).json({
+        error: {
+          code: 'CANNOT_DELETE',
+          message: 'Solo se pueden eliminar facturas en estado borrador. Las facturas emitidas deben ser anuladas, no eliminadas.',
+        },
+      });
+    }
+
+    // Delete invoice (items will be deleted automatically due to cascade)
+    await prisma.invoice.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Invoice deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete invoice error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting invoice',
       },
     });
   }
@@ -1966,7 +2186,28 @@ export const createPOSSale = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Use createInvoice logic
+    // Validate amountReceived for cash payments
+    if (data.paymentMethod === 'CASH' && data.amountReceived !== undefined) {
+      // Calculate total first to validate
+      const total = data.items.reduce((sum, item) => {
+        const itemSubtotal = item.quantity * item.price - item.discount;
+        return sum + itemSubtotal;
+      }, 0) - (data.discount || 0);
+      
+      const tax = data.type === 'FISCAL' ? total * 0.18 : 0;
+      const finalTotal = total + tax;
+
+      if (data.amountReceived < finalTotal) {
+        return res.status(400).json({
+          error: {
+            code: 'INSUFFICIENT_PAYMENT',
+            message: `El monto recibido (${data.amountReceived}) es menor que el total (${finalTotal})`,
+          },
+        });
+      }
+    }
+
+    // Use createInvoice logic - it will return the full invoice with change
     return createInvoice(req, res);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -2157,6 +2398,43 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validate that credit note items don't exceed invoice quantities
+    const invoiceItemsMap = new Map(
+      invoice.items.map((item) => [item.productId || item.id, Number(item.quantity)])
+    );
+    
+    // Track total credited quantities per product
+    const creditedQuantities = new Map<string, number>();
+    
+    for (const item of data.items) {
+      if (item.productId) {
+        const invoiceQuantity = invoiceItemsMap.get(item.productId) || 0;
+        const currentCredited = creditedQuantities.get(item.productId) || 0;
+        const newTotalCredited = currentCredited + item.quantity;
+        
+        if (newTotalCredited > invoiceQuantity) {
+          // Find product name for error message
+          const invoiceItem = invoice.items.find((i) => i.productId === item.productId);
+          const productName = invoiceItem?.description || 'producto';
+          
+          return res.status(400).json({
+            error: {
+              code: 'EXCEEDS_INVOICE_QUANTITY',
+              message: `La cantidad acreditar para "${productName}" (${newTotalCredited.toFixed(2)}) excede la cantidad de la factura original (${invoiceQuantity.toFixed(2)})`,
+              product: {
+                id: item.productId,
+                name: productName,
+              },
+              invoiceQuantity,
+              requestedQuantity: newTotalCredited,
+            },
+          });
+        }
+        
+        creditedQuantities.set(item.productId, newTotalCredited);
+      }
+    }
+
     // Generate credit note number
     const lastCreditNote = await prisma.creditNote.findFirst({
       orderBy: { createdAt: 'desc' },
@@ -2318,6 +2596,27 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
 // ============================================
 // HISTORIAL / ANULADOS
 // ============================================
+
+export const getCancelledInvoicesCount = async (req: AuthRequest, res: Response) => {
+  try {
+    const count = await prisma.invoice.count({
+      where: {
+        status: InvoiceStatus.CANCELLED,
+        ncf: { not: null }, // Only count cancelled invoices with NCF
+      },
+    });
+
+    res.json({ count });
+  } catch (error) {
+    console.error('Get cancelled invoices count error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching cancelled invoices count',
+      },
+    });
+  }
+};
 
 export const getCancelledInvoices = async (req: AuthRequest, res: Response) => {
   try {

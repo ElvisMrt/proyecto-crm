@@ -504,6 +504,26 @@ const InvoicesTab = () => {
                                         {invoice.status === 'DRAFT' ? 'Continuar Edición' : 'Editar'}
                                       </button>
                                     )}
+                                    {invoice.status === 'DRAFT' && (
+                                      <button
+                                        onClick={async () => {
+                                          if (window.confirm(`¿Está seguro de eliminar la factura ${invoice.number}? Esta acción no se puede deshacer.`)) {
+                                            try {
+                                              await salesApi.deleteInvoice(invoice.id);
+                                              showToast('Factura eliminada exitosamente', 'success');
+                                              fetchInvoices();
+                                              setActionMenuOpen(null);
+                                            } catch (error: any) {
+                                              showToast(error.response?.data?.error?.message || 'Error al eliminar la factura', 'error');
+                                              setActionMenuOpen(null);
+                                            }
+                                          }
+                                        }}
+                                        className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => {
                                         handlePrint(invoice);
@@ -557,7 +577,7 @@ const InvoicesTab = () => {
                                         </button>
                                       </>
                                     )}
-                                    {invoice.status === 'ISSUED' && (
+                                    {invoice.status === 'ISSUED' && invoice.balance === invoice.total && (
                                       <button
                                         onClick={() => {
                                           handleCancelClick(invoice);
@@ -567,6 +587,11 @@ const InvoicesTab = () => {
                                       >
                                         Anular
                                       </button>
+                                    )}
+                                    {invoice.status === 'ISSUED' && invoice.balance < invoice.total && (
+                                      <div className="block w-full text-left px-4 py-2 text-xs text-gray-500 italic">
+                                        No se puede anular (tiene pagos). Use Nota de Crédito.
+                                      </div>
                                     )}
                                     <button
                                       onClick={() => {

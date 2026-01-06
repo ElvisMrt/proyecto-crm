@@ -99,6 +99,10 @@ export const salesApi = {
     const response = await api.post(`/sales/invoices/${id}/cancel`, { reason });
     return response.data;
   },
+  deleteInvoice: async (id: string) => {
+    const response = await api.delete(`/sales/invoices/${id}`);
+    return response.data;
+  },
   getQuotes: async (params?: any) => {
     const response = await api.get('/sales/quotes', { params });
     return response.data;
@@ -141,6 +145,10 @@ export const salesApi = {
   },
   getCancelledInvoices: async (params?: any) => {
     const response = await api.get('/sales/cancelled', { params });
+    return response.data;
+  },
+  getCancelledInvoicesCount: async () => {
+    const response = await api.get('/sales/cancelled/count');
     return response.data;
   },
 };

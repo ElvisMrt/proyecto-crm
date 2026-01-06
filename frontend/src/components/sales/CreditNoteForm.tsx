@@ -66,6 +66,21 @@ const CreditNoteForm = () => {
     const existingItem = form.items.find((item) => item.productId === invoiceItem.productId);
     
     if (existingItem) {
+      // Calculate current total credited for this product
+      const currentCredited = form.items
+        .filter((item) => item.productId === invoiceItem.productId)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      
+      const maxQuantity = Number(invoiceItem.quantity);
+      
+      if (currentCredited >= maxQuantity) {
+        showToast(
+          `Ya se ha acreditado la cantidad máxima para este producto (${maxQuantity.toFixed(2)})`,
+          'warning'
+        );
+        return;
+      }
+      
       updateItemQuantity(existingItem.productId!, existingItem.quantity + 1);
     } else {
       const newItem: CreditNoteItem = {
@@ -131,9 +146,45 @@ const CreditNoteForm = () => {
   };
 
   const updateItemQuantity = (productId: string, quantity: number) => {
+    if (!invoice) {
+      return;
+    }
+
+    // Find the invoice item to get max quantity
+    const invoiceItem = invoice.items?.find((item: any) => item.productId === productId);
+    if (!invoiceItem) {
+      return;
+    }
+
+    const maxQuantity = Number(invoiceItem.quantity);
+    
+    // Calculate total quantity already credited for this product
+    const currentCredited = form.items
+      .filter((item) => item.productId === productId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Find the item being updated
+    const itemToUpdate = form.items.find((item) => item.productId === productId);
+    if (!itemToUpdate) {
+      return;
+    }
+
+    // Calculate new total if we update this item
+    const otherItemsQuantity = currentCredited - itemToUpdate.quantity;
+    const newTotal = otherItemsQuantity + quantity;
+    
+    // Limit quantity to max available
+    const newQuantity = Math.max(0, Math.min(quantity, maxQuantity - otherItemsQuantity));
+    
+    if (newTotal > maxQuantity) {
+      showToast(
+        `La cantidad máxima acreditar para este producto es ${maxQuantity.toFixed(2)} (cantidad de la factura original)`,
+        'warning'
+      );
+    }
+
     const updatedItems = form.items.map((item) => {
       if (item.productId === productId) {
-        const newQuantity = Math.max(0, quantity);
         return {
           ...item,
           quantity: newQuantity,
@@ -168,6 +219,33 @@ const CreditNoteForm = () => {
     if (form.items.length === 0) {
       showToast('Debe agregar al menos un item', 'error');
       return;
+    }
+
+    // Validate quantities don't exceed invoice quantities
+    if (invoice) {
+      const invoiceItemsMap = new Map(
+        invoice.items?.map((item: any) => [item.productId || item.id, Number(item.quantity)]) || []
+      );
+      
+      const creditedQuantities = new Map<string, number>();
+      
+      for (const item of form.items) {
+        if (item.productId) {
+          const invoiceQuantity = invoiceItemsMap.get(item.productId) || 0;
+          const currentCredited = creditedQuantities.get(item.productId) || 0;
+          const newTotalCredited = currentCredited + item.quantity;
+          
+          if (newTotalCredited > invoiceQuantity) {
+            showToast(
+              `La cantidad acreditar para "${item.description}" (${newTotalCredited.toFixed(2)}) excede la cantidad de la factura original (${invoiceQuantity.toFixed(2)})`,
+              'error'
+            );
+            return;
+          }
+          
+          creditedQuantities.set(item.productId, newTotalCredited);
+        }
+      }
     }
 
     try {
@@ -251,23 +329,45 @@ const CreditNoteForm = () => {
               </div>
             </div>
             <div className="mt-4">
-              <p className="text-sm text-gray-600 mb-2">Items de la factura:</p>
+              <p className="text-sm text-gray-600 mb-2">Items de la factura (haga clic para agregar a la nota de crédito):</p>
               <div className="space-y-2">
-                {invoice.items?.map((item: any, index: number) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => addProductFromInvoice(item)}
-                    className="w-full text-left p-2 bg-white rounded border border-gray-200 hover:border-blue-500 hover:bg-blue-50"
-                  >
-                    <div className="flex justify-between">
-                      <span className="text-sm">{item.description}</span>
-                      <span className="text-sm font-medium">
-                        {new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(Number(item.subtotal))}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                {invoice.items?.map((item: any, index: number) => {
+                  const creditedQuantity = form.items
+                    .filter((ci) => ci.productId === item.productId)
+                    .reduce((sum, ci) => sum + ci.quantity, 0);
+                  const availableQuantity = Number(item.quantity) - creditedQuantity;
+                  const isDisabled = availableQuantity <= 0;
+                  
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => !isDisabled && addProductFromInvoice(item)}
+                      disabled={isDisabled}
+                      className={`w-full text-left p-3 bg-white rounded border ${
+                        isDisabled 
+                          ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
+                          : 'border-gray-200 hover:border-blue-500 hover:bg-blue-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">{item.description}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Cantidad facturada: {Number(item.quantity).toFixed(2)} | 
+                            Acreditado: {creditedQuantity.toFixed(2)} | 
+                            Disponible: <span className={isDisabled ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                              {availableQuantity.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-sm font-medium ml-4">
+                          {new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(Number(item.subtotal))}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
