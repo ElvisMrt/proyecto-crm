@@ -1,0 +1,600 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id            String         @id @default(uuid())
+  name          String
+  slug          String         @unique
+  email         String
+  phone         String?
+  address       String?
+  country       String         @default("DO")
+  status        TenantStatus   @default(ACTIVE)
+  plan          PlanType       @default(BASIC)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         MasterUser[]
+  subscriptions Subscription[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+model MasterUser {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  name      String
+  role      MasterRole @default(SUPPORT)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  tenantId  String?
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id])
+
+  @@index([email])
+}
+
+model Subscription {
+  id           String             @id @default(uuid())
+  tenantId     String
+  plan         PlanType
+  status       SubscriptionStatus @default(ACTIVE)
+  startDate    DateTime
+  endDate      DateTime?
+  billingCycle BillingCycle       @default(MONTHLY)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model User {
+  id                   String                @id @default(uuid())
+  email                String                @unique
+  password             String
+  name                 String
+  phone                String?
+  role                 Role                  @default(OPERATOR)
+  isActive             Boolean               @default(true)
+  lastLogin            DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cashMovements        CashMovement[]
+  closedCashRegisters  CashRegister[]        @relation("ClosedCashRegister")
+  openedCashRegisters  CashRegister[]        @relation("OpenedCashRegister")
+  creditNotes          CreditNote[]
+  inventoryAdjustments InventoryAdjustment[]
+  inventoryMovements   InventoryMovement[]
+  invoices             Invoice[]
+  payments             Payment[]
+  quotes               Quote[]
+  tasks                Task[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+model Client {
+  id             String    @id @default(uuid())
+  name           String
+  identification String
+  email          String?
+  phone          String?
+  address        String?
+  creditLimit    Decimal?  @default(0) @db.Decimal(10, 2)
+  creditDays     Int       @default(30)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  invoices       Invoice[]
+  payments       Payment[]
+  quotes         Quote[]
+  tasks          Task[]
+
+  @@index([name])
+  @@index([identification])
+  @@index([isActive])
+}
+
+model Branch {
+  id                 String                @id @default(uuid())
+  name               String                @unique
+  address            String?
+  phone              String?
+  isActive           Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  cashRegisters      CashRegister[]
+  adjustments        InventoryAdjustment[]
+  inventoryMovements InventoryMovement[]
+  invoices           Invoice[]
+  ncfSequences       NcfSequence[]
+  stocks             Stock[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Product {
+  id              String                    @id @default(uuid())
+  code            String                    @unique
+  barcode         String?                   @unique
+  name            String
+  description     String?
+  categoryId      String
+  brand           String?
+  unit            String                    @default("UNIT")
+  salePrice       Decimal                   @db.Decimal(10, 2)
+  cost            Decimal?                  @db.Decimal(10, 2)
+  hasTax          Boolean                   @default(true)
+  taxPercent      Decimal                   @default(18) @db.Decimal(5, 2)
+  controlsStock   Boolean                   @default(true)
+  minStock        Decimal                   @default(0) @db.Decimal(10, 2)
+  isActive        Boolean                   @default(true)
+  imageUrl        String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  creditNoteItems CreditNoteItem[]
+  adjustmentItems InventoryAdjustmentItem[]
+  movements       InventoryMovement[]
+  invoiceItems    InvoiceItem[]
+  category        Category                  @relation(fields: [categoryId], references: [id])
+  quoteItems      QuoteItem[]
+  stocks          Stock[]
+
+  @@index([code])
+  @@index([barcode])
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model Stock {
+  id        String   @id @default(uuid())
+  productId String
+  branchId  String
+  quantity  Decimal  @default(0) @db.Decimal(10, 2)
+  minStock  Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt DateTime @updatedAt
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId], name: "productId_branchId")
+  @@index([productId])
+  @@index([branchId])
+}
+
+model Invoice {
+  id                 String        @id @default(uuid())
+  number             String        @unique
+  ncf                String?       @unique
+  clientId           String?
+  type               InvoiceType   @default(FISCAL)
+  status             InvoiceStatus @default(ISSUED)
+  paymentMethod      PaymentMethod
+  subtotal           Decimal       @db.Decimal(10, 2)
+  tax                Decimal       @default(0) @db.Decimal(10, 2)
+  discount           Decimal       @default(0) @db.Decimal(10, 2)
+  total              Decimal       @db.Decimal(10, 2)
+  balance            Decimal       @default(0) @db.Decimal(10, 2)
+  issueDate          DateTime      @default(now())
+  dueDate            DateTime?
+  userId             String
+  branchId           String?
+  observations       String?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  cancelledBy        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  creditNotes        CreditNote[]
+  branch             Branch?       @relation(fields: [branchId], references: [id])
+  client             Client?       @relation(fields: [clientId], references: [id])
+  user               User          @relation(fields: [userId], references: [id])
+  items              InvoiceItem[]
+  payments           Payment[]
+
+  @@index([number])
+  @@index([ncf])
+  @@index([clientId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([dueDate])
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  productId   String?
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  price       Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @default(0) @db.Decimal(10, 2)
+  subtotal    Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
+model Quote {
+  id                   String      @id @default(uuid())
+  number               String      @unique
+  clientId             String
+  status               QuoteStatus @default(OPEN)
+  subtotal             Decimal     @db.Decimal(10, 2)
+  tax                  Decimal     @default(0) @db.Decimal(10, 2)
+  discount             Decimal     @default(0) @db.Decimal(10, 2)
+  total                Decimal     @db.Decimal(10, 2)
+  validUntil           DateTime?
+  userId               String
+  convertedToInvoiceId String?     @unique
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  client               Client      @relation(fields: [clientId], references: [id])
+  user                 User        @relation(fields: [userId], references: [id])
+  items                QuoteItem[]
+
+  @@index([number])
+  @@index([clientId])
+  @@index([status])
+}
+
+model QuoteItem {
+  id          String   @id @default(uuid())
+  quoteId     String
+  productId   String?
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  price       Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @default(0) @db.Decimal(10, 2)
+  subtotal    Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  product     Product? @relation(fields: [productId], references: [id])
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+model CreditNote {
+  id        String           @id @default(uuid())
+  number    String           @unique
+  ncf       String?          @unique
+  invoiceId String
+  reason    String
+  subtotal  Decimal          @db.Decimal(10, 2)
+  tax       Decimal          @default(0) @db.Decimal(10, 2)
+  total     Decimal          @db.Decimal(10, 2)
+  issueDate DateTime         @default(now())
+  userId    String
+  createdAt DateTime         @default(now())
+  invoice   Invoice          @relation(fields: [invoiceId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+  items     CreditNoteItem[]
+
+  @@index([number])
+  @@index([invoiceId])
+  @@index([issueDate])
+}
+
+model CreditNoteItem {
+  id           String     @id @default(uuid())
+  creditNoteId String
+  productId    String?
+  description  String
+  quantity     Decimal    @db.Decimal(10, 2)
+  price        Decimal    @db.Decimal(10, 2)
+  subtotal     Decimal    @db.Decimal(10, 2)
+  createdAt    DateTime   @default(now())
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  product      Product?   @relation(fields: [productId], references: [id])
+
+  @@index([creditNoteId])
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  clientId     String
+  invoiceId    String?
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod
+  reference    String?
+  paymentDate  DateTime      @default(now())
+  observations String?
+  userId       String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  client       Client        @relation(fields: [clientId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([paymentDate])
+}
+
+model CashRegister {
+  id            String         @id @default(uuid())
+  branchId      String
+  status        CashStatus     @default(CLOSED)
+  initialAmount Decimal        @db.Decimal(10, 2)
+  finalAmount   Decimal?       @db.Decimal(10, 2)
+  difference    Decimal?       @default(0) @db.Decimal(10, 2)
+  openedAt      DateTime
+  closedAt      DateTime?
+  openedBy      String
+  closedBy      String?
+  observations  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  movements     CashMovement[]
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  closedByUser  User?          @relation("ClosedCashRegister", fields: [closedBy], references: [id])
+  openedByUser  User           @relation("OpenedCashRegister", fields: [openedBy], references: [id])
+
+  @@index([branchId])
+  @@index([status])
+  @@index([openedAt])
+}
+
+model CashMovement {
+  id             String        @id @default(uuid())
+  cashRegisterId String
+  type           MovementType
+  concept        String
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod
+  invoiceId      String?
+  paymentId      String?
+  userId         String
+  movementDate   DateTime      @default(now())
+  observations   String?
+  createdAt      DateTime      @default(now())
+  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id])
+
+  @@index([cashRegisterId])
+  @@index([type])
+  @@index([movementDate])
+}
+
+model InventoryMovement {
+  id           String                @id @default(uuid())
+  productId    String
+  branchId     String
+  type         InventoryMovementType
+  quantity     Decimal               @db.Decimal(10, 2)
+  balance      Decimal               @db.Decimal(10, 2)
+  documentType String?
+  documentId   String?
+  userId       String
+  movementDate DateTime              @default(now())
+  observations String?
+  createdAt    DateTime              @default(now())
+  branch       Branch                @relation(fields: [branchId], references: [id])
+  product      Product               @relation(fields: [productId], references: [id])
+  user         User                  @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([branchId])
+  @@index([type])
+  @@index([movementDate])
+}
+
+model InventoryAdjustment {
+  id             String                    @id @default(uuid())
+  branchId       String
+  type           AdjustmentType
+  reason         String
+  userId         String
+  adjustmentDate DateTime                  @default(now())
+  observations   String?
+  createdAt      DateTime                  @default(now())
+  branch         Branch                    @relation(fields: [branchId], references: [id])
+  user           User                      @relation(fields: [userId], references: [id])
+  items          InventoryAdjustmentItem[]
+
+  @@index([branchId])
+  @@index([adjustmentDate])
+}
+
+model InventoryAdjustmentItem {
+  id                 String              @id @default(uuid())
+  adjustmentId       String
+  productId          String
+  previousQuantity   Decimal             @db.Decimal(10, 2)
+  adjustmentQuantity Decimal             @db.Decimal(10, 2)
+  newQuantity        Decimal             @db.Decimal(10, 2)
+  createdAt          DateTime            @default(now())
+  adjustment         InventoryAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product            Product             @relation(fields: [productId], references: [id])
+
+  @@index([adjustmentId])
+  @@index([productId])
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  clientId    String?
+  userId      String
+  status      String    @default("PENDING")
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  client      Client?   @relation(fields: [clientId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([status])
+}
+
+model NcfSequence {
+  id            String    @id @default(uuid())
+  prefix        String
+  description   String?
+  startRange    Int
+  endRange      Int
+  currentNumber Int       @default(0)
+  isActive      Boolean   @default(true)
+  validFrom     DateTime  @default(now())
+  validUntil    DateTime?
+  branchId      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+
+  @@index([prefix])
+  @@index([isActive])
+  @@index([branchId])
+  @@index([validUntil])
+}
+
+model WhatsAppTemplate {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  type      String
+  subject   String?
+  message   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PlanType {
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum MasterRole {
+  SUPER_ADMIN
+  SUPPORT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum Role {
+  ADMINISTRATOR
+  SUPERVISOR
+  OPERATOR
+  CASHIER
+}
+
+enum InvoiceType {
+  FISCAL
+  NON_FISCAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+  CREDIT
+  MIXED
+}
+
+enum QuoteStatus {
+  OPEN
+  ACCEPTED
+  REJECTED
+  CONVERTED
+}
+
+enum CashStatus {
+  OPEN
+  CLOSED
+}
+
+enum MovementType {
+  OPENING
+  SALE
+  PAYMENT
+  MANUAL_ENTRY
+  MANUAL_EXIT
+  CLOSING
+}
+
+enum InventoryMovementType {
+  SALE
+  CREDIT_NOTE
+  ADJUSTMENT_ENTRY
+  ADJUSTMENT_EXIT
+  TRANSFER
+}
+
+enum AdjustmentType {
+  ENTRY
+  EXIT
+}
