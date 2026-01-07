@@ -12,12 +12,16 @@ const updateCompanySchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  rnc: z.string().optional(),
 });
 
 const createBranchSchema = z.object({
   name: z.string().min(1),
+  code: z.string().optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
+  email: z.string().email().optional(),
+  managerId: z.string().uuid().optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -26,6 +30,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   phone: z.string().optional(),
   role: z.enum(['ADMINISTRATOR', 'SUPERVISOR', 'OPERATOR', 'CASHIER']).default('OPERATOR'),
+  branchId: z.string().uuid().optional(),
   password: z.string().min(6),
   isActive: z.boolean().default(true),
 });
@@ -35,6 +40,7 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   role: z.enum(['ADMINISTRATOR', 'SUPERVISOR', 'OPERATOR', 'CASHIER']).optional(),
+  branchId: z.string().uuid().optional().nullable(),
   isActive: z.boolean().optional(),
   password: z.string().min(6).optional(),
 });
@@ -44,14 +50,34 @@ const updateUserSchema = z.object({
 // ============================================
 export const getCompany = async (req: AuthRequest, res: Response) => {
   try {
-    // For now, return a mock company. In multi-tenant, this would fetch from Tenant model
+    // Get the first active tenant or create a default one
+    let tenant = await prisma.tenant.findFirst({
+      where: { status: 'ACTIVE' },
+    });
+
+    if (!tenant) {
+      // Create a default tenant if none exists
+      tenant = await prisma.tenant.create({
+        data: {
+          name: 'Mi Empresa',
+          slug: 'mi-empresa',
+          email: 'info@miempresa.com',
+          phone: '809-000-0000',
+          address: 'Santo Domingo, República Dominicana',
+          country: 'DO',
+          status: 'ACTIVE',
+          plan: 'BASIC',
+        },
+      });
+    }
+
     res.json({
-      id: '1',
-      name: 'Mi Empresa',
-      email: 'info@miempresa.com',
-      phone: '809-000-0000',
-      address: 'Santo Domingo, República Dominicana',
-      rnc: '123456789',
+      id: tenant.id,
+      name: tenant.name,
+      email: tenant.email,
+      phone: tenant.phone || '',
+      address: tenant.address || '',
+      rnc: '', // RNC is not in Tenant model, we'll store it separately if needed
       logo: null,
     });
   } catch (error) {
@@ -68,12 +94,47 @@ export const getCompany = async (req: AuthRequest, res: Response) => {
 export const updateCompany = async (req: AuthRequest, res: Response) => {
   try {
     const data = updateCompanySchema.parse(req.body);
-    // In multi-tenant, this would update Tenant model
+    
+    // Get the first active tenant or create one
+    let tenant = await prisma.tenant.findFirst({
+      where: { status: 'ACTIVE' },
+    });
+
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.email) updateData.email = data.email;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.address !== undefined) updateData.address = data.address;
+
+    if (tenant) {
+      tenant = await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: updateData,
+      });
+    } else {
+      tenant = await prisma.tenant.create({
+        data: {
+          name: data.name || 'Mi Empresa',
+          slug: 'mi-empresa',
+          email: data.email || 'info@miempresa.com',
+          phone: data.phone,
+          address: data.address,
+          country: 'DO',
+          status: 'ACTIVE',
+          plan: 'BASIC',
+        },
+      });
+    }
+
     res.json({
       message: 'Company updated successfully',
       data: {
-        id: '1',
-        ...data,
+        id: tenant.id,
+        name: tenant.name,
+        email: tenant.email,
+        phone: tenant.phone || '',
+        address: tenant.address || '',
+        rnc: data.rnc || '',
       },
     });
   } catch (error: any) {
@@ -225,6 +286,14 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         email: true,
         phone: true,
         role: true,
+        branchId: true,
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
         isActive: true,
         lastLogin: true,
         createdAt: true,
@@ -312,6 +381,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         phone: data.phone,
         password: hashedPassword,
         role: data.role,
+        branchId: data.branchId || null,
         isActive: data.isActive,
       },
       select: {
@@ -319,6 +389,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         name: true,
         email: true,
         role: true,
+        branchId: true,
       },
     });
 
@@ -361,6 +432,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
     if (data.email) updateData.email = data.email;
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.role) updateData.role = data.role;
+    if (data.branchId !== undefined) updateData.branchId = data.branchId || null;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10);
@@ -442,6 +514,57 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error updating user status',
+      },
+    });
+  }
+};
+
+export const deleteUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user has associated data
+    const [invoices, payments, cashMovements] = await Promise.all([
+      prisma.invoice.count({ where: { userId: id } }),
+      prisma.payment.count({ where: { userId: id } }),
+      prisma.cashMovement.count({ where: { userId: id } }),
+    ]);
+
+    if (invoices > 0 || payments > 0 || cashMovements > 0) {
+      // Instead of deleting, deactivate the user
+      const user = await prisma.user.update({
+        where: { id },
+        data: { isActive: false },
+      });
+
+      return res.json({
+        message: 'User deactivated successfully (has associated data)',
+        data: user,
+      });
+    }
+
+    // Safe to delete if no associated data
+    await prisma.user.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'User deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'User not found',
+        },
+      });
+    }
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting user',
       },
     });
   }

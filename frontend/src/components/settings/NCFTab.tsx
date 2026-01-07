@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ncfApi, branchesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiPlus, HiPencil, HiTrash, HiExclamationCircle } from 'react-icons/hi';
+import { HiPlus, HiPencil, HiTrash, HiExclamationCircle, HiSearch, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
+import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 interface NcfSequence {
   id: string;
@@ -24,10 +25,14 @@ interface NcfSequence {
 const NCFTab = () => {
   const { showToast } = useToast();
   const [sequences, setSequences] = useState<NcfSequence[]>([]);
+  const [filteredSequences, setFilteredSequences] = useState<NcfSequence[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingSequence, setEditingSequence] = useState<NcfSequence | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [formData, setFormData] = useState({
     prefix: 'FACE',
     description: '',
@@ -43,6 +48,25 @@ const NCFTab = () => {
     fetchSequences();
     fetchBranches();
   }, []);
+
+  useEffect(() => {
+    filterSequences();
+  }, [searchTerm, sequences]);
+
+  const filterSequences = () => {
+    if (!searchTerm.trim()) {
+      setFilteredSequences(sequences);
+    } else {
+      const filtered = sequences.filter(
+        (seq) =>
+          seq.prefix.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (seq.description && seq.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (seq.branch && seq.branch.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredSequences(filtered);
+    }
+    setCurrentPage(1);
+  };
 
   const fetchSequences = async () => {
     try {
@@ -149,6 +173,58 @@ const NCFTab = () => {
     return 'bg-green-100 text-green-800';
   };
 
+  const handleExportExcel = () => {
+    const exportData = filteredSequences.map((seq) => ({
+      Prefijo: seq.prefix,
+      Descripción: seq.description || '-',
+      'Rango Inicial': seq.startRange,
+      'Rango Final': seq.endRange,
+      'Número Actual': seq.currentNumber,
+      Disponibles: seq.remaining,
+      'Uso %': `${seq.percentageUsed}%`,
+      Sucursal: seq.branch?.name || 'Todas',
+      Estado: seq.isActive ? 'Activa' : 'Inactiva',
+      'Válido desde': new Date(seq.validFrom).toLocaleDateString('es-DO'),
+      'Válido hasta': seq.validUntil ? new Date(seq.validUntil).toLocaleDateString('es-DO') : '-',
+    }));
+    exportToExcel(exportData, `Secuencias_NCF_${new Date().toISOString().split('T')[0]}`, 'Secuencias NCF');
+    showToast('Exportación a Excel completada', 'success');
+  };
+
+  const handleExportPDF = () => {
+    const columns = [
+      { header: 'Prefijo', dataKey: 'prefijo', width: 60 },
+      { header: 'Descripción', dataKey: 'descripcion', width: 100 },
+      { header: 'Rango', dataKey: 'rango', width: 100 },
+      { header: 'Actual', dataKey: 'actual', width: 60 },
+      { header: 'Disponibles', dataKey: 'disponibles', width: 70 },
+      { header: 'Uso %', dataKey: 'uso', width: 50 },
+      { header: 'Sucursal', dataKey: 'sucursal', width: 100 },
+      { header: 'Estado', dataKey: 'estado', width: 60 },
+    ];
+    const exportData = filteredSequences.map((seq) => ({
+      prefijo: seq.prefix,
+      descripcion: seq.description || '-',
+      rango: `${seq.startRange.toLocaleString()} - ${seq.endRange.toLocaleString()}`,
+      actual: seq.currentNumber.toLocaleString(),
+      disponibles: seq.remaining.toLocaleString(),
+      uso: `${seq.percentageUsed}%`,
+      sucursal: seq.branch?.name || 'Todas',
+      estado: seq.isActive ? 'Activa' : 'Inactiva',
+    }));
+    exportToPDF(exportData, columns, `Secuencias_NCF_${new Date().toISOString().split('T')[0]}`, 'Secuencias NCF', {
+      title: 'Listado de Secuencias NCF',
+      date: new Date().toLocaleDateString('es-DO'),
+    });
+    showToast('Exportación a PDF completada', 'success');
+  };
+
+  // Pagination
+  const totalPages = Math.ceil(filteredSequences.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentSequences = filteredSequences.slice(startIndex, endIndex);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -167,6 +243,48 @@ const NCFTab = () => {
           <HiPlus className="w-4 h-4 mr-2" />
           Nueva Secuencia
         </button>
+      </div>
+
+      {/* Filters and Export */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex-1 w-full md:w-auto">
+            <div className="relative">
+              <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Buscar por prefijo, descripción o sucursal..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <HiXCircle className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md"
+            >
+              <HiDocumentDownload className="w-4 h-4" />
+              Excel
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md"
+            >
+              <HiDocumentDownload className="w-4 h-4" />
+              PDF
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Formulario */}
@@ -313,94 +431,123 @@ const NCFTab = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Cargando secuencias NCF...</p>
           </div>
-        ) : sequences.length === 0 ? (
+        ) : filteredSequences.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No hay secuencias NCF configuradas
+            {searchTerm ? 'No se encontraron secuencias NCF' : 'No hay secuencias NCF configuradas'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prefijo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rango</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibles</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uso</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sucursal</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {sequences.map((sequence) => (
-                  <tr key={sequence.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{sequence.prefix}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sequence.description || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sequence.startRange.toLocaleString()} - {sequence.endRange.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {sequence.currentNumber.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={sequence.remaining <= 100 ? 'text-red-600 font-medium' : 'text-gray-900'}>
-                        {sequence.remaining.toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              sequence.percentageUsed >= 90
-                                ? 'bg-red-600'
-                                : sequence.percentageUsed >= 70
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{ width: `${Math.min(sequence.percentageUsed, 100)}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-xs text-gray-600">{sequence.percentageUsed}%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sequence.branch?.name || 'Todas'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(sequence)}`}
-                      >
-                        {sequence.isActive ? 'Activa' : 'Inactiva'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEdit(sequence)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <HiPencil className="w-5 h-5" />
-                        </button>
-                        {sequence.isActive && (
-                          <button
-                            onClick={() => handleDelete(sequence.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <HiTrash className="w-5 h-5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prefijo</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rango</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibles</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uso</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sucursal</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentSequences.map((sequence) => (
+                    <tr key={sequence.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{sequence.prefix}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sequence.description || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sequence.startRange.toLocaleString()} - {sequence.endRange.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {sequence.currentNumber.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={sequence.remaining <= 100 ? 'text-red-600 font-medium' : 'text-gray-900'}>
+                          {sequence.remaining.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                sequence.percentageUsed >= 90
+                                  ? 'bg-red-600'
+                                  : sequence.percentageUsed >= 70
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(sequence.percentageUsed, 100)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-gray-600">{sequence.percentageUsed}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sequence.branch?.name || 'Todas'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(sequence)}`}
+                        >
+                          {sequence.isActive ? 'Activa' : 'Inactiva'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleEdit(sequence)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            <HiPencil className="w-5 h-5" />
+                          </button>
+                          {sequence.isActive && (
+                            <button
+                              onClick={() => handleDelete(sequence.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <HiTrash className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                <div className="text-sm text-gray-700">
+                  Mostrando {startIndex + 1} a {Math.min(endIndex, filteredSequences.length)} de {filteredSequences.length} secuencias
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Anterior
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -423,4 +570,3 @@ const NCFTab = () => {
 };
 
 export default NCFTab;
-

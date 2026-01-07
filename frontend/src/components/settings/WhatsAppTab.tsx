@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { whatsappApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiPlus, HiPencil, HiTrash, HiChat } from 'react-icons/hi';
+import { HiPlus, HiPencil, HiTrash, HiChat, HiSearch, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
+import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 interface WhatsAppTemplate {
   id: string;
@@ -17,9 +18,13 @@ interface WhatsAppTemplate {
 const WhatsAppTab = () => {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [filteredTemplates, setFilteredTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [formData, setFormData] = useState({
     name: '',
     type: 'INVOICE' as WhatsAppTemplate['type'],
@@ -30,6 +35,26 @@ const WhatsAppTab = () => {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    filterTemplates();
+  }, [searchTerm, templates]);
+
+  const filterTemplates = () => {
+    if (!searchTerm.trim()) {
+      setFilteredTemplates(templates);
+    } else {
+      const filtered = templates.filter(
+        (template) =>
+          template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getTypeLabel(template.type).toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (template.subject && template.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          template.message.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredTemplates(filtered);
+    }
+    setCurrentPage(1);
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -135,6 +160,48 @@ const WhatsAppTab = () => {
     return variables[type] || [];
   };
 
+  const handleExportExcel = () => {
+    const exportData = filteredTemplates.map((template) => ({
+      Nombre: template.name,
+      Tipo: getTypeLabel(template.type),
+      Asunto: template.subject || '-',
+      Mensaje: template.message.substring(0, 100) + (template.message.length > 100 ? '...' : ''),
+      Estado: template.isActive ? 'Activo' : 'Inactivo',
+      'Fecha Creación': new Date(template.createdAt).toLocaleDateString('es-DO'),
+      'Última Actualización': new Date(template.updatedAt).toLocaleDateString('es-DO'),
+    }));
+    exportToExcel(exportData, `Templates_WhatsApp_${new Date().toISOString().split('T')[0]}`, 'Templates WhatsApp');
+    showToast('Exportación a Excel completada', 'success');
+  };
+
+  const handleExportPDF = () => {
+    const columns = [
+      { header: 'Nombre', dataKey: 'nombre', width: 100 },
+      { header: 'Tipo', dataKey: 'tipo', width: 80 },
+      { header: 'Asunto', dataKey: 'asunto', width: 100 },
+      { header: 'Mensaje', dataKey: 'mensaje', width: 150 },
+      { header: 'Estado', dataKey: 'estado', width: 60 },
+    ];
+    const exportData = filteredTemplates.map((template) => ({
+      nombre: template.name,
+      tipo: getTypeLabel(template.type),
+      asunto: template.subject || '-',
+      mensaje: template.message.substring(0, 100) + (template.message.length > 100 ? '...' : ''),
+      estado: template.isActive ? 'Activo' : 'Inactivo',
+    }));
+    exportToPDF(exportData, columns, `Templates_WhatsApp_${new Date().toISOString().split('T')[0]}`, 'Templates WhatsApp', {
+      title: 'Listado de Templates de WhatsApp',
+      date: new Date().toLocaleDateString('es-DO'),
+    });
+    showToast('Exportación a PDF completada', 'success');
+  };
+
+  // Pagination
+  const totalPages = Math.ceil(filteredTemplates.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTemplates = filteredTemplates.slice(startIndex, endIndex);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -153,6 +220,48 @@ const WhatsAppTab = () => {
           <HiPlus className="w-4 h-4 mr-2" />
           Nuevo Template
         </button>
+      </div>
+
+      {/* Filters and Export */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex-1 w-full md:w-auto">
+            <div className="relative">
+              <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, tipo, asunto o mensaje..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <HiXCircle className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md"
+            >
+              <HiDocumentDownload className="w-4 h-4" />
+              Excel
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md"
+            >
+              <HiDocumentDownload className="w-4 h-4" />
+              PDF
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Formulario */}
@@ -257,79 +366,108 @@ const WhatsAppTab = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Cargando templates...</p>
           </div>
-        ) : templates.length === 0 ? (
+        ) : filteredTemplates.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No hay templates configurados
+            {searchTerm ? 'No se encontraron templates' : 'No hay templates configurados'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asunto</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mensaje</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {templates.map((template) => (
-                  <tr key={template.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{template.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getTypeLabel(template.type)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {template.subject || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                      <div className="truncate" title={template.message}>
-                        {template.message.substring(0, 50)}...
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          template.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {template.isActive ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleToggleActive(template)}
-                          className={`${
-                            template.isActive ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'
-                          }`}
-                          title={template.isActive ? 'Desactivar' : 'Activar'}
-                        >
-                          <HiChat className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(template)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <HiPencil className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(template.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <HiTrash className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asunto</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mensaje</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentTemplates.map((template) => (
+                    <tr key={template.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{template.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {getTypeLabel(template.type)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {template.subject || '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                        <div className="truncate" title={template.message}>
+                          {template.message.substring(0, 50)}...
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            template.isActive
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {template.isActive ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleToggleActive(template)}
+                            className={`${
+                              template.isActive ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'
+                            }`}
+                            title={template.isActive ? 'Desactivar' : 'Activar'}
+                          >
+                            <HiChat className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(template)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            <HiPencil className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(template.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <HiTrash className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                <div className="text-sm text-gray-700">
+                  Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTemplates.length)} de {filteredTemplates.length} templates
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Anterior
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -337,5 +475,3 @@ const WhatsAppTab = () => {
 };
 
 export default WhatsAppTab;
-
-

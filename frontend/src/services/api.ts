@@ -27,7 +27,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Solo redirigir si no estamos ya en la página de login
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -154,39 +155,35 @@ export const salesApi = {
 };
 
 export const receivablesApi = {
-  getStatus: async (clientId: string) => {
-    const response = await api.get(`/receivables/status/${clientId}`);
+  getStatus: async (clientId: string, params?: any) => {
+    const response = await api.get(`/receivables/status/${clientId}`, { params });
     return response.data;
   },
   getOverdue: async (params?: any) => {
     const response = await api.get('/receivables/overdue', { params });
     return response.data;
   },
-  createPayment: async (data: any) => {
-    const response = await api.post('/receivables/payments', data);
+  createPayment: async (data: any, params?: any) => {
+    const response = await api.post('/receivables/payments', data, { params });
     return response.data;
   },
   getPayments: async (params?: any) => {
     const response = await api.get('/receivables/payments', { params });
     return response.data;
   },
-  getSummary: async () => {
-    const response = await api.get('/receivables/summary');
+  getSummary: async (params?: any) => {
+    const response = await api.get('/receivables/summary', { params });
     return response.data;
   },
 };
 
 export const cashApi = {
-  getCurrentCash: async () => {
-    const response = await api.get('/cash/current');
+  getCurrentCash: async (params?: any) => {
+    const response = await api.get('/cash/current', { params });
     return response.data;
   },
   openCash: async (data: any) => {
     const response = await api.post('/cash/open', data);
-    return response.data;
-  },
-  getCurrentCash: async (params?: any) => {
-    const response = await api.get('/cash/current', { params });
     return response.data;
   },
   getMovements: async (params?: any) => {
@@ -198,7 +195,8 @@ export const cashApi = {
     return response.data;
   },
   closeCash: async (data: any) => {
-    const response = await api.post('/cash/close', data);
+    const { cashRegisterId, ...rest } = data;
+    const response = await api.post(`/cash/close/${cashRegisterId}`, rest);
     return response.data;
   },
   getHistory: async (params?: any) => {
@@ -224,6 +222,10 @@ export const inventoryApi = {
     const response = await api.put(`/inventory/categories/${id}`, data);
     return response.data;
   },
+  deleteCategory: async (id: string) => {
+    const response = await api.delete(`/inventory/categories/${id}`);
+    return response.data;
+  },
   getProducts: async (params?: any) => {
     const response = await api.get('/inventory/products', { params });
     return response.data;
@@ -238,6 +240,10 @@ export const inventoryApi = {
   },
   updateProduct: async (id: string, data: any) => {
     const response = await api.put(`/inventory/products/${id}`, data);
+    return response.data;
+  },
+  deleteProduct: async (id: string) => {
+    const response = await api.delete(`/inventory/products/${id}`);
     return response.data;
   },
   getStock: async (params?: any) => {
@@ -279,6 +285,22 @@ export const clientsApi = {
     const response = await api.patch(`/clients/${id}/status`, { isActive });
     return response.data;
   },
+  deleteClient: async (id: string) => {
+    const response = await api.delete(`/clients/${id}`);
+    return response.data;
+  },
+  getClientInvoices: async (id: string, params?: any) => {
+    const response = await api.get(`/clients/${id}/invoices`, { params });
+    return response.data;
+  },
+  getClientQuotes: async (id: string, params?: any) => {
+    const response = await api.get(`/clients/${id}/quotes`, { params });
+    return response.data;
+  },
+  getClientPayments: async (id: string, params?: any) => {
+    const response = await api.get(`/clients/${id}/payments`, { params });
+    return response.data;
+  },
 };
 
 export const crmApi = {
@@ -300,6 +322,10 @@ export const crmApi = {
   },
   completeTask: async (id: string) => {
     const response = await api.patch(`/crm/tasks/${id}/complete`);
+    return response.data;
+  },
+  deleteTask: async (id: string) => {
+    const response = await api.delete(`/crm/tasks/${id}`);
     return response.data;
   },
   getOverdueTasks: async () => {
@@ -459,6 +485,10 @@ export const settingsApi = {
     const response = await api.put(`/settings/branches/${id}`, data);
     return response.data;
   },
+  deleteBranch: async (id: string) => {
+    const response = await api.delete(`/settings/branches/${id}`);
+    return response.data;
+  },
   // Users
   getUsers: async () => {
     const response = await api.get('/settings/users');
@@ -478,6 +508,10 @@ export const settingsApi = {
   },
   toggleUserStatus: async (id: string, isActive: boolean) => {
     const response = await api.patch(`/settings/users/${id}/status`, { isActive });
+    return response.data;
+  },
+  deleteUser: async (id: string) => {
+    const response = await api.delete(`/settings/users/${id}`);
     return response.data;
   },
   // Roles & Permissions
