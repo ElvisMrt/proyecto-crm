@@ -7,8 +7,17 @@ const prisma = new PrismaClient();
 export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
   try {
     const branchId = req.query.branchId as string | undefined;
-    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
+    let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    
+    // If dates are invalid, use current month
+    if (isNaN(startDate.getTime())) {
+      startDate = new Date();
+      startDate.setDate(1);
+    }
+    if (isNaN(endDate.getTime())) {
+      endDate = new Date();
+    }
     
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
@@ -67,11 +76,14 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
     });
 
     // Cash Status
+    const cashWhere: any = {
+      status: 'OPEN',
+    };
+    if (branchId) {
+      cashWhere.branchId = branchId;
+    }
     const currentCash = await prisma.cashRegister.findFirst({
-      where: {
-        ...branchFilter,
-        status: 'OPEN',
-      },
+      where: cashWhere,
       include: {
         movements: true,
       },
@@ -84,10 +96,10 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
     if (currentCash) {
       const income = currentCash.movements
-        .filter((m) => m.type === 'INCOME')
+        .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
         .reduce((sum, m) => sum + Number(m.amount), 0);
       const expenses = currentCash.movements
-        .filter((m) => m.type === 'EXPENSE')
+        .filter((m) => m.type === 'MANUAL_EXIT')
         .reduce((sum, m) => sum + Number(m.amount), 0);
       cashStatus = {
         balance: Number(currentCash.initialAmount) + income - expenses,
@@ -131,6 +143,22 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
         const dayEnd = new Date(day);
         dayEnd.setHours(23, 59, 59, 999);
 
+        const incomeWhere: any = {
+          type: { in: ['SALE', 'PAYMENT', 'MANUAL_ENTRY', 'OPENING'] },
+          movementDate: { gte: dayStart, lte: dayEnd },
+        };
+        if (branchId) {
+          incomeWhere.cashRegister = { branchId };
+        }
+
+        const expensesWhere: any = {
+          type: 'MANUAL_EXIT',
+          movementDate: { gte: dayStart, lte: dayEnd },
+        };
+        if (branchId) {
+          expensesWhere.cashRegister = { branchId };
+        }
+
         const [sales, income, expenses] = await Promise.all([
           prisma.invoice.aggregate({
             where: {
@@ -141,19 +169,11 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
             _sum: { total: true },
           }),
           prisma.cashMovement.aggregate({
-            where: {
-              ...branchFilter,
-              type: 'INCOME',
-              movementDate: { gte: dayStart, lte: dayEnd },
-            },
+            where: incomeWhere,
             _sum: { amount: true },
           }),
           prisma.cashMovement.aggregate({
-            where: {
-              ...branchFilter,
-              type: 'EXPENSE',
-              movementDate: { gte: dayStart, lte: dayEnd },
-            },
+            where: expensesWhere,
             _sum: { amount: true },
           }),
         ]);
@@ -190,13 +210,15 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
     });
 
     const productsWithDetails = await Promise.all(
-      topProducts.map(async (item) => {
+      topProducts
+        .filter((item) => item.productId) // Filter out null productIds
+        .map(async (item) => {
         const product = await prisma.product.findUnique({
-          where: { id: item.productId },
+            where: { id: item.productId! },
           select: { id: true, name: true },
         });
         return {
-          product: product || { id: item.productId, name: 'Producto eliminado' },
+            product: product || { id: item.productId!, name: 'Producto eliminado' },
           quantity: Number(item._sum.quantity || 0),
           total: Number(item._sum.subtotal || 0),
         };
@@ -221,22 +243,25 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
     });
 
     const clientsWithDetails = await Promise.all(
-      bestClients.map(async (item) => {
+      bestClients
+        .filter((item) => item.clientId) // Filter out null clientIds
+        .map(async (item) => {
         const client = await prisma.client.findUnique({
-          where: { id: item.clientId },
+            where: { id: item.clientId! },
           select: { id: true, name: true },
         });
         return {
-          client: client || { id: item.clientId, name: 'Cliente eliminado' },
+            client: client || { id: item.clientId!, name: 'Cliente eliminado' },
           total: Number(item._sum.total || 0),
         };
       })
     );
 
-    res.json({
+    // Ensure all data comes from database - no hardcoded values
+    const response = {
       salesToday: {
         amount: Number(salesToday._sum.total || 0),
-        count: salesToday._count,
+        count: salesToday._count || 0,
       },
       salesMonth: {
         amount: Number(salesMonth._sum.total || 0),
@@ -246,11 +271,24 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
         overdue: Number(overdueReceivables._sum.balance || 0),
       },
       cash: cashStatus,
-      lowStockProducts,
-      chartData,
-      topProducts: productsWithDetails,
-      bestClients: clientsWithDetails,
+      lowStockProducts: lowStockProducts || [],
+      chartData: chartData || [],
+      topProducts: productsWithDetails || [],
+      bestClients: clientsWithDetails || [],
+    };
+
+    // Log to verify data is from database
+    console.log('General Summary - Data from DB:', {
+      invoicesCount: salesToday._count,
+      salesTodayAmount: response.salesToday.amount,
+      salesMonthAmount: response.salesMonth.amount,
+      receivablesTotal: response.receivables.total,
+      lowStockCount: response.lowStockProducts.length,
+      topProductsCount: response.topProducts.length,
+      bestClientsCount: response.bestClients.length,
     });
+
+    res.json(response);
   } catch (error) {
     console.error('Get general summary error:', error);
     res.status(500).json({
@@ -305,12 +343,15 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
     }, 0);
 
     // Expenses from cash movements (MANUAL_EXIT represents expenses/withdrawals)
+    const expensesWhere: any = {
+      type: 'MANUAL_EXIT',
+      movementDate: { gte: date, lte: dayEnd },
+    };
+    if (branchId) {
+      expensesWhere.cashRegister = { branchId };
+    }
     const expenses = await prisma.cashMovement.aggregate({
-      where: {
-        ...branchFilter,
-        type: 'MANUAL_EXIT',
-        movementDate: { gte: date, lte: dayEnd },
-      },
+      where: expensesWhere,
       _sum: { amount: true },
     });
 
@@ -340,11 +381,20 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
 
 export const getSalesReport = async (req: AuthRequest, res: Response) => {
   try {
-    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
+    let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
     const branchId = req.query.branchId as string | undefined;
     const clientId = req.query.clientId as string | undefined;
     const status = req.query.status as string | undefined;
+
+    // If dates are invalid, use current month
+    if (isNaN(startDate.getTime())) {
+      startDate = new Date();
+      startDate.setDate(1);
+    }
+    if (isNaN(endDate.getTime())) {
+      endDate = new Date();
+    }
 
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
@@ -377,19 +427,32 @@ export const getSalesReport = async (req: AuthRequest, res: Response) => {
       { total: 0, count: 0 }
     );
 
-    res.json({
+    // Ensure all data comes from database - no hardcoded values
+    const response = {
       data: invoices.map((inv) => ({
         id: inv.id,
         number: inv.number,
-        date: inv.issueDate,
-        client: inv.client.name,
-        branch: inv.branch?.name,
-        user: inv.user.name,
+        date: inv.issueDate.toISOString(),
+        client: inv.client?.name || 'Cliente eliminado',
+        branch: inv.branch?.name || '-',
+        user: inv.user?.name || '-',
         total: Number(inv.total),
         status: inv.status,
       })),
-      summary,
+      summary: {
+        total: summary.total || 0,
+        count: summary.count || 0,
+      },
+    };
+
+    // Log to verify data is from database
+    console.log('Sales Report - Data from DB:', {
+      invoicesCount: invoices.length,
+      totalAmount: response.summary.total,
+      invoiceCount: response.summary.count,
     });
+
+    res.json(response);
   } catch (error) {
     console.error('Get sales report error:', error);
     res.status(500).json({
@@ -451,6 +514,19 @@ export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
       totalOverdue,
       aging,
       invoicesCount: invoices.length,
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        number: inv.number,
+        date: inv.issueDate,
+        dueDate: inv.dueDate,
+        client: inv.client.name,
+        total: Number(inv.total),
+        balance: Number(inv.balance),
+        status: inv.status,
+        daysOverdue: inv.dueDate && inv.dueDate < now
+          ? Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24))
+          : null,
+      })),
     });
   } catch (error) {
     console.error('Get receivables report error:', error);
@@ -477,7 +553,21 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     const cashRegisters = await prisma.cashRegister.findMany({
       where: {
         ...branchFilter,
-        openedAt: { gte: startDate, lte: endDate },
+        OR: [
+          { openedAt: { gte: startDate, lte: endDate } },
+          { closedAt: { gte: startDate, lte: endDate } },
+          {
+            AND: [
+              { openedAt: { lte: startDate } },
+              {
+                OR: [
+                  { closedAt: { gte: startDate } },
+                  { status: 'OPEN' },
+                ],
+              },
+            ],
+          },
+        ],
       },
       include: {
         movements: true,
@@ -490,10 +580,10 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     const summary = cashRegisters.reduce(
       (acc, cash) => {
         const income = cash.movements
-          .filter((m) => m.type === 'INCOME')
+          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
           .reduce((sum, m) => sum + Number(m.amount), 0);
         const expenses = cash.movements
-          .filter((m) => m.type === 'EXPENSE')
+          .filter((m) => m.type === 'MANUAL_EXIT')
           .reduce((sum, m) => sum + Number(m.amount), 0);
 
         acc.totalIncome += income;
@@ -507,10 +597,10 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     res.json({
       data: cashRegisters.map((cash) => {
         const income = cash.movements
-          .filter((m) => m.type === 'INCOME')
+          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
           .reduce((sum, m) => sum + Number(m.amount), 0);
         const expenses = cash.movements
-          .filter((m) => m.type === 'EXPENSE')
+          .filter((m) => m.type === 'MANUAL_EXIT')
           .reduce((sum, m) => sum + Number(m.amount), 0);
 
         return {

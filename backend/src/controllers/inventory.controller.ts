@@ -25,7 +25,7 @@ const createProductSchema = z.object({
 const createAdjustmentSchema = z.object({
   branchId: z.string().uuid(),
   type: z.enum(['ENTRY', 'EXIT']),
-  reason: z.string().min(1),
+  reason: z.string().optional(),
   items: z.array(z.object({
     productId: z.string().uuid(),
     adjustmentQuantity: z.number().positive(),
@@ -213,21 +213,29 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 
     // Create initial stock if controls stock
     if (data.controlsStock) {
-      // Obtener la primera sucursal activa como default
-      const defaultBranch = await prisma.branch.findFirst({
+      // Obtener todas las sucursales activas
+      const activeBranches = await prisma.branch.findMany({
         where: { isActive: true },
         orderBy: { createdAt: 'asc' },
       });
 
-      if (defaultBranch) {
-        await prisma.stock.create({
+      if (activeBranches.length === 0) {
+        // Si no hay sucursales, mostrar advertencia pero permitir crear el producto
+        console.warn(`Product ${product.code} created with controlsStock=true but no active branches exist`);
+      } else {
+        // Crear stock en todas las sucursales activas
+        await Promise.all(
+          activeBranches.map((branch) =>
+            prisma.stock.create({
           data: {
             productId: product.id,
-            branchId: defaultBranch.id,
+                branchId: branch.id,
             quantity: 0,
             minStock: data.minStock,
           },
-        });
+            })
+          )
+        );
       }
     }
 
@@ -319,12 +327,6 @@ export const getStock = async (req: AuthRequest, res: Response) => {
       };
     }
 
-    if (req.query.lowStock === 'true') {
-      where.quantity = {
-        lte: prisma.stock.fields.minStock,
-      };
-    }
-
     if (req.query.search) {
       where.product = {
         ...where.product,
@@ -335,7 +337,49 @@ export const getStock = async (req: AuthRequest, res: Response) => {
       };
     }
 
-    const [stocks, total] = await Promise.all([
+    // For lowStock filter, we need to use raw SQL or fetch all and filter
+    // Using a more efficient approach: fetch all matching stocks first if lowStock filter is active
+    let stocks;
+    let total;
+
+    if (req.query.lowStock === 'true') {
+      // Fetch all stocks matching other filters first
+      const allStocks = await prisma.stock.findMany({
+        where,
+        include: {
+          product: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          branch: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Filter by lowStock in memory
+      const lowStockItems = allStocks.filter(
+        (stock) => Number(stock.quantity) <= Number(stock.minStock)
+      );
+
+      total = lowStockItems.length;
+      
+      // Apply pagination
+      const paginatedItems = lowStockItems.slice(skip, skip + limit);
+      
+      stocks = paginatedItems;
+    } else {
+      // Normal query without lowStock filter
+      [stocks, total] = await Promise.all([
       prisma.stock.findMany({
         where,
         skip,
@@ -364,9 +408,9 @@ export const getStock = async (req: AuthRequest, res: Response) => {
       }),
       prisma.stock.count({ where }),
     ]);
+    }
 
-    res.json({
-      data: stocks.map((stock) => ({
+    const mappedStocks = stocks.map((stock) => ({
         id: stock.id,
         product: stock.product,
         branch: stock.branch,
@@ -374,7 +418,10 @@ export const getStock = async (req: AuthRequest, res: Response) => {
         minStock: Number(stock.minStock),
         status: Number(stock.quantity) === 0 ? 'OUT' :
           Number(stock.quantity) <= Number(stock.minStock) ? 'LOW' : 'OK',
-      })),
+    }));
+
+    res.json({
+      data: mappedStocks,
       pagination: {
         page,
         limit,
@@ -499,6 +546,26 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
       const adjustmentItems = [];
 
       for (const item of data.items) {
+        // Validate that product controls stock
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { 
+            id: true,
+            name: true,
+            code: true,
+            controlsStock: true,
+            minStock: true,
+          },
+        });
+
+        if (!product) {
+          throw new Error(`Product ${item.productId} not found`);
+        }
+
+        if (!product.controlsStock) {
+          throw new Error(`Product ${product.name} (${product.code}) does not control stock. Cannot adjust inventory for products that don't control stock.`);
+        }
+
         // Get current stock
         const stock = await tx.stock.findUnique({
           where: {
@@ -509,21 +576,29 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
           },
         });
 
-        if (!stock) {
-          throw new Error(`Stock not found for product ${item.productId}`);
-        }
-
-        const previousQuantity = Number(stock.quantity);
+        const previousQuantity = stock ? Number(stock.quantity) : 0;
         const adjustmentQuantity = data.type === 'EXIT'
           ? -item.adjustmentQuantity
           : item.adjustmentQuantity;
         const newQuantity = previousQuantity + adjustmentQuantity;
 
         if (newQuantity < 0) {
-          throw new Error(`Insufficient stock for product ${item.productId}`);
+          throw new Error(`Insufficient stock for product ${product.name} (${product.code}). Cannot have negative stock.`);
         }
 
-        // Update stock
+        // Create or update stock
+        if (!stock) {
+          // Create stock record if it doesn't exist
+          await tx.stock.create({
+            data: {
+              productId: item.productId,
+              branchId: data.branchId,
+              quantity: newQuantity,
+              minStock: Number(product.minStock) || 0,
+            },
+          });
+        } else {
+          // Update existing stock
         await tx.stock.update({
           where: {
             productId_branchId: {
@@ -535,6 +610,7 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
             quantity: newQuantity,
           },
         });
+        }
 
         // Create movement
         await tx.inventoryMovement.create({
@@ -546,7 +622,7 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
             balance: newQuantity,
             documentType: 'Adjustment',
             userId: req.user!.id,
-            observations: data.reason,
+                observations: data.reason || data.observations || 'Ajuste de inventario',
           },
         });
 
@@ -775,6 +851,137 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error updating category',
+      },
+    });
+  }
+};
+
+export const deleteCategory = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if category has products
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            products: true,
+          },
+        },
+      },
+    });
+
+    if (!category) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Category not found',
+        },
+      });
+    }
+
+    if (category._count.products > 0) {
+      return res.status(400).json({
+        error: {
+          code: 'CATEGORY_HAS_PRODUCTS',
+          message: `No se puede eliminar la categoría porque tiene ${category._count.products} producto(s) asociado(s). Primero mueva los productos a otra categoría o desactívelos.`,
+        },
+      });
+    }
+
+    await prisma.category.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Category deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Category not found',
+        },
+      });
+    }
+
+    console.error('Delete category error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting category',
+      },
+    });
+  }
+};
+
+export const deleteProduct = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if product has history (invoices, movements, etc.)
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            invoiceItems: true,
+            quoteItems: true,
+            inventoryMovements: true,
+            stocks: true,
+          },
+        },
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        },
+      });
+    }
+
+    const hasHistory = 
+      product._count.invoiceItems > 0 ||
+      product._count.quoteItems > 0 ||
+      product._count.inventoryMovements > 0;
+
+    if (hasHistory) {
+      return res.status(400).json({
+        error: {
+          code: 'PRODUCT_HAS_HISTORY',
+          message: 'No se puede eliminar el producto porque tiene historial (ventas, cotizaciones o movimientos). Solo se puede desactivar.',
+        },
+      });
+    }
+
+    // Delete product (stocks will be deleted by cascade)
+    await prisma.product.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Product deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        },
+      });
+    }
+
+    console.error('Delete product error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting product',
       },
     });
   }

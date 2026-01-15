@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -22,9 +23,10 @@ import Settings from './pages/Settings';
 
 function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <BrowserRouter>
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
@@ -58,6 +60,7 @@ function App() {
       </BrowserRouter>
     </AuthProvider>
     </ToastProvider>
+    </ThemeProvider>
   );
 }
 

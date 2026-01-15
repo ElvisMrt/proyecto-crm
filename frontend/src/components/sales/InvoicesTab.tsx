@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { salesApi, branchesApi, clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import VoidInvoiceModal from './VoidInvoiceModal';
-import { HiDotsVertical, HiPrinter, HiDocumentDownload, HiChat, HiReceiptTax } from 'react-icons/hi';
-import { printInvoice, downloadInvoicePDF } from '../../utils/invoicePrint';
-import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
+import { HiDotsVertical, HiPrinter, HiDocumentDownload, HiReceiptTax } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
+import { printInvoice, downloadInvoicePDF, printThermalTicket } from '../../utils/invoicePrint';
+// WhatsApp module disabled
+// import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
 
 interface Invoice {
   id: string;
@@ -28,7 +30,7 @@ interface Invoice {
 }
 
 const InvoicesTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -155,6 +157,15 @@ const InvoicesTab = () => {
     }
   };
 
+  const handlePrintThermal = async (invoice: Invoice) => {
+    try {
+      const fullInvoice = await salesApi.getInvoice(invoice.id);
+      printThermalTicket(fullInvoice);
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Error al cargar la factura', 'error');
+    }
+  };
+
   const handleDownloadPDF = async (invoice: Invoice) => {
     try {
       const fullInvoice = await salesApi.getInvoice(invoice.id);
@@ -165,19 +176,20 @@ const InvoicesTab = () => {
     }
   };
 
-  const handleSendWhatsApp = async (invoice: Invoice) => {
-    try {
-      const fullInvoice = await salesApi.getInvoice(invoice.id);
-      const result = await sendInvoiceWhatsApp(fullInvoice);
-      if (result.success) {
-        showToast('Mensaje WhatsApp enviado exitosamente', 'success');
-      } else {
-        showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
-      }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Error al enviar por WhatsApp', 'error');
-    }
-  };
+  // WhatsApp function disabled
+  // const handleSendWhatsApp = async (invoice: Invoice) => {
+  //   try {
+  //     const fullInvoice = await salesApi.getInvoice(invoice.id);
+  //     const result = await sendInvoiceWhatsApp(fullInvoice);
+  //     if (result.success) {
+  //       showToast('Mensaje WhatsApp enviado exitosamente', 'success');
+  //     } else {
+  //       showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
+  //     }
+  //   } catch (error: any) {
+  //     showToast(error.response?.data?.error?.message || 'Error al enviar por WhatsApp', 'error');
+  //   }
+  // };
 
   const handleGenerateReceipt = async (invoice: Invoice) => {
     try {
@@ -506,18 +518,22 @@ const InvoicesTab = () => {
                                     )}
                                     {invoice.status === 'DRAFT' && (
                                       <button
-                                        onClick={async () => {
-                                          if (window.confirm(`¿Está seguro de eliminar la factura ${invoice.number}? Esta acción no se puede deshacer.`)) {
-                                            try {
-                                              await salesApi.deleteInvoice(invoice.id);
-                                              showToast('Factura eliminada exitosamente', 'success');
-                                              fetchInvoices();
-                                              setActionMenuOpen(null);
-                                            } catch (error: any) {
-                                              showToast(error.response?.data?.error?.message || 'Error al eliminar la factura', 'error');
-                                              setActionMenuOpen(null);
-                                            }
-                                          }
+                                        onClick={() => {
+                                          setActionMenuOpen(null);
+                                          showConfirm(
+                                            'Eliminar Factura',
+                                            `¿Está seguro de eliminar la factura ${invoice.number}? Esta acción no se puede deshacer.`,
+                                            async () => {
+                                              try {
+                                                await salesApi.deleteInvoice(invoice.id);
+                                                showToast('Factura eliminada exitosamente', 'success');
+                                                fetchInvoices();
+                                              } catch (error: any) {
+                                                showToast(error.response?.data?.error?.message || 'Error al eliminar la factura', 'error');
+                                              }
+                                            },
+                                            { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+                                          );
                                         }}
                                         className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
                                       >
@@ -532,7 +548,17 @@ const InvoicesTab = () => {
                                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                                     >
                                       <HiPrinter className="w-4 h-4 mr-2" />
-                                      Imprimir
+                                      Imprimir Factura
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        handlePrintThermal(invoice);
+                                        setActionMenuOpen(null);
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    >
+                                      <HiPrinter className="w-4 h-4 mr-2" />
+                                      Imprimir Ticket Térmico
                                     </button>
                                     <button
                                       onClick={() => {
@@ -544,7 +570,8 @@ const InvoicesTab = () => {
                                       <HiDocumentDownload className="w-4 h-4 mr-2" />
                                       Descargar PDF
                                     </button>
-                                    <button
+                                    {/* WhatsApp button disabled */}
+                                    {/* <button
                                       onClick={() => {
                                         handleSendWhatsApp(invoice);
                                         setActionMenuOpen(null);
@@ -553,7 +580,7 @@ const InvoicesTab = () => {
                                     >
                                       <HiChat className="w-4 h-4 mr-2" />
                                       Enviar WhatsApp
-                                    </button>
+                                    </button> */}
                                     {invoice.status === 'ISSUED' && invoice.balance > 0 && (
                                       <>
                                         <button

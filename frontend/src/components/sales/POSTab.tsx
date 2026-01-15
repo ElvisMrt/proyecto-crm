@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { salesApi, inventoryApi, clientsApi, cashApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { HiSearch } from 'react-icons/hi';
+import { printInvoice, printReceipt, printThermalTicket } from '../../utils/invoicePrint';
+// WhatsApp module disabled
+// import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
 
 interface Product {
   id: string;
@@ -9,6 +13,8 @@ interface Product {
   name: string;
   salePrice: number;
   stock?: number;
+  minStock?: number;
+  imageUrl?: string;
 }
 
 interface CartItem {
@@ -22,6 +28,10 @@ interface CartItem {
 
 const POSTab = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  
+  // Check if user can edit prices (Administrator or Supervisor)
+  const canEditPrice = user?.role === 'ADMINISTRATOR' || user?.role === 'SUPERVISOR';
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -33,6 +43,7 @@ const POSTab = () => {
   const [cashStatus, setCashStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [amountReceived, setAmountReceived] = useState<number>(0);
+  const [generalDiscount, setGeneralDiscount] = useState<number>(0);
   const [saleResult, setSaleResult] = useState<any>(null); // Store sale result for success screen
 
   // Debounce search input
@@ -95,7 +106,33 @@ const POSTab = () => {
   const fetchProducts = async () => {
     try {
       const response = await inventoryApi.getProducts({ isActive: true, limit: 200 });
-      setProducts(response.data || []);
+      // Fetch stock information for each product
+      const productsWithStock = await Promise.all(
+        (response.data || []).map(async (product: any) => {
+          try {
+            const stockResponse = await inventoryApi.getStock({ 
+              productId: product.id,
+              limit: 1 
+            });
+            const stocks = stockResponse.data || [];
+            const totalStock = stocks.reduce((sum: number, stock: any) => 
+              sum + Number(stock.quantity || 0), 0
+            );
+            return {
+              ...product,
+              stock: totalStock,
+              minStock: product.minStock || 0,
+            };
+          } catch (error) {
+            return {
+              ...product,
+              stock: 0,
+              minStock: product.minStock || 0,
+            };
+          }
+        })
+      );
+      setProducts(productsWithStock);
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -174,9 +211,21 @@ const POSTab = () => {
     );
   }, [cart]);
 
+  const updatePrice = useCallback((productId: string, price: number) => {
+    if (!canEditPrice) return;
+    setCart(
+      cart.map((item) =>
+        item.productId === productId
+          ? { ...item, price: Math.max(0, price), subtotal: item.quantity * Math.max(0, price) - item.discount }
+          : item
+      )
+    );
+  }, [cart, canEditPrice]);
+
   const calculateTotal = useCallback(() => {
-    return cart.reduce((sum, item) => sum + item.subtotal, 0);
-  }, [cart]);
+    const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
+    return Math.max(0, subtotal - generalDiscount);
+  }, [cart, generalDiscount]);
 
   const calculateTotalDiscount = useCallback(() => {
     return cart.reduce((sum, item) => sum + item.discount, 0);
@@ -184,8 +233,11 @@ const POSTab = () => {
 
   const calculateTax = useCallback(() => {
     if (!includeTax) return 0;
-    return calculateTotal() * 0.18;
-  }, [includeTax, calculateTotal]);
+    // ITBIS se calcula sobre el subtotal después del descuento general
+    const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
+    const subtotalAfterDiscount = Math.max(0, subtotal - generalDiscount);
+    return subtotalAfterDiscount * 0.18;
+  }, [includeTax, cart, generalDiscount]);
 
   const calculateFinalTotal = useCallback(() => {
     return calculateTotal() + calculateTax();
@@ -199,8 +251,14 @@ const POSTab = () => {
 
   // Update amountReceived when total changes (for cash payments)
   useEffect(() => {
-    if (paymentMethod === 'CASH' && (amountReceived === 0 || amountReceived < finalTotal)) {
-      setAmountReceived(finalTotal);
+    if (paymentMethod === 'CASH') {
+      // Solo actualizar si está en 0 o es menor al total
+      if (amountReceived === 0 || amountReceived < finalTotal) {
+        setAmountReceived(finalTotal);
+      }
+    } else {
+      // Limpiar amountReceived si no es efectivo
+      setAmountReceived(0);
     }
   }, [finalTotal, paymentMethod]);
 
@@ -215,16 +273,22 @@ const POSTab = () => {
       return;
     }
 
-    if (paymentMethod === 'CASH' && amountReceived < finalTotal) {
-      showToast('El monto recibido debe ser mayor o igual al total', 'error');
-      return;
+    // Validar amountReceived para pagos en efectivo
+    if (paymentMethod === 'CASH') {
+      // Asegurar que amountReceived sea al menos igual al total
+      const validAmountReceived = amountReceived >= finalTotal ? amountReceived : finalTotal;
+      
+      if (validAmountReceived < finalTotal) {
+        showToast('El monto recibido debe ser mayor o igual al total', 'error');
+        return;
+      }
     }
 
     try {
       setLoading(true);
 
       const requestData: any = {
-        type: includeTax ? 'FISCAL' : 'NON_FISCAL',
+        type: 'NON_FISCAL', // POS siempre es no fiscal, ITBIS se maneja con includeTax
         paymentMethod,
         items: cart.map((item) => ({
           productId: item.productId,
@@ -233,7 +297,8 @@ const POSTab = () => {
           price: item.price,
           discount: item.discount,
         })),
-        discount: 0,
+        discount: generalDiscount,
+        includeTax: includeTax, // Incluir ITBIS opcional
       };
 
       // Solo incluir clientId si hay un cliente seleccionado
@@ -241,9 +306,10 @@ const POSTab = () => {
         requestData.clientId = selectedClient;
       }
 
-      // Include amountReceived for cash payments
-      if (paymentMethod === 'CASH' && amountReceived > 0) {
-        requestData.amountReceived = amountReceived;
+      // Include amountReceived for cash payments - siempre enviar si es CASH
+      if (paymentMethod === 'CASH') {
+        const validAmountReceived = amountReceived >= finalTotal ? amountReceived : finalTotal;
+        requestData.amountReceived = validAmountReceived;
       }
 
       const response = await salesApi.createPOSSale(requestData);
@@ -252,6 +318,8 @@ const POSTab = () => {
       if (response.invoice) {
         setSaleResult(response);
         showToast('Venta realizada exitosamente', 'success');
+        
+        // Ya no imprimimos automáticamente, el usuario elige el tipo de impresión
       } else {
         // Fallback for old format
         showToast('Venta realizada exitosamente', 'success');
@@ -290,6 +358,7 @@ const POSTab = () => {
     setSelectedClient('');
     setIncludeTax(false);
     setAmountReceived(0);
+    setGeneralDiscount(0);
     setPaymentMethod('CASH');
     checkCashStatus();
   };
@@ -300,21 +369,22 @@ const POSTab = () => {
     }
   };
 
-  const handleSendWhatsApp = async () => {
-    if (saleResult?.invoice) {
-      try {
-        if (!saleResult.invoice.client?.phone) {
-          showToast('El cliente no tiene número de teléfono registrado', 'error');
-          return;
-        }
-        await sendInvoiceWhatsApp(saleResult.invoice);
-        showToast('Factura enviada por WhatsApp', 'success');
-      } catch (error) {
-        console.error('Error sending WhatsApp:', error);
-        showToast('Error al enviar por WhatsApp', 'error');
-      }
-    }
-  };
+  // WhatsApp function disabled
+  // const handleSendWhatsApp = async () => {
+  //   if (saleResult?.invoice) {
+  //     try {
+  //       if (!saleResult.invoice.client?.phone) {
+  //         showToast('El cliente no tiene número de teléfono registrado', 'error');
+  //         return;
+  //       }
+  //       await sendInvoiceWhatsApp(saleResult.invoice);
+  //       showToast('Factura enviada por WhatsApp', 'success');
+  //     } catch (error) {
+  //       console.error('Error sending WhatsApp:', error);
+  //       showToast('Error al enviar por WhatsApp', 'error');
+  //     }
+  //   }
+  // };
 
   // Success screen after sale
   if (saleResult?.invoice) {
@@ -366,15 +436,25 @@ const POSTab = () => {
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
-            onClick={handlePrint}
+            onClick={() => handlePrint('invoice')}
             className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
-            Imprimir Ticket
+            Imprimir Factura
           </button>
-          {invoice.client?.phone && (
+          <button
+            onClick={() => handlePrint('thermal')}
+            className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Imprimir Ticket Térmico
+          </button>
+          {/* WhatsApp button disabled */}
+          {/* {invoice.client?.phone && (
             <button
               onClick={handleSendWhatsApp}
               className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center justify-center gap-2"
@@ -384,7 +464,7 @@ const POSTab = () => {
               </svg>
               Enviar por WhatsApp
             </button>
-          )}
+          )} */}
           <button
             onClick={handleNewSale}
             className="px-6 py-3 bg-gray-600 text-white rounded-md hover:bg-gray-700 font-medium flex items-center justify-center gap-2"
@@ -449,19 +529,68 @@ const POSTab = () => {
             />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-          {filteredProducts.map((product) => (
-            <button
-              key={product.id}
-              onClick={() => addToCart(product)}
-              className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-md transition-all text-left"
-            >
-              <div className="font-medium text-sm">{product.code}</div>
-              <div className="text-xs text-gray-600 mt-1">{product.name}</div>
-              <div className="text-sm font-bold text-blue-600 mt-2">
-                RD$ {Number(product.salePrice).toLocaleString()}
-              </div>
-            </button>
-          ))}
+          {filteredProducts.map((product) => {
+            // Determinar color según disponibilidad
+            const stock = product.stock || 0;
+            const minStock = product.minStock || 0;
+            let borderColor = 'border-gray-200';
+            let bgColor = 'bg-white';
+            let availabilityColor = '';
+            
+            if (stock === 0) {
+              // Sin stock - Rojo
+              borderColor = 'border-red-300';
+              bgColor = 'bg-red-50';
+              availabilityColor = 'text-red-600';
+            } else if (stock <= minStock) {
+              // Stock bajo - Amarillo/Naranja
+              borderColor = 'border-yellow-300';
+              bgColor = 'bg-yellow-50';
+              availabilityColor = 'text-yellow-600';
+            } else {
+              // Stock disponible - Verde
+              borderColor = 'border-green-300';
+              bgColor = 'bg-green-50';
+              availabilityColor = 'text-green-600';
+            }
+            
+            return (
+              <button
+                key={product.id}
+                onClick={() => addToCart(product)}
+                className={`p-4 border-2 ${borderColor} ${bgColor} rounded-lg hover:shadow-md transition-all text-left flex flex-col relative`}
+              >
+                {/* Indicador de disponibilidad */}
+                <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${stock === 0 ? 'bg-red-500' : stock <= minStock ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                
+                {product.imageUrl ? (
+                  <img 
+                    src={product.imageUrl} 
+                    alt={product.name}
+                    className="w-full h-24 object-cover rounded mb-2 border border-gray-200"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-24 bg-gray-100 rounded mb-2 border border-gray-200 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                )}
+                <div className="font-medium text-sm">{product.code}</div>
+                <div className="text-xs text-gray-600 mt-1 line-clamp-2">{product.name}</div>
+                <div className="text-sm font-bold text-blue-600 mt-2">
+                  RD$ {Number(product.salePrice).toLocaleString()}
+                </div>
+                {/* Indicador de stock */}
+                <div className={`text-xs font-semibold mt-1 ${availabilityColor}`}>
+                  {stock === 0 ? 'Sin stock' : stock <= minStock ? `Stock bajo (${stock})` : `Disponible (${stock})`}
+                </div>
+              </button>
+            );
+          })}
         </div>
         </div>
 
@@ -502,6 +631,21 @@ const POSTab = () => {
         </div>
 
         <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Descuento General
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={generalDiscount || ''}
+            onChange={(e) => setGeneralDiscount(parseFloat(e.target.value) || 0)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="0.00"
+          />
+        </div>
+
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pago</label>
           <select
             value={paymentMethod}
@@ -524,31 +668,41 @@ const POSTab = () => {
         {paymentMethod === 'CASH' && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Monto Recibido
+              Monto Recibido <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
               min={finalTotal}
               step="0.01"
-              value={amountReceived || ''}
-              onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)}
+              value={amountReceived || finalTotal}
+              onChange={(e) => {
+                const value = Number(e.target.value) || 0;
+                setAmountReceived(value >= finalTotal ? value : finalTotal);
+              }}
               onFocus={(e) => {
-                if (!amountReceived || amountReceived === 0) {
+                if (!amountReceived || amountReceived < finalTotal) {
                   e.target.value = finalTotal.toString();
                   setAmountReceived(finalTotal);
                 }
+                e.target.select(); // Seleccionar todo el texto para facilitar edición
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               placeholder={finalTotal.toLocaleString()}
+              required
             />
             {amountReceived > 0 && amountReceived < finalTotal && (
               <p className="text-xs text-red-600 mt-1">
-                El monto recibido es menor que el total
+                El monto recibido debe ser mayor o igual al total (RD$ {finalTotal.toLocaleString()})
               </p>
             )}
-            {amountReceived > finalTotal && (
+            {amountReceived >= finalTotal && amountReceived > finalTotal && (
               <p className="text-xs text-green-600 mt-1">
                 Vuelto: RD$ {(amountReceived - finalTotal).toLocaleString()}
+              </p>
+            )}
+            {amountReceived === finalTotal && (
+              <p className="text-xs text-gray-500 mt-1">
+                Monto exacto, sin vuelto
               </p>
             )}
           </div>
@@ -562,9 +716,33 @@ const POSTab = () => {
               cart.map((item) => (
                 <div key={item.productId} className="p-2 bg-gray-50 rounded mb-2">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{item.product.name}</div>
-                      <div className="text-xs text-gray-500">RD$ {item.price.toLocaleString()} c/u</div>
+                    <div className="flex items-center space-x-3 flex-1">
+                      {item.product.imageUrl ? (
+                        <img 
+                          src={item.product.imageUrl} 
+                          alt={item.product.name}
+                          className="w-12 h-12 object-cover rounded border border-gray-200 flex-shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">{item.product.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {canEditPrice ? (
+                            <span className="text-blue-600">Precio editable</span>
+                          ) : (
+                            <>RD$ {item.price.toLocaleString()} c/u</>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <button
                       onClick={() => updateQuantity(item.productId, 0)}
@@ -626,12 +804,18 @@ const POSTab = () => {
         <div className="border-t border-gray-200 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span>Subtotal:</span>
-            <span className="font-medium">RD$ {total.toLocaleString()}</span>
+            <span className="font-medium">RD$ {(cart.reduce((sum, item) => sum + item.subtotal, 0)).toLocaleString()}</span>
           </div>
           {totalDiscount > 0 && (
             <div className="flex justify-between text-sm text-red-600">
-              <span>Descuentos:</span>
+              <span>Descuentos por ítem:</span>
               <span>-RD$ {totalDiscount.toLocaleString()}</span>
+            </div>
+          )}
+          {generalDiscount > 0 && (
+            <div className="flex justify-between text-sm text-red-600">
+              <span>Descuento General:</span>
+              <span>-RD$ {generalDiscount.toLocaleString()}</span>
             </div>
           )}
           {includeTax && (
@@ -649,10 +833,10 @@ const POSTab = () => {
         <button
           onClick={handleCheckout}
           disabled={
-            loading || 
-            cart.length === 0 || 
+            loading ||
+            cart.length === 0 ||
             (paymentMethod === 'CASH' && !cashStatus) ||
-            (paymentMethod === 'CASH' && amountReceived < finalTotal)
+            (paymentMethod === 'CASH' && (!amountReceived || amountReceived < finalTotal))
           }
           className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
         >

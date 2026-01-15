@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { inventoryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { HiDotsVertical, HiPencil, HiTrash } from 'react-icons/hi';
 
 const CategoriesTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [form, setForm] = useState({ name: '', description: '' });
+  const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -43,6 +45,24 @@ const CategoriesTab = () => {
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Error al guardar la categoría', 'error');
     }
+  };
+
+  const handleDelete = async (category: any) => {
+    setActionMenuOpen(null);
+    showConfirm(
+      'Eliminar Categoría',
+      `¿Está seguro de eliminar la categoría "${category.name}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          await inventoryApi.deleteCategory(category.id);
+          showToast('Categoría eliminada exitosamente', 'success');
+          fetchCategories();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al eliminar la categoría', 'error');
+        }
+      },
+      { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+    );
   };
 
   return (
@@ -134,17 +154,46 @@ const CategoriesTab = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
                       {category.productCount || 0}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="relative inline-block">
+                        <button
+                          onClick={() => setActionMenuOpen(actionMenuOpen === category.id ? null : category.id)}
+                          className="p-1 text-gray-400 hover:text-gray-600 focus:outline-none"
+                        >
+                          <HiDotsVertical className="w-5 h-5" />
+                        </button>
+                        {actionMenuOpen === category.id && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setActionMenuOpen(null)}
+                            ></div>
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200">
+                              <div className="py-1">
                       <button
                         onClick={() => {
                           setEditingCategory(category);
                           setForm({ name: category.name, description: category.description || '' });
                           setShowForm(true);
+                                    setActionMenuOpen(null);
                         }}
-                        className="text-blue-600 hover:text-blue-900"
+                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                       >
+                                  <HiPencil className="w-4 h-4 mr-2" />
                         Editar
                       </button>
+                                <button
+                                  onClick={() => handleDelete(category)}
+                                  className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center"
+                                >
+                                  <HiTrash className="w-4 h-4 mr-2" />
+                                  Eliminar
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

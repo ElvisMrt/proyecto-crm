@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cashApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { HiPlusCircle, HiLockClosed, HiCurrencyDollar, HiArrowUp, HiArrowDown, HiCash, HiSwitchHorizontal } from 'react-icons/hi';
 
 interface MovementsTabProps {
   currentCash: any;
@@ -102,7 +103,9 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
   if (!currentCash) {
     return (
       <div className="bg-white rounded-lg shadow p-12 text-center">
-        <div className="text-6xl mb-4">🔒</div>
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-4">
+          <HiLockClosed className="w-10 h-10 text-red-600" />
+        </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Caja Cerrada</h2>
         <p className="text-gray-600">
           Debe abrir la caja primero para registrar movimientos
@@ -115,12 +118,24 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
     <div className="space-y-4">
       {/* Botón para agregar movimiento */}
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-900">Movimientos de Caja</h2>
+        <h2 className="text-xl font-bold text-gray-900 flex items-center">
+          <HiSwitchHorizontal className="w-5 h-5 mr-2 text-gray-400" />
+          Movimientos de Caja
+        </h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md flex items-center"
         >
-          {showForm ? 'Cancelar' : '+ Nuevo Movimiento'}
+          {showForm ? (
+            <>
+              <span className="mr-2">Cancelar</span>
+            </>
+          ) : (
+            <>
+              <HiPlusCircle className="w-5 h-5 mr-2" />
+              Nuevo Movimiento
+            </>
+          )}
         </button>
       </div>
 
@@ -132,7 +147,14 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Tipo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                  {form.type === 'MANUAL_ENTRY' ? (
+                    <HiArrowUp className="w-4 h-4 mr-1 text-green-600" />
+                  ) : (
+                    <HiArrowDown className="w-4 h-4 mr-1 text-red-600" />
+                  )}
+                  Tipo *
+                </label>
                 <select
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value as any })}
@@ -146,7 +168,10 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
 
               {/* Método */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Método *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                  <HiCurrencyDollar className="w-4 h-4 mr-1 text-gray-400" />
+                  Método *
+                </label>
                 <select
                   value={form.method}
                   onChange={(e) => setForm({ ...form, method: e.target.value as any })}
@@ -249,15 +274,30 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
                       {formatDate(movement.movementDate)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm font-medium ${getTypeColor(movement.type)}`}>
+                      <span className={`text-sm font-medium flex items-center ${getTypeColor(movement.type)}`}>
+                        {movement.type === 'SALE' || movement.type === 'PAYMENT' || movement.type === 'MANUAL_ENTRY' || movement.type === 'OPENING' ? (
+                          <HiArrowUp className="w-4 h-4 mr-1" />
+                        ) : (
+                          <HiArrowDown className="w-4 h-4 mr-1" />
+                        )}
                         {getTypeLabel(movement.type)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {movement.concept}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {movement.method === 'CASH' ? 'Efectivo' : 'Transferencia'}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center">
+                      {movement.method === 'CASH' ? (
+                        <>
+                          <HiCash className="w-4 h-4 mr-1 text-gray-400" />
+                          Efectivo
+                        </>
+                      ) : (
+                        <>
+                          <HiSwitchHorizontal className="w-4 h-4 mr-1 text-gray-400" />
+                          Transferencia
+                        </>
+                      )}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
                       movement.amount >= 0 ? 'text-green-600' : 'text-red-600'

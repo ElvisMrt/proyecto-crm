@@ -28,8 +28,9 @@ const generateCreditNoteHTML = (creditNote: any) => {
       body { margin: 0; }
       .no-print { display: none; }
     }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
@@ -285,25 +286,26 @@ export const downloadCreditNotePDF = (creditNote: any) => {
   URL.revokeObjectURL(url);
 };
 
-export const sendCreditNoteWhatsApp = (creditNote: any) => {
-  const invoice = creditNote.invoice;
-  const client = invoice?.client;
-  
-  if (!client?.phone) {
-    return;
-  }
-
-  const message = `Hola! Te enviamos nuestra nota de crédito:\n\n` +
-    `*Nota de Crédito ${creditNote.number}*\n` +
-    `Factura: ${invoice?.number || 'N/A'}\n` +
-    `Fecha: ${new Date(creditNote.issueDate).toLocaleDateString('es-DO')}\n` +
-    `Motivo: ${creditNote.reason}\n` +
-    `Total: RD$ ${Number(creditNote.total).toLocaleString('es-DO', { minimumFractionDigits: 2 })}\n\n` +
-    `Para más detalles, revisa el documento adjunto.`;
-  
-  const encodedMessage = encodeURIComponent(message);
-  const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodedMessage}`;
-  window.open(whatsappUrl, '_blank');
-};
+// WhatsApp function disabled - WhatsApp module removed
+// export const sendCreditNoteWhatsApp = (creditNote: any) => {
+//   const invoice = creditNote.invoice;
+//   const client = invoice?.client;
+//   
+//   if (!client?.phone) {
+//     return;
+//   }
+//
+//   const message = `Hola! Te enviamos nuestra nota de crédito:\n\n` +
+//     `*Nota de Crédito ${creditNote.number}*\n` +
+//     `Factura: ${invoice?.number || 'N/A'}\n` +
+//     `Fecha: ${new Date(creditNote.issueDate).toLocaleDateString('es-DO')}\n` +
+//     `Motivo: ${creditNote.reason}\n` +
+//     `Total: RD$ ${Number(creditNote.total).toLocaleString('es-DO', { minimumFractionDigits: 2 })}\n\n` +
+//     `Para más detalles, revisa el documento adjunto.`;
+//   
+//   const encodedMessage = encodeURIComponent(message);
+//   const whatsappUrl = `https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodedMessage}`;
+//   window.open(whatsappUrl, '_blank');
+// };
 
 

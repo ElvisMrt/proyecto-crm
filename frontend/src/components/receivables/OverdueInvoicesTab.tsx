@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { receivablesApi } from '../../services/api';
+import { receivablesApi, crmApi, salesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 interface OverdueInvoice {
@@ -22,7 +22,13 @@ interface OverdueInvoice {
   };
 }
 
-const OverdueInvoicesTab = () => {
+interface OverdueInvoicesTabProps {
+  branchId?: string;
+  onNavigateToPayment?: (clientId: string, invoiceIds: string[]) => void;
+  onNavigateToStatus?: (clientId: string) => void;
+}
+
+const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus }: OverdueInvoicesTabProps) => {
   const { showToast } = useToast();
   const [invoices, setInvoices] = useState<OverdueInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +56,7 @@ const OverdueInvoicesTab = () => {
       if (filters.days) params.days = filters.days;
       if (filters.search) params.search = filters.search;
       if (filters.clientId) params.clientId = filters.clientId;
+      if (branchId) params.branchId = branchId;
 
       const response = await receivablesApi.getOverdue(params);
       setInvoices(response.data || []);
@@ -63,7 +70,7 @@ const OverdueInvoicesTab = () => {
 
   useEffect(() => {
     fetchOverdue();
-  }, [filters.page, filters.days, filters.clientId]);
+  }, [filters.page, filters.days, filters.clientId, branchId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-DO', {
@@ -96,15 +103,97 @@ const OverdueInvoicesTab = () => {
   };
 
   const handleCollect = (invoiceId: string, clientId: string) => {
-    // Cambiar a la tab de pagos y seleccionar cliente/factura
-    // Por ahora, simplemente mostrar un mensaje
-    showToast(`Redirigiendo a registro de pagos para factura ${invoiceId}`, 'info');
-    // TODO: Implementar navegación entre tabs cuando esté disponible
+    if (onNavigateToPayment) {
+      onNavigateToPayment(clientId, [invoiceId]);
+    } else {
+      showToast(`Redirigiendo a registro de pagos para factura ${invoiceId}`, 'info');
+    }
   };
 
-  const handleCreateTask = (clientId: string, invoiceId: string) => {
-    // TODO: Integrar con módulo de CRM para crear tarea
-    showToast('Funcionalidad de crear tarea próximamente', 'info');
+  const handleViewAccountStatus = (clientId: string) => {
+    if (onNavigateToStatus) {
+      onNavigateToStatus(clientId);
+    }
+  };
+
+  const handleCreateTask = async (clientId: string, invoiceId: string) => {
+    try {
+      // Fetch invoice details to include in task description
+      const invoice = await salesApi.getInvoice(invoiceId);
+      
+      const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('es-DO', {
+          style: 'currency',
+          currency: 'DOP',
+          minimumFractionDigits: 0,
+        }).format(amount);
+      };
+
+      const formatDate = (dateString: string | null) => {
+        if (!dateString) return '-';
+        return new Date(dateString).toLocaleDateString('es-DO', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+      };
+
+      // Calculate days overdue
+      const now = new Date();
+      const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+      const daysOverdue = dueDate && dueDate < now
+        ? Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      // Create task title
+      const taskTitle = `Cobro - Factura ${invoice.number}${invoice.ncf ? ` (${invoice.ncf})` : ''}`;
+
+      // Create task description with invoice details
+      let description = `Tarea de cobro para factura vencida.\n\n`;
+      description += `**Información de la Factura:**\n`;
+      description += `- Número: ${invoice.number}\n`;
+      if (invoice.ncf) {
+        description += `- NCF: ${invoice.ncf}\n`;
+      }
+      description += `- Cliente: ${invoice.client?.name || 'Sin cliente'}\n`;
+      description += `- Fecha de Emisión: ${formatDate(invoice.issueDate)}\n`;
+      description += `- Fecha de Vencimiento: ${formatDate(invoice.dueDate)}\n`;
+      description += `- Días Vencidos: ${daysOverdue} días\n`;
+      description += `- Total: ${formatCurrency(Number(invoice.total))}\n`;
+      description += `- Saldo Pendiente: ${formatCurrency(Number(invoice.balance))}\n`;
+      
+      if (invoice.client?.phone) {
+        description += `\n**Contacto:**\n`;
+        description += `- Teléfono: ${invoice.client.phone}\n`;
+        if (invoice.client.email) {
+          description += `- Email: ${invoice.client.email}\n`;
+        }
+      }
+
+      // Calculate due date for task (7 days from now)
+      const taskDueDate = new Date();
+      taskDueDate.setDate(taskDueDate.getDate() + 7);
+
+      // Create the task
+      const result = await crmApi.createTask({
+        title: taskTitle,
+        description: description,
+        clientId: clientId,
+        dueDate: taskDueDate.toISOString(),
+      });
+
+      if (result.id) {
+        showToast('Tarea de cobro creada exitosamente', 'success');
+      } else {
+        showToast('Error al crear la tarea', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error creating task:', error);
+      showToast(
+        error.response?.data?.error?.message || 'Error al crear la tarea de cobro',
+        'error'
+      );
+    }
   };
 
   return (
@@ -208,10 +297,16 @@ const OverdueInvoicesTab = () => {
                             Cobrar
                           </button>
                           <button
+                            onClick={() => handleViewAccountStatus(item.client.id)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium py-1 px-3 rounded"
+                          >
+                            Ver Estado
+                          </button>
+                          <button
                             onClick={() => handleCreateTask(item.client.id, item.invoice.id)}
                             className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium py-1 px-3 rounded"
                           >
-                            Tarea de Cobro
+                            Tarea
                           </button>
                           {item.client.phone && (
                             <a

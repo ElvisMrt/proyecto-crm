@@ -23,7 +23,7 @@ interface NcfSequence {
 }
 
 const NCFTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [sequences, setSequences] = useState<NcfSequence[]>([]);
   const [filteredSequences, setFilteredSequences] = useState<NcfSequence[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
@@ -140,10 +140,10 @@ const NCFTab = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Está seguro de que desea desactivar esta secuencia NCF?')) {
-      return;
-    }
-
+    showConfirm(
+      'Desactivar Secuencia NCF',
+      '¿Está seguro de que desea desactivar esta secuencia NCF?',
+      async () => {
     try {
       await ncfApi.deleteSequence(id);
       showToast('Secuencia NCF desactivada exitosamente', 'success');
@@ -151,6 +151,9 @@ const NCFTab = () => {
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Error al desactivar la secuencia NCF', 'error');
     }
+      },
+      { type: 'warning', confirmText: 'Desactivar', cancelText: 'Cancelar' }
+    );
   };
 
   const resetForm = () => {
@@ -437,89 +440,89 @@ const NCFTab = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prefijo</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rango</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibles</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uso</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sucursal</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prefijo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rango</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibles</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uso</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sucursal</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
                   {currentSequences.map((sequence) => (
-                    <tr key={sequence.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{sequence.prefix}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sequence.description || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sequence.startRange.toLocaleString()} - {sequence.endRange.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {sequence.currentNumber.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={sequence.remaining <= 100 ? 'text-red-600 font-medium' : 'text-gray-900'}>
-                          {sequence.remaining.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                            <div
-                              className={`h-2 rounded-full ${
-                                sequence.percentageUsed >= 90
-                                  ? 'bg-red-600'
-                                  : sequence.percentageUsed >= 70
-                                  ? 'bg-yellow-500'
-                                  : 'bg-green-500'
-                              }`}
-                              style={{ width: `${Math.min(sequence.percentageUsed, 100)}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs text-gray-600">{sequence.percentageUsed}%</span>
+                  <tr key={sequence.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{sequence.prefix}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {sequence.description || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {sequence.startRange.toLocaleString()} - {sequence.endRange.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {sequence.currentNumber.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={sequence.remaining <= 100 ? 'text-red-600 font-medium' : 'text-gray-900'}>
+                        {sequence.remaining.toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              sequence.percentageUsed >= 90
+                                ? 'bg-red-600'
+                                : sequence.percentageUsed >= 70
+                                ? 'bg-yellow-500'
+                                : 'bg-green-500'
+                            }`}
+                            style={{ width: `${Math.min(sequence.percentageUsed, 100)}%` }}
+                          ></div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sequence.branch?.name || 'Todas'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(sequence)}`}
+                        <span className="text-xs text-gray-600">{sequence.percentageUsed}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {sequence.branch?.name || 'Todas'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(sequence)}`}
+                      >
+                        {sequence.isActive ? 'Activa' : 'Inactiva'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => handleEdit(sequence)}
+                          className="text-blue-600 hover:text-blue-900"
                         >
-                          {sequence.isActive ? 'Activa' : 'Inactiva'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
+                          <HiPencil className="w-5 h-5" />
+                        </button>
+                        {sequence.isActive && (
                           <button
-                            onClick={() => handleEdit(sequence)}
-                            className="text-blue-600 hover:text-blue-900"
+                            onClick={() => handleDelete(sequence.id)}
+                            className="text-red-600 hover:text-red-900"
                           >
-                            <HiPencil className="w-5 h-5" />
+                            <HiTrash className="w-5 h-5" />
                           </button>
-                          {sequence.isActive && (
-                            <button
-                              onClick={() => handleDelete(sequence.id)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <HiTrash className="w-5 h-5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">

@@ -13,6 +13,7 @@ const updateCompanySchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   rnc: z.string().optional(),
+  logo: z.string().url().or(z.string().startsWith('data:image')).optional(),
 });
 
 const createBranchSchema = z.object({
@@ -59,11 +60,11 @@ export const getCompany = async (req: AuthRequest, res: Response) => {
       // Create a default tenant if none exists
       tenant = await prisma.tenant.create({
         data: {
-          name: 'Mi Empresa',
+      name: 'Mi Empresa',
           slug: 'mi-empresa',
-          email: 'info@miempresa.com',
-          phone: '809-000-0000',
-          address: 'Santo Domingo, República Dominicana',
+      email: 'info@miempresa.com',
+      phone: '809-000-0000',
+      address: 'Santo Domingo, República Dominicana',
           country: 'DO',
           status: 'ACTIVE',
           plan: 'BASIC',
@@ -77,8 +78,8 @@ export const getCompany = async (req: AuthRequest, res: Response) => {
       email: tenant.email,
       phone: tenant.phone || '',
       address: tenant.address || '',
-      rnc: '', // RNC is not in Tenant model, we'll store it separately if needed
-      logo: null,
+      rnc: tenant.rnc || '',
+      logo: tenant.logo || null,
     });
   } catch (error) {
     console.error('Get company error:', error);
@@ -105,6 +106,8 @@ export const updateCompany = async (req: AuthRequest, res: Response) => {
     if (data.email) updateData.email = data.email;
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.address !== undefined) updateData.address = data.address;
+    if (data.rnc !== undefined) updateData.rnc = data.rnc;
+    if (data.logo !== undefined) updateData.logo = data.logo;
 
     if (tenant) {
       tenant = await prisma.tenant.update({
@@ -119,6 +122,8 @@ export const updateCompany = async (req: AuthRequest, res: Response) => {
           email: data.email || 'info@miempresa.com',
           phone: data.phone,
           address: data.address,
+          rnc: data.rnc,
+          logo: data.logo,
           country: 'DO',
           status: 'ACTIVE',
           plan: 'BASIC',
@@ -134,7 +139,8 @@ export const updateCompany = async (req: AuthRequest, res: Response) => {
         email: tenant.email,
         phone: tenant.phone || '',
         address: tenant.address || '',
-        rnc: data.rnc || '',
+        rnc: tenant.rnc || '',
+        logo: tenant.logo || null,
       },
     });
   } catch (error: any) {
@@ -269,6 +275,57 @@ export const updateBranch = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error updating branch',
+      },
+    });
+  }
+};
+
+export const deleteBranch = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if branch has associated data
+    const [users, cashRegisters, invoices] = await Promise.all([
+      prisma.user.count({ where: { branchId: id } }),
+      prisma.cashRegister.count({ where: { branchId: id } }),
+      prisma.invoice.count({ where: { branchId: id } }),
+    ]);
+
+    if (users > 0 || cashRegisters > 0 || invoices > 0) {
+      // Instead of deleting, deactivate the branch
+      const branch = await prisma.branch.update({
+        where: { id },
+        data: { isActive: false },
+      });
+
+      return res.json({
+        message: 'Branch deactivated successfully (has associated data)',
+        data: branch,
+      });
+    }
+
+    // Safe to delete if no associated data
+    await prisma.branch.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Branch deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Branch not found',
+        },
+      });
+    }
+    console.error('Delete branch error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting branch',
       },
     });
   }

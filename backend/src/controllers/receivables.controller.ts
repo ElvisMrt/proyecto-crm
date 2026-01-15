@@ -22,6 +22,7 @@ const createPaymentSchema = z.object({
 export const getStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { clientId } = req.params;
+    const branchId = req.query.branchId as string | undefined;
 
     const client = await prisma.client.findUnique({
       where: { id: clientId },
@@ -46,10 +47,12 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    const branchFilter = branchId ? { branchId } : {};
     const invoices = await prisma.invoice.findMany({
       where: {
         clientId,
         status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE, InvoiceStatus.PAID] },
+        ...branchFilter,
       },
       include: {
         payments: {
@@ -158,11 +161,16 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const branchId = req.query.branchId as string | undefined;
     const where: any = {
       status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
       dueDate: dateFilter,
       balance: { gt: 0 },
     };
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
 
     if (req.query.clientId) {
       where.clientId = req.query.clientId;
@@ -249,22 +257,29 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
     }
 
     const data = createPaymentSchema.parse(req.body);
+    const branchId = req.query.branchId as string | undefined;
 
     // Get client invoices with balance
     let invoices: any[] = [];
     let invoicePayments: Array<{ invoiceId: string; amount: number }> = [];
+    let invoiceBranchId: string | null = null;
 
     if (data.invoicePayments && data.invoicePayments.length > 0) {
       // Distribución manual por factura
       invoicePayments = data.invoicePayments;
       const invoiceIds = invoicePayments.map((ip) => ip.invoiceId);
       
+      const invoiceWhere: any = {
+        id: { in: invoiceIds },
+        clientId: data.clientId,
+        status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
+      };
+      if (branchId) {
+        invoiceWhere.branchId = branchId;
+      }
+      
       invoices = await prisma.invoice.findMany({
-        where: {
-          id: { in: invoiceIds },
-          clientId: data.clientId,
-          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
-        },
+        where: invoiceWhere,
       });
 
       if (invoices.length !== invoiceIds.length) {
@@ -308,11 +323,24 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       }
     } else if (data.invoiceIds && data.invoiceIds.length > 0) {
       // Distribución automática entre facturas seleccionadas
+      const invoiceWhere: any = {
+        id: { in: data.invoiceIds },
+        clientId: data.clientId,
+        status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
+      };
+      if (branchId) {
+        invoiceWhere.branchId = branchId;
+      }
+      
       invoices = await prisma.invoice.findMany({
-        where: {
-          id: { in: data.invoiceIds },
-          clientId: data.clientId,
-          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
+        where: invoiceWhere,
+        select: {
+          id: true,
+          number: true,
+          balance: true,
+          status: true,
+          dueDate: true,
+          branchId: true,
         },
         orderBy: { dueDate: 'asc' }, // Pagar primero las más vencidas
       });
@@ -326,6 +354,24 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         });
       }
 
+      // Validate all invoices are from the same branch (if branchId is specified)
+      if (branchId) {
+        const invalidBranchInvoices = invoices.filter((inv) => inv.branchId !== branchId);
+        if (invalidBranchInvoices.length > 0) {
+          return res.status(400).json({
+            error: {
+              code: 'BRANCH_MISMATCH',
+              message: 'Algunas facturas no pertenecen a la sucursal seleccionada',
+            },
+          });
+        }
+      }
+
+      // Get branchId from first invoice for cash validation
+      if (invoices.length > 0 && !invoiceBranchId) {
+        invoiceBranchId = invoices[0].branchId;
+      }
+
       const totalBalance = invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
       if (data.amount > totalBalance) {
         return res.status(400).json({
@@ -337,11 +383,24 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       }
     } else {
       // Si no se especifican facturas, obtener todas las pendientes del cliente
+      const invoiceWhere: any = {
+        clientId: data.clientId,
+        status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
+        balance: { gt: 0 },
+      };
+      if (branchId) {
+        invoiceWhere.branchId = branchId;
+      }
+      
       invoices = await prisma.invoice.findMany({
-        where: {
-          clientId: data.clientId,
-          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
-          balance: { gt: 0 },
+        where: invoiceWhere,
+        select: {
+          id: true,
+          number: true,
+          balance: true,
+          status: true,
+          dueDate: true,
+          branchId: true,
         },
         orderBy: { dueDate: 'asc' },
       });
@@ -352,6 +411,47 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           error: {
             code: 'AMOUNT_EXCEEDS_BALANCE',
             message: 'Payment amount exceeds total balance',
+          },
+        });
+      }
+
+      // Validate all invoices are from the same branch (if branchId is specified)
+      if (branchId) {
+        const invalidBranchInvoices = invoices.filter((inv) => inv.branchId !== branchId);
+        if (invalidBranchInvoices.length > 0) {
+          return res.status(400).json({
+            error: {
+              code: 'BRANCH_MISMATCH',
+              message: 'Algunas facturas no pertenecen a la sucursal seleccionada',
+            },
+          });
+        }
+      }
+
+      // Get branchId from first invoice for cash validation
+      if (invoices.length > 0 && !invoiceBranchId) {
+        invoiceBranchId = invoices[0].branchId;
+      }
+    }
+
+    // Validate cash register branch matches invoice branch for cash payments
+    if (data.method === 'CASH' && invoiceBranchId) {
+      const cashWhere: any = { status: 'OPEN' };
+      if (branchId) {
+        cashWhere.branchId = branchId;
+      } else {
+        cashWhere.branchId = invoiceBranchId;
+      }
+      
+      const openCash = await prisma.cashRegister.findFirst({
+        where: cashWhere,
+      });
+
+      if (!openCash) {
+        return res.status(400).json({
+          error: {
+            code: 'CASH_BRANCH_MISMATCH',
+            message: 'No hay caja abierta para la sucursal de las facturas seleccionadas',
           },
         });
       }
@@ -372,7 +472,26 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           const invoiceBalance = Number(invoice.balance);
           const paymentAmount = ip.amount;
           const newBalance = invoiceBalance - paymentAmount;
-          const newStatus = newBalance === 0 ? InvoiceStatus.PAID : invoice.status;
+          
+          // Determine new status based on balance
+          let newStatus = invoice.status;
+          if (newBalance === 0) {
+            newStatus = InvoiceStatus.PAID;
+          } else if (invoice.status === InvoiceStatus.PAID) {
+            // If was PAID but now has balance, check if overdue
+            const now = new Date();
+            if (invoice.dueDate && invoice.dueDate < now) {
+              newStatus = InvoiceStatus.OVERDUE;
+            } else {
+              newStatus = InvoiceStatus.ISSUED;
+            }
+          } else if (invoice.status === InvoiceStatus.ISSUED && invoice.dueDate) {
+            // Check if should be marked as OVERDUE
+            const now = new Date();
+            if (invoice.dueDate < now && newBalance > 0) {
+              newStatus = InvoiceStatus.OVERDUE;
+            }
+          }
 
           // Update invoice
           await tx.invoice.update({
@@ -409,7 +528,26 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           const paymentAmount = Math.min(remainingAmount, invoiceBalance);
 
           const newBalance = invoiceBalance - paymentAmount;
-          const newStatus = newBalance === 0 ? InvoiceStatus.PAID : invoice.status;
+          
+          // Determine new status based on balance
+          let newStatus = invoice.status;
+          if (newBalance === 0) {
+            newStatus = InvoiceStatus.PAID;
+          } else if (invoice.status === InvoiceStatus.PAID) {
+            // If was PAID but now has balance, check if overdue
+            const now = new Date();
+            if (invoice.dueDate && invoice.dueDate < now) {
+              newStatus = InvoiceStatus.OVERDUE;
+            } else {
+              newStatus = InvoiceStatus.ISSUED;
+            }
+          } else if (invoice.status === InvoiceStatus.ISSUED && invoice.dueDate) {
+            // Check if should be marked as OVERDUE
+            const now = new Date();
+            if (invoice.dueDate < now && newBalance > 0) {
+              newStatus = InvoiceStatus.OVERDUE;
+            }
+          }
 
           // Update invoice
           await tx.invoice.update({
@@ -439,10 +577,17 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      // Create cash movement if cash payment (solo uno para el total)
+      // Create cash movement for cash payments (solo uno para el total)
       if (data.method === 'CASH' && createdPayments.length > 0) {
+        const cashWhere: any = { status: 'OPEN' };
+        if (branchId) {
+          cashWhere.branchId = branchId;
+        } else if (invoiceBranchId) {
+          cashWhere.branchId = invoiceBranchId;
+        }
+
         const openCash = await tx.cashRegister.findFirst({
-          where: { status: 'OPEN' },
+          where: cashWhere,
         });
 
         if (openCash) {
@@ -455,10 +600,43 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
               method: 'CASH',
               paymentId: createdPayments[0].id, // Link to first payment
               userId: req.user!.id,
+              movementDate: new Date(),
             },
           });
         }
       }
+
+      // Create cash movement for transfer payments (optional - según reglas de negocio)
+      // Si se requiere registrar transferencias también en caja, descomentar:
+      /*
+      if (data.method === 'TRANSFER' && createdPayments.length > 0) {
+        const cashWhere: any = { status: 'OPEN' };
+        if (branchId) {
+          cashWhere.branchId = branchId;
+        } else if (invoiceBranchId) {
+          cashWhere.branchId = invoiceBranchId;
+        }
+
+        const openCash = await tx.cashRegister.findFirst({
+          where: cashWhere,
+        });
+
+        if (openCash) {
+          await tx.cashMovement.create({
+            data: {
+              cashRegisterId: openCash.id,
+              type: 'PAYMENT',
+              concept: `Pago por transferencia - Cuenta por cobrar (${createdPayments.length} factura${createdPayments.length > 1 ? 's' : ''})`,
+              amount: data.amount,
+              method: 'TRANSFER',
+              paymentId: createdPayments[0].id,
+              userId: req.user!.id,
+              movementDate: new Date(),
+            },
+          });
+        }
+      }
+      */
 
       return createdPayments;
     });
@@ -499,6 +677,7 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
+    const branchId = req.query.branchId as string | undefined;
 
     const where: any = {};
 
@@ -508,6 +687,12 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
     if (req.query.invoiceId) {
       where.invoiceId = req.query.invoiceId;
+    }
+
+    if (branchId) {
+      where.invoice = {
+        branchId,
+      };
     }
 
     if (req.query.startDate || req.query.endDate) {
@@ -655,6 +840,40 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     const allClientIds = new Set(allInvoices.map((inv) => inv.clientId));
     const totalClientsWithReceivables = allClientIds.size;
 
+    // Get top 10 clients by receivable amount
+    const clientReceivables = new Map<string, { clientId: string; total: number; invoiceCount: number }>();
+    
+    allInvoices.forEach((inv) => {
+      if (!inv.clientId) return;
+      const existing = clientReceivables.get(inv.clientId) || { clientId: inv.clientId, total: 0, invoiceCount: 0 };
+      existing.total += Number(inv.balance);
+      existing.invoiceCount += 1;
+      clientReceivables.set(inv.clientId, existing);
+    });
+
+    const topClientsData = Array.from(clientReceivables.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    // Fetch client details for top clients
+    const topClients = await Promise.all(
+      topClientsData.map(async (data) => {
+        const client = await prisma.client.findUnique({
+          where: { id: data.clientId },
+          select: {
+            id: true,
+            name: true,
+            identification: true,
+          },
+        });
+        return {
+          client: client || { id: data.clientId, name: 'Cliente eliminado', identification: '' },
+          totalReceivable: data.total,
+          invoiceCount: data.invoiceCount,
+        };
+      })
+    );
+
     res.json({
       totalReceivable,
       totalOverdue,
@@ -663,6 +882,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       byAge,
       overdueCount: overdue.length,
       totalInvoices: allInvoices.length,
+      topClients,
     });
   } catch (error) {
     console.error('Get summary error:', error);

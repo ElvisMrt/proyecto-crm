@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { validateIdentification, normalizeIdentification } from '../../utils/identificationValidator';
 
 interface ClientFormTabProps {
   client?: any;
@@ -22,6 +23,7 @@ const ClientFormTab = ({ client, onSave, onCancel }: ClientFormTabProps) => {
     observations: '',
   });
   const [loading, setLoading] = useState(false);
+  const [identificationError, setIdentificationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (client) {
@@ -52,19 +54,36 @@ const ClientFormTab = ({ client, onSave, onCancel }: ClientFormTabProps) => {
       return;
     }
 
+    // Validar identificación
+    const validation = validateIdentification(form.identification);
+    if (!validation.isValid) {
+      showToast(validation.error || 'Identificación inválida', 'error');
+      setIdentificationError(validation.error || 'Identificación inválida');
+      return;
+    }
+
     try {
       setLoading(true);
       const data: any = {
-        name: form.name,
-        identification: form.identification,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        address: form.address || undefined,
+        name: form.name.trim(),
+        identification: normalizeIdentification(form.identification),
         clientType: form.clientType,
         creditDays: form.creditDays,
       };
 
-      if (form.clientType === 'CREDIT') {
+      // Solo incluir campos opcionales si tienen valor
+      if (form.email && form.email.trim()) {
+        data.email = form.email.trim();
+      }
+      if (form.phone && form.phone.trim()) {
+        data.phone = form.phone.trim();
+      }
+      if (form.address && form.address.trim()) {
+        data.address = form.address.trim();
+      }
+
+      // Solo incluir creditLimit si es cliente de crédito
+      if (form.clientType === 'CREDIT' && form.creditLimit > 0) {
         data.creditLimit = form.creditLimit;
       }
 
@@ -116,10 +135,43 @@ const ClientFormTab = ({ client, onSave, onCancel }: ClientFormTabProps) => {
                   <input
                     type="text"
                     value={form.identification}
-                    onChange={(e) => setForm({ ...form, identification: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setForm({ ...form, identification: value });
+                      
+                      // Validar en tiempo real si hay contenido
+                      if (value.trim()) {
+                        const validation = validateIdentification(value);
+                        if (!validation.isValid) {
+                          setIdentificationError(validation.error || 'Formato inválido');
+                        } else {
+                          setIdentificationError(null);
+                        }
+                      } else {
+                        setIdentificationError(null);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Normalizar al perder el foco
+                      const normalized = normalizeIdentification(e.target.value);
+                      if (normalized !== e.target.value) {
+                        setForm({ ...form, identification: normalized });
+                      }
+                    }}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+                      identificationError ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Ej: 123456789 o 00123456789"
                   />
+                  {identificationError && (
+                    <p className="mt-1 text-sm text-red-600">{identificationError}</p>
+                  )}
+                  {form.identification && !identificationError && (
+                    <p className="mt-1 text-sm text-green-600">
+                      {validateIdentification(form.identification).type === 'RNC' ? '✓ RNC válido' : '✓ Cédula válida'}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>

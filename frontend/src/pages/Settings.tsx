@@ -4,17 +4,18 @@ import BranchesTab from '../components/settings/BranchesTab';
 import UsersTab from '../components/settings/UsersTab';
 import RolesTab from '../components/settings/RolesTab';
 import NCFTab from '../components/settings/NCFTab';
-import WhatsAppTab from '../components/settings/WhatsAppTab';
+// WhatsApp module disabled
+// import WhatsAppTab from '../components/settings/WhatsAppTab';
 import {
   HiOfficeBuilding,
   HiHome,
   HiUser,
   HiLockClosed,
   HiDocumentText,
-  HiChat,
+  // HiChat, // WhatsApp icon disabled
 } from 'react-icons/hi';
 
-type TabType = 'company' | 'branches' | 'users' | 'roles' | 'ncf' | 'whatsapp';
+type TabType = 'company' | 'branches' | 'users' | 'roles' | 'ncf';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState<TabType>('company');
@@ -25,7 +26,8 @@ const Settings = () => {
     { id: 'users' as TabType, label: 'Usuarios', icon: HiUser },
     { id: 'roles' as TabType, label: 'Roles y Permisos', icon: HiLockClosed },
     { id: 'ncf' as TabType, label: 'NCF', icon: HiDocumentText },
-    { id: 'whatsapp' as TabType, label: 'WhatsApp', icon: HiChat },
+    // WhatsApp tab disabled
+    // { id: 'whatsapp' as TabType, label: 'WhatsApp', icon: HiChat },
   ];
 
   return (
@@ -50,8 +52,10 @@ const Settings = () => {
                 }
               `}
             >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
+              <span className="inline-flex items-center">
+                <tab.icon className="w-4 h-4 mr-2" />
+                <span>{tab.label}</span>
+              </span>
             </button>
           ))}
         </nav>
@@ -64,7 +68,8 @@ const Settings = () => {
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'roles' && <RolesTab />}
         {activeTab === 'ncf' && <NCFTab />}
-        {activeTab === 'whatsapp' && <WhatsAppTab />}
+        {/* WhatsApp tab disabled */}
+        {/* {activeTab === 'whatsapp' && <WhatsAppTab />} */}
       </div>
     </div>
   );

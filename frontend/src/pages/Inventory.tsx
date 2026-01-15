@@ -73,13 +73,15 @@ const Inventory = () => {
                 }
               `}
             >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
-              {tab.badge && tab.badge > 0 && (
-                <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                  {tab.badge}
-                </span>
-              )}
+              <span className="inline-flex items-center">
+                <tab.icon className="w-5 h-5 mr-2" />
+                <span>{tab.label}</span>
+                {tab.badge && tab.badge > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                    {tab.badge}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </nav>

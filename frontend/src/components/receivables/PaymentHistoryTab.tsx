@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { receivablesApi } from '../../services/api';
+import { useEffect, useState, useRef } from 'react';
+import { receivablesApi, clientsApi } from '../../services/api';
 
 interface Payment {
   id: string;
@@ -24,7 +24,11 @@ interface Payment {
   observations: string | null;
 }
 
-const PaymentHistoryTab = () => {
+interface PaymentHistoryTabProps {
+  branchId?: string;
+}
+
+const PaymentHistoryTab = ({ branchId }: PaymentHistoryTabProps) => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -41,6 +45,11 @@ const PaymentHistoryTab = () => {
     total: 0,
     totalPages: 0,
   });
+  const [clients, setClients] = useState<any[]>([]);
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [selectedClientName, setSelectedClientName] = useState('');
+  const clientSearchRef = useRef<HTMLDivElement>(null);
 
   const fetchPayments = async () => {
     try {
@@ -53,6 +62,7 @@ const PaymentHistoryTab = () => {
       if (filters.invoiceId) params.invoiceId = filters.invoiceId;
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
+      if (branchId) params.branchId = branchId;
 
       const response = await receivablesApi.getPayments(params);
       setPayments(response.data || []);
@@ -66,7 +76,53 @@ const PaymentHistoryTab = () => {
 
   useEffect(() => {
     fetchPayments();
-  }, [filters.page, filters.clientId, filters.invoiceId, filters.startDate, filters.endDate]);
+  }, [filters.page, filters.clientId, filters.invoiceId, filters.startDate, filters.endDate, branchId]);
+
+  useEffect(() => {
+    if (clientSearchTerm.length >= 2) {
+      fetchClients();
+    } else {
+      setClients([]);
+      setShowClientDropdown(false);
+    }
+  }, [clientSearchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clientSearchRef.current && !clientSearchRef.current.contains(event.target as Node)) {
+        setShowClientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      const response = await clientsApi.getClients({ 
+        search: clientSearchTerm, 
+        isActive: true, 
+        limit: 10 
+      });
+      setClients(response.data || []);
+      setShowClientDropdown(true);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  const handleClientSelect = (client: any) => {
+    setFilters({ ...filters, clientId: client.id, page: 1 });
+    setClientSearchTerm(client.name);
+    setSelectedClientName(client.name);
+    setShowClientDropdown(false);
+  };
+
+  const handleClearClient = () => {
+    setFilters({ ...filters, clientId: '', page: 1 });
+    setClientSearchTerm('');
+    setSelectedClientName('');
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-DO', {
@@ -100,15 +156,52 @@ const PaymentHistoryTab = () => {
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
+          <div className="relative" ref={clientSearchRef}>
             <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-            <input
-              type="text"
-              placeholder="ID del cliente"
-              value={filters.clientId}
-              onChange={(e) => setFilters({ ...filters, clientId: e.target.value, page: 1 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar cliente por nombre..."
+                value={clientSearchTerm}
+                onChange={(e) => {
+                  setClientSearchTerm(e.target.value);
+                  if (!e.target.value) {
+                    handleClearClient();
+                  }
+                }}
+                onFocus={() => {
+                  if (clientSearchTerm.length >= 2) {
+                    setShowClientDropdown(true);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              {filters.clientId && (
+                <button
+                  onClick={handleClearClient}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              )}
+              {showClientDropdown && clients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {clients.map((client) => (
+                    <div
+                      key={client.id}
+                      onClick={() => handleClientSelect(client)}
+                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    >
+                      <div className="font-medium text-gray-900">{client.name}</div>
+                      <div className="text-sm text-gray-500">{client.identification}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {selectedClientName && (
+              <p className="text-xs text-gray-500 mt-1">Cliente seleccionado: {selectedClientName}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Factura</label>

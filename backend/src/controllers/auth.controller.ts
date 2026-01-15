@@ -16,15 +16,24 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    // Find user
+    // Find user - solo seleccionar campos necesarios (incluyendo password para verificación)
     const user = await prisma.user.findUnique({
-      where: { email },
-      include: {
-        // Puedes incluir información del tenant aquí si es necesario
+      where: { email: email.toLowerCase().trim() }, // Normalizar email
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        branchId: true,
+        password: true,
+        isActive: true,
       }
     });
 
+    // Validar que el usuario exista y esté activo primero
     if (!user || !user.isActive) {
+      // Pequeño delay para prevenir timing attacks
+      await new Promise(resolve => setTimeout(resolve, 100));
       return res.status(401).json({
         error: {
           code: 'INVALID_CREDENTIALS',
@@ -33,10 +42,12 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify password
+    // Verificar password
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
+      // Pequeño delay para prevenir timing attacks adicionales
+      await new Promise(resolve => setTimeout(resolve, 100));
       return res.status(401).json({
         error: {
           code: 'INVALID_CREDENTIALS',
@@ -44,12 +55,6 @@ export const login = async (req: Request, res: Response) => {
         }
       });
     }
-
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() }
-    });
 
     // Generate JWT
     const jwtSecret = process.env.JWT_SECRET || 'secret';
@@ -58,10 +63,20 @@ export const login = async (req: Request, res: Response) => {
         userId: user.id,
         email: user.email,
         role: user.role,
+        branchId: user.branchId,
       },
       jwtSecret,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
+
+    // Actualizar lastLogin en background (no bloquear respuesta)
+    prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() }
+    }).catch(err => {
+      console.error('Error updating lastLogin:', err);
+      // No fallar el login si falla la actualización de lastLogin
+    });
 
     res.json({
       token,
@@ -70,6 +85,7 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        branchId: user.branchId,
       },
     });
   } catch (error: any) {

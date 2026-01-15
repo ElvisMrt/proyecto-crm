@@ -404,32 +404,45 @@ export const branchesApi = {
   },
 };
 
-export const whatsappApi = {
-  getTemplates: async (params?: any) => {
-    const response = await api.get('/whatsapp/templates', { params });
-    return response.data;
-  },
-  getTemplate: async (id: string) => {
-    const response = await api.get(`/whatsapp/templates/${id}`);
-    return response.data;
-  },
-  createTemplate: async (data: any) => {
-    const response = await api.post('/whatsapp/templates', data);
-    return response.data;
-  },
-  updateTemplate: async (id: string, data: any) => {
-    const response = await api.put(`/whatsapp/templates/${id}`, data);
-    return response.data;
-  },
-  deleteTemplate: async (id: string) => {
-    const response = await api.delete(`/whatsapp/templates/${id}`);
-    return response.data;
-  },
-  sendMessage: async (data: any) => {
-    const response = await api.post('/whatsapp/send', data);
-    return response.data;
-  },
-};
+// WhatsApp API disabled - WhatsApp module removed
+// export const whatsappApi = {
+//   getTemplates: async (params?: any) => {
+//     const response = await api.get('/whatsapp/templates', { params });
+//     return response.data;
+//   },
+//   getTemplate: async (id: string) => {
+//     const response = await api.get(`/whatsapp/templates/${id}`);
+//     return response.data;
+//   },
+//   createTemplate: async (data: any) => {
+//     const response = await api.post('/whatsapp/templates', data);
+//     return response.data;
+//   },
+//   updateTemplate: async (id: string, data: any) => {
+//     const response = await api.put(`/whatsapp/templates/${id}`, data);
+//     return response.data;
+//   },
+//   deleteTemplate: async (id: string) => {
+//     const response = await api.delete(`/whatsapp/templates/${id}`);
+//     return response.data;
+//   },
+//   sendMessage: async (data: any) => {
+//     const response = await api.post('/whatsapp/send', data);
+//     return response.data;
+//   },
+//   getInstanceStatus: async () => {
+//     const response = await api.get('/whatsapp/instance/status');
+//     return response.data;
+//   },
+//   createInstance: async () => {
+//     const response = await api.post('/whatsapp/instance/create');
+//     return response.data;
+//   },
+//   getQRCode: async () => {
+//     const response = await api.get('/whatsapp/instance/qrcode');
+//     return response.data;
+//   },
+// };
 
 export const ncfApi = {
   getSequences: async (params?: any) => {

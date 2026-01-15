@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { salesApi, receivablesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiArrowLeft, HiPrinter, HiDocumentDownload, HiChat, HiX, HiReceiptTax } from 'react-icons/hi';
+import { HiArrowLeft, HiPrinter, HiDocumentDownload, HiX, HiReceiptTax, HiDocumentText } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
 import VoidInvoiceModal from './VoidInvoiceModal';
 import { printInvoice, downloadInvoicePDF } from '../../utils/invoicePrint';
-import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
+// WhatsApp module disabled
+// import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
 
 const InvoiceDetail = () => {
   const { id } = useParams();
@@ -127,6 +129,15 @@ const InvoiceDetail = () => {
             <p className="text-sm text-gray-500 mt-1">{invoice.number}</p>
           </div>
         </div>
+        {invoice.client && (
+          <button
+            onClick={() => navigate(`/receivables?tab=status&clientId=${invoice.client.id}`)}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md flex items-center"
+          >
+            <HiDocumentText className="w-4 h-4 mr-2" />
+            Ver Estado de Cuenta
+          </button>
+        )}
         <div className="flex space-x-2">
           <button
             onClick={() => printInvoice(invoice)}
@@ -145,7 +156,8 @@ const InvoiceDetail = () => {
             <HiDocumentDownload className="w-4 h-4 mr-2" />
             PDF
           </button>
-          <button
+          {/* WhatsApp button disabled */}
+          {/* <button
             onClick={async () => {
               if (!invoice.client?.phone) {
                 showToast('El cliente no tiene un número de teléfono registrado', 'error');
@@ -166,7 +178,7 @@ const InvoiceDetail = () => {
           >
             <HiChat className="w-4 h-4 mr-2" />
             WhatsApp
-          </button>
+          </button> */}
           {invoice.status === 'ISSUED' && invoice.balance > 0 && (
             <button
               onClick={() => navigate(`/receivables?invoiceId=${invoice.id}&generateReceipt=true`)}
@@ -362,7 +374,7 @@ const InvoiceDetail = () => {
                   <span className="font-medium text-red-600">-{formatCurrency(Number(invoice.discount))}</span>
                 </div>
               )}
-              {invoice.type === 'FISCAL' && (
+              {Number(invoice.tax) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">ITBIS (18%):</span>
                   <span className="font-medium">{formatCurrency(Number(invoice.tax))}</span>

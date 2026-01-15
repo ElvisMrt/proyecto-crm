@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { cashApi } from '../../services/api';
+import { cashApi, branchesApi } from '../../services/api';
+import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import { HiDocumentDownload, HiTable, HiOfficeBuilding, HiLockOpen, HiLockClosed, HiCalendar, HiX, HiSearch } from 'react-icons/hi';
 
 const HistoryTab = () => {
   const [history, setHistory] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     branchId: '',
@@ -18,6 +21,39 @@ const HistoryTab = () => {
     total: 0,
     totalPages: 0,
   });
+
+  useEffect(() => {
+    fetchBranches();
+  }, []);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await branchesApi.getBranches();
+      const branchesData = response?.data || response || [];
+      setBranches(branchesData);
+    } catch (error: any) {
+      // Si falla por permisos, intentar con el endpoint directo
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+          const token = localStorage.getItem('token');
+          const directResponse = await fetch(`${API_BASE_URL}/branches`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          
+          if (directResponse.ok) {
+            const data = await directResponse.json();
+            const branchesData = data?.data || data || [];
+            setBranches(branchesData);
+          }
+        } catch (err) {
+          console.error('Error fetching branches:', err);
+        }
+      } else {
+        console.error('Error fetching branches:', error);
+      }
+    }
+  };
 
   const fetchHistory = async () => {
     try {
@@ -58,13 +94,82 @@ const HistoryTab = () => {
     return new Date(dateString).toLocaleString('es-DO');
   };
 
+  const handleExportExcel = () => {
+    const exportData = history.map((item) => ({
+      'Sucursal': item.branch?.name || '-',
+      'Estado': item.status === 'OPEN' ? 'Abierta' : 'Cerrada',
+      'Monto Inicial': item.initialAmount,
+      'Ingresos': item.totalIncome,
+      'Egresos': item.totalExpenses,
+      'Balance': item.balance,
+      'Diferencia': item.difference !== null ? item.difference : 0,
+      'Fecha Apertura': item.openedAt ? new Date(item.openedAt).toLocaleDateString('es-DO') : '-',
+      'Fecha Cierre': item.closedAt ? new Date(item.closedAt).toLocaleDateString('es-DO') : '-',
+      'Abierta por': item.openedBy?.name || '-',
+    }));
+    exportToExcel(exportData, 'Historial_Caja', 'Historial de Caja');
+  };
+
+  const handleExportPDF = () => {
+    const exportData = history.map((item) => ({
+      'Sucursal': item.branch?.name || '-',
+      'Estado': item.status === 'OPEN' ? 'Abierta' : 'Cerrada',
+      'Monto Inicial': item.initialAmount,
+      'Ingresos': item.totalIncome,
+      'Egresos': item.totalExpenses,
+      'Balance': item.balance,
+      'Diferencia': item.difference !== null ? item.difference : 0,
+      'Fecha Apertura': item.openedAt ? new Date(item.openedAt).toLocaleDateString('es-DO') : '-',
+      'Fecha Cierre': item.closedAt ? new Date(item.closedAt).toLocaleDateString('es-DO') : '-',
+      'Abierta por': item.openedBy?.name || '-',
+    }));
+    exportToPDF(
+      exportData,
+      [
+        { header: 'Sucursal', dataKey: 'Sucursal' },
+        { header: 'Estado', dataKey: 'Estado' },
+        { header: 'Monto Inicial', dataKey: 'Monto Inicial' },
+        { header: 'Ingresos', dataKey: 'Ingresos' },
+        { header: 'Egresos', dataKey: 'Egresos' },
+        { header: 'Balance', dataKey: 'Balance' },
+        { header: 'Diferencia', dataKey: 'Diferencia' },
+        { header: 'Fecha Apertura', dataKey: 'Fecha Apertura' },
+        { header: 'Fecha Cierre', dataKey: 'Fecha Cierre' },
+        { header: 'Abierta por', dataKey: 'Abierta por' },
+      ],
+      'Historial_Caja',
+      'Historial de Caja'
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiOfficeBuilding className="w-4 h-4 mr-1 text-gray-400" />
+              Sucursal
+            </label>
+            <select
+              value={filters.branchId}
+              onChange={(e) => setFilters({ ...filters, branchId: e.target.value, page: 1 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todas</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiLockOpen className="w-4 h-4 mr-1 text-gray-400" />
+              Estado
+            </label>
             <select
               value={filters.status}
               onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
@@ -76,7 +181,10 @@ const HistoryTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiCalendar className="w-4 h-4 mr-1 text-gray-400" />
+              Desde
+            </label>
             <input
               type="date"
               value={filters.startDate}
@@ -85,7 +193,10 @@ const HistoryTab = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiCalendar className="w-4 h-4 mr-1 text-gray-400" />
+              Hasta
+            </label>
             <input
               type="date"
               value={filters.endDate}
@@ -93,12 +204,29 @@ const HistoryTab = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end space-x-2">
             <button
               onClick={fetchHistory}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md flex items-center justify-center"
             >
+              <HiSearch className="w-4 h-4 mr-2" />
               Buscar
+            </button>
+            <button
+              onClick={() => {
+                setFilters({
+                  branchId: '',
+                  status: '',
+                  startDate: '',
+                  endDate: '',
+                  page: 1,
+                  limit: 10,
+                });
+              }}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium rounded-md flex items-center"
+            >
+              <HiX className="w-4 h-4 mr-1" />
+              Limpiar
             </button>
           </div>
         </div>
@@ -112,6 +240,27 @@ const HistoryTab = () => {
           <div className="text-center py-12 text-gray-500">No hay registros de caja</div>
         ) : (
           <>
+            {history.length > 0 && (
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Registros de Caja</h3>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleExportExcel}
+                    className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center space-x-1"
+                  >
+                    <HiTable className="w-4 h-4" />
+                    <span>Excel</span>
+                  </button>
+                  <button
+                    onClick={handleExportPDF}
+                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded flex items-center space-x-1"
+                  >
+                    <HiDocumentDownload className="w-4 h-4" />
+                    <span>PDF</span>
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -135,12 +284,22 @@ const HistoryTab = () => {
                         {item.branch?.name || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full flex items-center w-fit ${
                           item.status === 'OPEN'
                             ? 'bg-green-100 text-green-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {item.status === 'OPEN' ? 'Abierta' : 'Cerrada'}
+                          {item.status === 'OPEN' ? (
+                            <>
+                              <HiLockOpen className="w-3 h-3 mr-1" />
+                              Abierta
+                            </>
+                          ) : (
+                            <>
+                              <HiLockClosed className="w-3 h-3 mr-1" />
+                              Cerrada
+                            </>
+                          )}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

@@ -5,7 +5,7 @@ import { HiDotsVertical, HiPencil, HiTrash, HiSearch, HiDocumentDownload, HiXCir
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 const UsersTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,35 +90,39 @@ const UsersTab = () => {
   };
 
   const handleDelete = async (user: any) => {
-    if (!window.confirm(`¿Está seguro de eliminar el usuario "${user.name}"?`)) {
-      setActionMenuOpen(null);
-      return;
-    }
-    try {
-      await settingsApi.deleteUser(user.id);
-      showToast('Usuario eliminado exitosamente', 'success');
-      fetchUsers();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Error al eliminar el usuario', 'error');
-    } finally {
-      setActionMenuOpen(null);
-    }
+    setActionMenuOpen(null);
+    showConfirm(
+      'Eliminar Usuario',
+      `¿Está seguro de eliminar el usuario "${user.name}"? Esta acción puede desactivar el usuario si tiene datos asociados.`,
+      async () => {
+        try {
+          await settingsApi.deleteUser(user.id);
+          showToast('Usuario eliminado exitosamente', 'success');
+          fetchUsers();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al eliminar el usuario', 'error');
+        }
+      },
+      { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+    );
   };
 
   const handleToggleStatus = async (user: any) => {
-    if (!window.confirm(`¿Está seguro de ${user.isActive ? 'desactivar' : 'activar'} este usuario?`)) {
-      setActionMenuOpen(null);
-      return;
-    }
-    try {
-      await settingsApi.toggleUserStatus(user.id, !user.isActive);
-      showToast(`Usuario ${user.isActive ? 'desactivado' : 'activado'} exitosamente`, 'success');
-      fetchUsers();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Error al cambiar el estado', 'error');
-    } finally {
-      setActionMenuOpen(null);
-    }
+    setActionMenuOpen(null);
+    showConfirm(
+      user.isActive ? 'Desactivar Usuario' : 'Activar Usuario',
+      `¿Está seguro de ${user.isActive ? 'desactivar' : 'activar'} el usuario "${user.name}"?`,
+      async () => {
+        try {
+          await settingsApi.toggleUserStatus(user.id, !user.isActive);
+          showToast(`Usuario ${user.isActive ? 'desactivado' : 'activado'} exitosamente`, 'success');
+          fetchUsers();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al cambiar el estado', 'error');
+        }
+      },
+      { type: user.isActive ? 'warning' : 'info', confirmText: user.isActive ? 'Desactivar' : 'Activar', cancelText: 'Cancelar' }
+    );
   };
 
   const handleNew = () => {
@@ -402,54 +406,54 @@ const UsersTab = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sucursal</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Último Acceso</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Último Acceso</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
                   {currentUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {user.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.phone || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {getRoleLabel(user.role)}
-                      </td>
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {user.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.phone || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {getRoleLabel(user.role)}
+                    </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {user.branch?.name || '-'}
                         {user.branch?.code && (
                           <span className="text-xs text-gray-400 ml-1">({user.branch.code})</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {user.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(user.lastLogin)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        user.isActive
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {user.isActive ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(user.lastLogin)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                         <div className="relative inline-block">
                           <button
                             onClick={() => setActionMenuOpen(actionMenuOpen === user.id ? null : user.id)}
@@ -465,17 +469,17 @@ const UsersTab = () => {
                               ></div>
                               <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-xl border border-gray-200 z-20">
                                 <div className="py-1">
-                                  <button
-                                    onClick={() => handleEdit(user)}
+                        <button
+                          onClick={() => handleEdit(user)}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                  >
+                        >
                                     <HiPencil className="w-4 h-4" />
-                                    Editar
-                                  </button>
-                                  <button
-                                    onClick={() => handleToggleStatus(user)}
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(user)}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                  >
+                        >
                                     {user.isActive ? (
                                       <>
                                         <HiLockClosed className="w-4 h-4" />
@@ -494,18 +498,18 @@ const UsersTab = () => {
                                   >
                                     <HiTrash className="w-4 h-4" />
                                     Eliminar
-                                  </button>
+                        </button>
                                 </div>
                               </div>
                             </>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">

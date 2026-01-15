@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     role: string;
+    branchId?: string | null;
     tenantId?: string;
   };
   tenantId?: string;
@@ -38,15 +39,43 @@ export const authenticate = async (
       throw new Error('JWT_SECRET is not configured');
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as any;
+    // Verificar token primero (más rápido que consultar BD)
+    // Si el token es inválido, no necesitamos consultar la base de datos
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, jwtSecret) as any;
+    } catch (jwtError: any) {
+      // Manejar errores de JWT antes de consultar la BD
+      if (jwtError.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Invalid token'
+          }
+        });
+      }
 
-    // Get user from database
+      if (jwtError.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Token expired'
+          }
+        });
+      }
+
+      throw jwtError;
+    }
+
+    // Solo consultar BD si el token es válido
+    // Optimización: solo seleccionar campos necesarios
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
         id: true,
         email: true,
         role: true,
+        branchId: true,
         isActive: true
       }
     });
@@ -63,7 +92,8 @@ export const authenticate = async (
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
+      branchId: user.branchId,
     };
 
     // Extract tenant ID from header or token
@@ -71,24 +101,9 @@ export const authenticate = async (
 
     next();
   } catch (error: any) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Invalid token'
-        }
-      });
-    }
-
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Token expired'
-        }
-      });
-    }
-
+    // Errores de JWT ya fueron manejados arriba
+    // Este catch maneja otros errores inesperados
+    console.error('Authentication middleware error:', error);
     next(error);
   }
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { reportsApi, branchesApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
-import { HiDownload, HiDocumentDownload } from 'react-icons/hi';
+import { HiDownload, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
 import { useToast } from '../../contexts/ToastContext';
 
 const CashReportTab = () => {
@@ -9,6 +9,8 @@ const CashReportTab = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
   const [filters, setFilters] = useState({
     branchId: '',
     startDate: new Date(new Date().setDate(1)).toISOString().split('T')[0],
@@ -22,6 +24,7 @@ const CashReportTab = () => {
 
   useEffect(() => {
     fetchData();
+    setCurrentPage(1);
   }, [filters.branchId, filters.startDate, filters.endDate]);
 
   const fetchBranches = async () => {
@@ -43,8 +46,10 @@ const CashReportTab = () => {
 
       const response = await reportsApi.getCashReport(params);
       setData(response);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching cash report:', error);
+      showToast(error?.response?.data?.error?.message || 'Error al cargar el reporte de caja', 'error');
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -124,8 +129,19 @@ const CashReportTab = () => {
     showToast('Reporte exportado a PDF exitosamente', 'success');
   };
 
+  // Pagination calculations
+  const totalItems = data?.data?.length || 0;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentData = data?.data?.slice(startIndex, endIndex) || [];
+
   if (loading) {
     return <div className="text-center py-12">Cargando...</div>;
+  }
+
+  if (!data) {
+    return <div className="text-center py-12 text-gray-500">No hay datos disponibles</div>;
   }
 
   return (
@@ -159,7 +175,7 @@ const CashReportTab = () => {
             <select
               value={filters.branchId}
               onChange={(e) => setFilters({ ...filters, branchId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Todas</option>
               {branches.map((branch) => (
@@ -175,7 +191,7 @@ const CashReportTab = () => {
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
@@ -184,9 +200,24 @@ const CashReportTab = () => {
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => {
+              setFilters({
+                branchId: '',
+                startDate: new Date(new Date().setDate(1)).toISOString().split('T')[0],
+                endDate: new Date().toISOString().split('T')[0],
+              });
+            }}
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <HiXCircle className="w-4 h-4" />
+            <span>Limpiar Filtros</span>
+          </button>
         </div>
       </div>
 
@@ -217,6 +248,7 @@ const CashReportTab = () => {
       {/* Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {data?.data && data.data.length > 0 ? (
+          <>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -231,8 +263,8 @@ const CashReportTab = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {data.data.map((cash: any) => (
-                  <tr key={cash.id}>
+                  {currentData.map((cash: any) => (
+                    <tr key={cash.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(cash.openedAt)}
                     </td>
@@ -269,6 +301,84 @@ const CashReportTab = () => {
               </tbody>
             </table>
           </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
+                      <span className="font-medium">{Math.min(endIndex, totalItems)}</span> de{' '}
+                      <span className="font-medium">{totalItems}</span> resultados
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Anterior
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          if (totalPages <= 7) return true;
+                          if (page === 1 || page === totalPages) return true;
+                          if (Math.abs(page - currentPage) <= 1) return true;
+                          return false;
+                        })
+                        .map((page, idx, arr) => {
+                          const showEllipsisBefore = idx > 0 && page - arr[idx - 1] > 1;
+                          return (
+                            <div key={page} className="flex items-center">
+                              {showEllipsisBefore && (
+                                <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                  ...
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setCurrentPage(page)}
+                                className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                  currentPage === page
+                                    ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Siguiente
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-12 text-gray-500">No hay datos</div>
         )}

@@ -35,6 +35,7 @@ const InvoiceForm = () => {
     branchId: '',
     observations: '',
     discount: 0,
+    includeTax: true, // ITBIS opcional, por defecto true para facturas fiscales
     items: [] as InvoiceItem[],
   });
 
@@ -88,6 +89,7 @@ const InvoiceForm = () => {
         branchId: invoice.branchId || '',
         observations: invoice.observations || '',
         discount: Number(invoice.discount),
+        includeTax: Number(invoice.tax) > 0, // Si hay tax, includeTax estaba marcado
         items: invoice.items.map((item: any) => ({
           productId: item.productId,
           description: item.description,
@@ -173,7 +175,7 @@ const InvoiceForm = () => {
 
   const calculateTotals = () => {
     const subtotal = form.items.reduce((sum, item) => sum + item.subtotal, 0) - form.discount;
-    const tax = form.type === 'FISCAL' ? subtotal * 0.18 : 0;
+    const tax = form.includeTax ? subtotal * 0.18 : 0;
     const total = subtotal + tax;
     return { subtotal, tax, total };
   };
@@ -186,10 +188,7 @@ const InvoiceForm = () => {
       return;
     }
 
-    if (form.type === 'FISCAL' && !form.clientId) {
-      showToast('Las facturas fiscales requieren un cliente', 'error');
-      return;
-    }
+    // Cliente es opcional - validación de identificación se hace en el backend si es factura fiscal
 
     try {
       setLoading(true);
@@ -209,6 +208,7 @@ const InvoiceForm = () => {
         discount: form.discount,
         observations: form.observations || undefined,
         saveAsDraft: false,
+        includeTax: form.includeTax,
       };
 
       if (isEditing) {
@@ -276,13 +276,12 @@ const InvoiceForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cliente {form.type === 'FISCAL' && <span className="text-red-500">*</span>}
+                Cliente <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
               </label>
               <select
                 value={form.clientId}
                 onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                required={form.type === 'FISCAL'}
               >
                 <option value="">Seleccionar cliente (opcional)</option>
                 {clients.map((client) => (
@@ -355,6 +354,19 @@ const InvoiceForm = () => {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.includeTax}
+                  onChange={(e) => setForm({ ...form, includeTax: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Incluir ITBIS (18%) <span className="text-gray-500 font-normal">(Opcional)</span>
+                </span>
+              </label>
             </div>
           </div>
           <div className="mt-4">
@@ -494,7 +506,7 @@ const InvoiceForm = () => {
                   />
                 </div>
               </div>
-              {form.type === 'FISCAL' && (
+              {form.includeTax && (
                 <div className="flex justify-between text-sm">
                   <span>ITBIS (18%):</span>
                   <span>{new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(tax)}</span>

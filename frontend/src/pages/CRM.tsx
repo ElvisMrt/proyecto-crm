@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { crmApi } from '../services/api';
-import TasksTab from '../components/crm/TasksTab';
+import TasksTab, { TasksTabRef } from '../components/crm/TasksTab';
 import OverdueTasksTab from '../components/crm/OverdueTasksTab';
 import ClientHistoryTab from '../components/crm/ClientHistoryTab';
 import {
   HiCheckCircle,
-  HiExclamation,
+  HiExclamationCircle,
   HiSearch,
-  HiClipboardList,
+  HiClipboardCheck,
   HiBell,
   HiChartBar,
+  HiDocumentDownload,
 } from 'react-icons/hi';
 
 type TabType = 'tasks' | 'overdue' | 'history';
@@ -22,6 +23,7 @@ const CRM = () => {
     reminders: 0,
   });
   const [loading, setLoading] = useState(true);
+  const tasksTabRef = useRef<TasksTabRef>(null);
 
   useEffect(() => {
     fetchSummary();
@@ -39,8 +41,8 @@ const CRM = () => {
   };
 
   const tabs = [
-    { id: 'tasks' as TabType, label: 'Tareas Pendientes', icon: HiCheckCircle },
-    { id: 'overdue' as TabType, label: 'Tareas Vencidas', icon: HiExclamation, badge: summary.overdueTasks },
+    { id: 'tasks' as TabType, label: 'Tareas Pendientes', icon: HiClipboardCheck },
+    { id: 'overdue' as TabType, label: 'Tareas Vencidas', icon: HiExclamationCircle, badge: summary.overdueTasks },
     { id: 'history' as TabType, label: 'Historial del Cliente', icon: HiSearch },
   ];
 
@@ -54,7 +56,7 @@ const CRM = () => {
               <p className="text-sm font-medium text-yellow-800">Tareas Pendientes</p>
               <p className="text-3xl font-bold text-yellow-900 mt-2">{summary.pendingTasks}</p>
             </div>
-            <HiClipboardList className="w-10 h-10 text-yellow-600" />
+            <HiClipboardCheck className="w-10 h-10 text-yellow-600" />
           </div>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
@@ -63,7 +65,7 @@ const CRM = () => {
               <p className="text-sm font-medium text-red-800">Tareas Vencidas</p>
               <p className="text-3xl font-bold text-red-900 mt-2">{summary.overdueTasks}</p>
             </div>
-            <HiExclamation className="w-10 h-10 text-red-600" />
+            <HiExclamationCircle className="w-10 h-10 text-red-600" />
           </div>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
@@ -86,37 +88,62 @@ const CRM = () => {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs with Export Buttons */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors relative
-                ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }
-              `}
-            >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
-              {tab.badge && tab.badge > 0 && (
-                <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
+        <div className="flex items-center justify-between">
+          <nav className="-mb-px flex space-x-8">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  py-4 px-1 border-b-2 font-medium text-sm transition-colors relative inline-flex items-center
+                  ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }
+                `}
+              >
+                <tab.icon className="w-4 h-4 mr-2" />
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+          {/* Export Buttons - Only show for tasks tabs */}
+          {activeTab === 'tasks' && tasksTabRef.current && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  tasksTabRef.current?.handleExportExcel();
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center text-sm transition-colors"
+              >
+                <HiDocumentDownload className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </button>
+              <button
+                onClick={() => {
+                  tasksTabRef.current?.handleExportPDF();
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center text-sm transition-colors"
+              >
+                <HiDocumentDownload className="w-4 h-4 mr-2" />
+                Exportar PDF
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tab Content */}
       <div className="mt-6">
-        {activeTab === 'tasks' && <TasksTab onTaskChanged={fetchSummary} />}
+        {activeTab === 'tasks' && <TasksTab ref={tasksTabRef} onTaskChanged={fetchSummary} />}
         {activeTab === 'overdue' && <OverdueTasksTab onTaskChanged={fetchSummary} />}
         {activeTab === 'history' && <ClientHistoryTab />}
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { inventoryApi } from '../../services/api';
-import axios from 'axios';
+import { inventoryApi, branchesApi } from '../../services/api';
+import { HiOfficeBuilding, HiFolder, HiSearch, HiChartBar } from 'react-icons/hi';
 
 const StockTab = () => {
   const [stocks, setStocks] = useState<any[]>([]);
@@ -33,12 +33,8 @@ const StockTab = () => {
 
   const fetchBranches = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/branches`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      setBranches(response.data?.data || response.data || []);
+      const response = await branchesApi.getBranches();
+      setBranches(response?.data || response || []);
     } catch (error) {
       console.error('Error fetching branches:', error);
     }
@@ -100,7 +96,10 @@ const StockTab = () => {
       <div className="bg-white rounded-lg shadow p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiOfficeBuilding className="w-4 h-4 mr-1 text-gray-400" />
+              Sucursal
+            </label>
             <select
               value={filters.branchId}
               onChange={(e) => setFilters({ ...filters, branchId: e.target.value, page: 1 })}
@@ -115,7 +114,10 @@ const StockTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiFolder className="w-4 h-4 mr-1 text-gray-400" />
+              Categoría
+            </label>
             <select
               value={filters.categoryId}
               onChange={(e) => setFilters({ ...filters, categoryId: e.target.value, page: 1 })}
@@ -130,7 +132,10 @@ const StockTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiSearch className="w-4 h-4 mr-1 text-gray-400" />
+              Buscar
+            </label>
             <input
               type="text"
               placeholder="Código, nombre..."

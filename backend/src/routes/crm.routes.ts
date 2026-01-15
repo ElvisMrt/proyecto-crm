@@ -5,6 +5,7 @@ import {
   createTask,
   updateTask,
   completeTask,
+  deleteTask,
   getOverdueTasks,
   getClientHistory,
   getNotes,
@@ -27,6 +28,7 @@ router.get('/tasks/:id', requirePermission(PERMISSIONS.CRM_READ), getTask);
 router.post('/tasks', requirePermission(PERMISSIONS.CRM_TASK_CREATE), createTask);
 router.put('/tasks/:id', requirePermission(PERMISSIONS.CRM_TASK_UPDATE), updateTask);
 router.patch('/tasks/:id/complete', requirePermission(PERMISSIONS.CRM_TASK_UPDATE), completeTask);
+router.delete('/tasks/:id', requirePermission(PERMISSIONS.CRM_TASK_DELETE), deleteTask);
 
 // Client History (360° View)
 router.get('/clients/:clientId/history', requirePermission(PERMISSIONS.CRM_READ), getClientHistory);

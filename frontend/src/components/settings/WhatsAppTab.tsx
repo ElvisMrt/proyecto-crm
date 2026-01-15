@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { whatsappApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiPlus, HiPencil, HiTrash, HiChat, HiSearch, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
+import { HiPlus, HiPencil, HiTrash, HiChat, HiSearch, HiDocumentDownload, HiXCircle, HiRefresh, HiCheckCircle, HiX } from 'react-icons/hi';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 interface WhatsAppTemplate {
@@ -16,9 +16,8 @@ interface WhatsAppTemplate {
 }
 
 const WhatsAppTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
-  const [filteredTemplates, setFilteredTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
@@ -31,43 +30,209 @@ const WhatsAppTab = () => {
     subject: '',
     message: '',
   });
+  
+  // Estado de conexión WhatsApp
+  const [instanceStatus, setInstanceStatus] = useState<any>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [loadingQR, setLoadingQR] = useState(false);
+  const fetchingQRRef = useRef(false);
+  const fetchingTemplatesRef = useRef(false);
+  const fetchingStatusRef = useRef(false);
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
-  useEffect(() => {
-    filterTemplates();
-  }, [searchTerm, templates]);
-
-  const filterTemplates = () => {
-    if (!searchTerm.trim()) {
-      setFilteredTemplates(templates);
-    } else {
-      const filtered = templates.filter(
-        (template) =>
-          template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          getTypeLabel(template.type).toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (template.subject && template.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          template.message.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredTemplates(filtered);
-    }
-    setCurrentPage(1);
+  // Función helper para obtener etiqueta de tipo (debe estar antes del useMemo)
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      INVOICE: 'Factura',
+      QUOTE: 'Cotización',
+      PAYMENT: 'Pago',
+      REMINDER: 'Recordatorio',
+      CUSTOM: 'Personalizado',
+    };
+    return labels[type] || type;
   };
 
-  const fetchTemplates = async () => {
+  // Memoizar fetchTemplates para evitar recreaciones
+  const fetchTemplates = useCallback(async () => {
+    if (fetchingTemplatesRef.current) return; // Prevenir múltiples llamadas
+    
     try {
+      fetchingTemplatesRef.current = true;
       setLoading(true);
-      const response = await whatsappApi.getTemplates();
-      setTemplates(response.data || []);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout al cargar templates')), 10000)
+      );
+      
+      const response = await Promise.race([
+        whatsappApi.getTemplates(),
+        timeoutPromise
+      ]) as any;
+      
+      // Solo actualizar si los datos realmente cambiaron
+      setTemplates((prev) => {
+        const newTemplates = response.data || [];
+        if (prev.length === newTemplates.length && 
+            prev.every((t, i) => t.id === newTemplates[i]?.id && 
+                               t.updatedAt === newTemplates[i]?.updatedAt)) {
+          return prev; // No cambiar si son los mismos
+        }
+        return newTemplates;
+      });
     } catch (error: any) {
       console.error('Error fetching WhatsApp templates:', error);
-      showToast(error.response?.data?.error?.message || 'Error al cargar los templates', 'error');
+      if (error.message !== 'Timeout al cargar templates') {
+        showToast(error.response?.data?.error?.message || 'Error al cargar los templates', 'error');
+      }
     } finally {
       setLoading(false);
+      fetchingTemplatesRef.current = false;
+    }
+  }, []);
+
+  // Memoizar fetchInstanceStatus
+  const fetchInstanceStatus = useCallback(async () => {
+    if (fetchingStatusRef.current) return; // Prevenir múltiples llamadas
+    
+    try {
+      fetchingStatusRef.current = true;
+      setLoadingStatus(true);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout al obtener estado')), 10000)
+      );
+      
+      const status = await Promise.race([
+        whatsappApi.getInstanceStatus(),
+        timeoutPromise
+      ]) as any;
+      
+      // Solo actualizar si el estado realmente cambió
+      setInstanceStatus((prev: any) => {
+        if (prev?.connected === status?.connected && 
+            prev?.exists === status?.exists && 
+            prev?.status === status?.status &&
+            prev?.number === status?.number) {
+          return prev;
+        }
+        return status;
+      });
+    } catch (error: any) {
+      console.error('Error fetching instance status:', error);
+      setInstanceStatus((prev: any) => {
+        if (prev?.error === error.message) {
+          return prev;
+        }
+        return {
+          exists: false,
+          connected: false,
+          error: error.message || 'Error al obtener estado'
+        };
+      });
+    } finally {
+      setLoadingStatus(false);
+      fetchingStatusRef.current = false;
+    }
+  }, []);
+
+  // Cargar datos solo una vez al montar
+  useEffect(() => {
+    fetchTemplates();
+    fetchInstanceStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo se ejecuta una vez al montar - las funciones son estables gracias a useCallback
+
+  // Usar useMemo para filtrar templates directamente, sin estado adicional
+  const filteredTemplates = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return templates;
+    }
+    const searchLower = searchTerm.toLowerCase();
+    return templates.filter(
+      (template) =>
+        template.name.toLowerCase().includes(searchLower) ||
+        getTypeLabel(template.type).toLowerCase().includes(searchLower) ||
+        (template.subject && template.subject.toLowerCase().includes(searchLower)) ||
+        template.message.toLowerCase().includes(searchLower)
+    );
+  }, [searchTerm, templates]);
+
+  // Resetear página cuando cambia el término de búsqueda
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // fetchInstanceStatus ya está definido arriba con useCallback
+
+  const fetchQRCode = async () => {
+    // Prevenir múltiples llamadas simultáneas
+    if (loadingQR || fetchingQRRef.current || qrCode) {
+      return;
+    }
+    
+    try {
+      fetchingQRRef.current = true;
+      setLoadingQR(true);
+      
+      // Timeout de 10 segundos
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout al obtener QR')), 10000)
+      );
+      
+      const response = await Promise.race([
+        whatsappApi.getQRCode(),
+        timeoutPromise
+      ]) as any;
+      
+      console.log('Get QR code response:', response);
+      if (response.qrCode) {
+        // Limpiar el QR code si ya tiene el prefijo data: duplicado
+        let cleanQR = response.qrCode;
+        if (cleanQR.includes('data:image/png;base64,data:')) {
+          cleanQR = cleanQR.replace('data:image/png;base64,data:', 'data:image/png;base64,');
+        }
+        setQrCode(cleanQR);
+      } else {
+        console.warn('No QR code in response:', response);
+      }
+    } catch (error: any) {
+      console.error('Error fetching QR code:', error);
+    } finally {
+      setLoadingQR(false);
+      fetchingQRRef.current = false;
     }
   };
+
+  const handleCreateInstance = async () => {
+    try {
+      setLoadingQR(true);
+      const response = await whatsappApi.createInstance();
+      console.log('Create instance response:', response);
+      if (response.qrCode) {
+        // Limpiar el QR code si ya tiene el prefijo data: duplicado
+        let cleanQR = response.qrCode;
+        if (cleanQR.includes('data:image/png;base64,data:')) {
+          cleanQR = cleanQR.replace('data:image/png;base64,data:', 'data:image/png;base64,');
+        }
+        setQrCode(cleanQR);
+        showToast('Instancia creada exitosamente. QR code generado.', 'success');
+      } else {
+        console.warn('No QR code in response:', response);
+        showToast(response.message || 'Instancia creada pero no se pudo obtener el QR. Intenta actualizar.', 'warning');
+      }
+      await fetchInstanceStatus();
+    } catch (error: any) {
+      console.error('Error creating instance:', error);
+      showToast(error.response?.data?.error?.message || 'Error al crear instancia', 'error');
+    } finally {
+      setLoadingQR(false);
+    }
+  };
+
+  const handleRefreshQR = async () => {
+    await fetchQRCode();
+    showToast('QR code actualizado', 'success');
+  };
+
+  // fetchTemplates ya está definido arriba con useCallback
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,17 +271,20 @@ const WhatsAppTab = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Está seguro de que desea eliminar este template?')) {
-      return;
-    }
-
-    try {
-      await whatsappApi.deleteTemplate(id);
-      showToast('Template eliminado exitosamente', 'success');
-      fetchTemplates();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Error al eliminar el template', 'error');
-    }
+    showConfirm(
+      'Eliminar Template',
+      '¿Está seguro de que desea eliminar este template? Esta acción no se puede deshacer.',
+      async () => {
+        try {
+          await whatsappApi.deleteTemplate(id);
+          showToast('Template eliminado exitosamente', 'success');
+          fetchTemplates();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al eliminar el template', 'error');
+        }
+      },
+      { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+    );
   };
 
   const handleToggleActive = async (template: WhatsAppTemplate) => {
@@ -138,16 +306,7 @@ const WhatsAppTab = () => {
     });
   };
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      INVOICE: 'Factura',
-      QUOTE: 'Cotización',
-      PAYMENT: 'Pago',
-      REMINDER: 'Recordatorio',
-      CUSTOM: 'Personalizado',
-    };
-    return labels[type] || type;
-  };
+  // getTypeLabel ya está definido arriba
 
   const getVariablesHelp = (type: string) => {
     const variables: Record<string, string[]> = {
@@ -204,6 +363,137 @@ const WhatsAppTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Sección de Conexión WhatsApp */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Conexión WhatsApp</h2>
+            <p className="text-sm text-gray-600 mt-1">Gestiona la conexión de WhatsApp con Evolution API</p>
+          </div>
+          <button
+            onClick={fetchInstanceStatus}
+            disabled={loadingStatus}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50"
+          >
+            <HiRefresh className={`w-4 h-4 ${loadingStatus ? 'animate-spin' : ''}`} />
+            Actualizar Estado
+          </button>
+        </div>
+
+        {loadingStatus ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Verificando estado...</p>
+          </div>
+        ) : instanceStatus ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              {instanceStatus.connected ? (
+                <>
+                  <HiCheckCircle className="w-6 h-6 text-green-500" />
+                  <div>
+                    <p className="font-medium text-green-700">WhatsApp Conectado</p>
+                    {instanceStatus.number && (
+                      <p className="text-sm text-gray-600">Número: {instanceStatus.number}</p>
+                    )}
+                  </div>
+                </>
+              ) : instanceStatus.exists ? (
+                <>
+                  {instanceStatus.status === 'connecting' ? (
+                    <>
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <div>
+                        <p className="font-medium text-blue-700">Conectando...</p>
+                        <p className="text-sm text-gray-600">Escanea el QR code con WhatsApp</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <HiX className="w-6 h-6 text-yellow-500" />
+                      <div>
+                        <p className="font-medium text-yellow-700">WhatsApp Desconectado</p>
+                        <p className="text-sm text-gray-600">Estado: {instanceStatus.status}</p>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <HiX className="w-6 h-6 text-red-500" />
+                  <div>
+                    <p className="font-medium text-red-700">Instancia no encontrada</p>
+                    <p className="text-sm text-gray-600">Crea una instancia para conectar WhatsApp</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!instanceStatus.connected && (
+              <div className="border-t pt-4">
+                {!instanceStatus.exists ? (
+                  <button
+                    onClick={handleCreateInstance}
+                    disabled={loadingQR}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50"
+                  >
+                    {loadingQR ? 'Creando instancia...' : 'Crear Instancia y Generar QR'}
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-700">Código QR para conectar</p>
+                      <button
+                        onClick={handleRefreshQR}
+                        disabled={loadingQR}
+                        className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
+                      >
+                        <HiRefresh className={`w-4 h-4 ${loadingQR ? 'animate-spin' : ''}`} />
+                        Actualizar QR
+                      </button>
+                    </div>
+                    {loadingQR ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="mt-2 text-gray-600">Generando QR...</p>
+                      </div>
+                    ) : qrCode ? (
+                      <div className="flex flex-col items-center bg-gray-50 p-6 rounded-lg">
+                        <img
+                          src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                          alt="QR Code WhatsApp"
+                          className="max-w-xs w-full border-4 border-white rounded-lg shadow-lg"
+                        />
+                        <p className="mt-4 text-sm text-gray-600 text-center">
+                          1. Abre WhatsApp en tu teléfono<br />
+                          2. Ve a Configuración → Dispositivos vinculados → Vincular un dispositivo<br />
+                          3. Escanea este código QR
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <p className="text-gray-600">No hay QR code disponible. Intenta actualizar o crear la instancia.</p>
+                        <button
+                          onClick={handleCreateInstance}
+                          className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+                        >
+                          Recrear Instancia
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            No se pudo obtener el estado de la conexión
+          </div>
+        )}
+      </div>
+
+      {/* Sección de Templates */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Templates de WhatsApp</h2>

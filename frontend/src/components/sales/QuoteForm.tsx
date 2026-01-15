@@ -30,6 +30,7 @@ const QuoteForm = () => {
     validUntil: '',
     observations: '',
     discount: 0,
+    includeTax: false, // ITBIS opcional, por defecto false
     items: [] as QuoteItem[],
   });
 
@@ -69,6 +70,7 @@ const QuoteForm = () => {
         validUntil: quote.validUntil ? new Date(quote.validUntil).toISOString().split('T')[0] : '',
         observations: quote.observations || '',
         discount: Number(quote.discount),
+        includeTax: Number(quote.tax) > 0, // Si hay tax, includeTax estaba marcado
         items: quote.items.map((item: any) => ({
           productId: item.productId,
           description: item.description,
@@ -153,7 +155,7 @@ const QuoteForm = () => {
 
   const calculateTotals = () => {
     const subtotal = form.items.reduce((sum, item) => sum + item.subtotal, 0) - form.discount;
-    const tax = subtotal * 0.18; // 18% ITBIS (solo para referencia)
+    const tax = form.includeTax ? subtotal * 0.18 : 0; // 18% ITBIS solo si está marcado
     const total = subtotal + tax;
     return { subtotal, tax, total };
   };
@@ -180,6 +182,7 @@ const QuoteForm = () => {
         discount: form.discount,
         validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
         observations: form.observations || undefined,
+        includeTax: form.includeTax,
       };
 
       if (isEditing) {
@@ -261,6 +264,19 @@ const QuoteForm = () => {
                 onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+            <div>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.includeTax}
+                  onChange={(e) => setForm({ ...form, includeTax: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Incluir ITBIS (18%) <span className="text-gray-500 font-normal">(Opcional)</span>
+                </span>
+              </label>
             </div>
           </div>
           <div className="mt-4">
@@ -400,10 +416,12 @@ const QuoteForm = () => {
                   />
                 </div>
               </div>
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>ITBIS (18% - Referencia):</span>
-                <span>{new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(tax)}</span>
-              </div>
+              {form.includeTax && (
+                <div className="flex justify-between text-sm">
+                  <span>ITBIS (18%):</span>
+                  <span>{new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(tax)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold border-t pt-2">
                 <span>Total Estimado:</span>
                 <span>{new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(total)}</span>

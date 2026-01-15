@@ -11,6 +11,7 @@ const createTaskSchema = z.object({
   clientId: z.string().uuid().optional(),
   dueDate: z.string().datetime().optional(),
   assignedToUserId: z.string().uuid().optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional().default('MEDIUM'),
 });
 
 const createNoteSchema = z.object({
@@ -44,7 +45,29 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
       where.status = { not: 'COMPLETED' };
     }
 
-    // Note: taskType not in schema yet, can be added later
+    if (req.query.priority) {
+      where.priority = req.query.priority;
+    }
+
+    if (req.query.search) {
+      where.OR = [
+        { title: { contains: req.query.search as string, mode: 'insensitive' } },
+        { description: { contains: req.query.search as string, mode: 'insensitive' } },
+        { client: { name: { contains: req.query.search as string, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (req.query.startDate || req.query.endDate) {
+      where.dueDate = {};
+      if (req.query.startDate) {
+        where.dueDate.gte = new Date(req.query.startDate as string);
+      }
+      if (req.query.endDate) {
+        const endDate = new Date(req.query.endDate as string);
+        endDate.setHours(23, 59, 59, 999);
+        where.dueDate.lte = endDate;
+      }
+    }
 
     if (req.query.overdue === 'true') {
       const now = new Date();
@@ -174,6 +197,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         clientId: data.clientId,
         userId: data.assignedToUserId || req.user.id,
         status: 'PENDING',
+        priority: data.priority || 'MEDIUM',
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
       },
       include: {
@@ -228,6 +252,7 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     if (data.clientId !== undefined) updateData.clientId = data.clientId;
     if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
     if (data.assignedToUserId) updateData.userId = data.assignedToUserId;
+    if (data.priority) updateData.priority = data.priority;
 
     const task = await prisma.task.update({
       where: { id },
@@ -571,9 +596,17 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
       whereOverdue.userId = req.user?.id;
     }
 
-    const [pendingTasks, overdueTasks] = await Promise.all([
+    const whereCompleted: any = {
+      status: 'COMPLETED',
+    };
+    if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
+      whereCompleted.userId = req.user?.id;
+    }
+
+    const [pendingTasks, overdueTasks, completedTasks] = await Promise.all([
       prisma.task.count({ where: wherePending }),
       prisma.task.count({ where: whereOverdue }),
+      prisma.task.count({ where: whereCompleted }),
     ]);
 
     // Reminders: tasks due today or tomorrow
@@ -591,9 +624,18 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
 
     const reminders = await prisma.task.count({ where: whereReminders });
 
+    // Calcular total y porcentaje de completadas
+    const totalTasks = pendingTasks + overdueTasks + completedTasks;
+    const completionPercentage = totalTasks > 0 
+      ? Math.round((completedTasks / totalTasks) * 100) 
+      : 0;
+
     res.json({
       pendingTasks,
       overdueTasks,
+      completedTasks,
+      totalTasks,
+      completionPercentage,
       reminders,
     });
   } catch (error) {
@@ -660,6 +702,37 @@ export const getReminders = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error fetching reminders',
+      },
+    });
+  }
+};
+
+export const deleteTask = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.task.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Task deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Task not found',
+        },
+      });
+    }
+
+    console.error('Delete task error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting task',
       },
     });
   }

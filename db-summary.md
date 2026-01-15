@@ -60,3 +60,14 @@ Si no puedes conectar desde DBeaver, verifica:
 3. Que el contenedor `crm_postgres` esté en estado "healthy"
 4. Intentar con `127.0.0.1` en lugar de `localhost`
 
+
+
+
+
+
+
+
+
+
+
+

@@ -15,6 +15,8 @@ model Tenant {
   email         String
   phone         String?
   address       String?
+  rnc           String?
+  logo          String?
   country       String         @default("DO")
   status        TenantStatus   @default(ACTIVE)
   plan          PlanType       @default(BASIC)
@@ -68,6 +70,8 @@ model User {
   lastLogin            DateTime?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  branchId             String?
+  managedBranches      Branch[]              @relation("BranchManager")
   cashMovements        CashMovement[]
   closedCashRegisters  CashRegister[]        @relation("ClosedCashRegister")
   openedCashRegisters  CashRegister[]        @relation("OpenedCashRegister")
@@ -78,10 +82,12 @@ model User {
   payments             Payment[]
   quotes               Quote[]
   tasks                Task[]
+  branch               Branch?               @relation("UserBranch", fields: [branchId], references: [id])
 
   @@index([email])
   @@index([role])
   @@index([isActive])
+  @@index([branchId])
 }
 
 model Client {
@@ -114,13 +120,20 @@ model Branch {
   isActive           Boolean               @default(true)
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
+  code               String?               @unique
+  email              String?
+  managerId          String?
+  manager            User?                 @relation("BranchManager", fields: [managerId], references: [id])
   cashRegisters      CashRegister[]
   adjustments        InventoryAdjustment[]
   inventoryMovements InventoryMovement[]
   invoices           Invoice[]
   ncfSequences       NcfSequence[]
   stocks             Stock[]
+  users              User[]                @relation("UserBranch")
 
+  @@index([code])
+  @@index([managerId])
   @@index([name])
   @@index([isActive])
 }
@@ -244,7 +257,7 @@ model InvoiceItem {
 model Quote {
   id                   String      @id @default(uuid())
   number               String      @unique
-  clientId             String
+  clientId             String?
   status               QuoteStatus @default(OPEN)
   subtotal             Decimal     @db.Decimal(10, 2)
   tax                  Decimal     @default(0) @db.Decimal(10, 2)
@@ -255,7 +268,7 @@ model Quote {
   convertedToInvoiceId String?     @unique
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
-  client               Client      @relation(fields: [clientId], references: [id])
+  client               Client?     @relation(fields: [clientId], references: [id])
   user                 User        @relation(fields: [userId], references: [id])
   items                QuoteItem[]
 
@@ -444,6 +457,7 @@ model Task {
   clientId    String?
   userId      String
   status      String    @default("PENDING")
+  priority    String    @default("MEDIUM")
   dueDate     DateTime?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -454,6 +468,7 @@ model Task {
   @@index([clientId])
   @@index([userId])
   @@index([status])
+  @@index([priority])
 }
 
 model NcfSequence {

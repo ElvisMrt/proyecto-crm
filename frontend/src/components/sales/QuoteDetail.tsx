@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { salesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiArrowLeft, HiPrinter, HiDocumentDownload, HiChat, HiPencil } from 'react-icons/hi';
-import { printQuote, downloadQuotePDF, sendQuoteWhatsApp } from '../../utils/quotePrint';
+import { HiArrowLeft, HiPrinter, HiDocumentDownload, HiPencil } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
+import { printQuote, downloadQuotePDF } from '../../utils/quotePrint';
+// sendQuoteWhatsApp disabled - WhatsApp module removed
 import ConvertQuoteModal from './ConvertQuoteModal';
 
 const QuoteDetail = () => {
@@ -119,7 +121,8 @@ const QuoteDetail = () => {
             <HiDocumentDownload className="w-4 h-4 mr-2" />
             PDF
           </button>
-          {quote.client?.phone && (
+          {/* WhatsApp button disabled */}
+          {/* {quote.client?.phone && (
             <button
               onClick={() => {
                 sendQuoteWhatsApp(quote);
@@ -130,7 +133,7 @@ const QuoteDetail = () => {
               <HiChat className="w-4 h-4 mr-2" />
               WhatsApp
             </button>
-          )}
+          )} */}
           {quote.status === 'OPEN' && (
             <>
               <button

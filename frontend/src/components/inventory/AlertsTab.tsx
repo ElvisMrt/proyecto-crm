@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { inventoryApi } from '../../services/api';
+import { inventoryApi, crmApi } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
+import { useNavigate } from 'react-router-dom';
+import { HiCheckCircle, HiEye, HiClipboardList } from 'react-icons/hi';
 
 const AlertsTab = () => {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +26,23 @@ const AlertsTab = () => {
     }
   };
 
+  const handleViewProduct = (productId: string) => {
+    navigate(`/inventory?tab=products&productId=${productId}`);
+  };
+
+  const handleCreateTask = async (alert: any) => {
+    try {
+      await crmApi.createTask({
+        title: `Reordenar producto: ${alert.product.name}`,
+        description: `El producto ${alert.product.name} (${alert.product.code}) tiene stock bajo.\nStock actual: ${alert.currentStock}\nStock mínimo: ${alert.minStock}\nSucursal: ${alert.branch?.name || 'N/A'}`,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 días desde ahora
+      });
+      showToast('Tarea de reorden creada exitosamente', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Error al crear la tarea', 'error');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
@@ -34,8 +56,8 @@ const AlertsTab = () => {
         <div className="text-center py-12">Cargando...</div>
       ) : alerts.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          <div className="text-4xl mb-2">✅</div>
-          <p>No hay productos con stock bajo</p>
+          <HiCheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
+          <p className="text-lg font-medium">No hay productos con stock bajo</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -47,6 +69,7 @@ const AlertsTab = () => {
                 <th className="px-6 py-3 text-right text-xs font-medium text-red-800 uppercase">Stock Actual</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-red-800 uppercase">Stock Mínimo</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-red-800 uppercase">Diferencia</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-red-800 uppercase">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -67,6 +90,24 @@ const AlertsTab = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-red-600">
                     {alert.difference < 0 ? alert.difference : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => handleViewProduct(alert.product.id)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                        title="Ver producto"
+                      >
+                        <HiEye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleCreateTask(alert)}
+                        className="text-green-600 hover:text-green-900 p-1 rounded"
+                        title="Crear tarea de reorden"
+                      >
+                        <HiClipboardList className="w-5 h-5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

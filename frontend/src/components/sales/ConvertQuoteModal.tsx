@@ -29,9 +29,19 @@ const ConvertQuoteModal = ({ quote, onClose, onConvert }: ConvertQuoteModalProps
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div 
+      className="fixed inset-0 z-50 overflow-y-auto" 
+      role="dialog" 
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      aria-describedby="modal-description"
+    >
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose}></div>
+        <div 
+          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+          onClick={onClose}
+          aria-hidden="true"
+        ></div>
 
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">
           &#8203;
@@ -44,6 +54,9 @@ const ConvertQuoteModal = ({ quote, onClose, onConvert }: ConvertQuoteModalProps
                 <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
                   Convertir Cotización a Factura
                 </h3>
+                <p id="modal-description" className="sr-only">
+                  Formulario para convertir una cotización en factura. Seleccione el método de pago y tipo de factura.
+                </p>
                 <button
                   type="button"
                   onClick={onClose}

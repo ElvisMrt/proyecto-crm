@@ -25,10 +25,18 @@ interface PaymentForm {
   observations: string;
 }
 
-const PaymentRegisterTab = ({ onPaymentCreated }: { onPaymentCreated?: () => void }) => {
+interface PaymentRegisterTabProps {
+  branchId?: string;
+  initialClientId?: string;
+  initialInvoiceIds?: string[];
+  onPaymentCreated?: () => void;
+  onNavigateToStatus?: (clientId: string) => void;
+}
+
+const PaymentRegisterTab = ({ branchId, initialClientId, initialInvoiceIds, onPaymentCreated, onNavigateToStatus }: PaymentRegisterTabProps) => {
   const { showToast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId || '');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [form, setForm] = useState<PaymentForm>({
     clientId: '',
@@ -48,11 +56,41 @@ const PaymentRegisterTab = ({ onPaymentCreated }: { onPaymentCreated?: () => voi
   }, []);
 
   useEffect(() => {
+    if (initialClientId && initialClientId !== selectedClientId) {
+      setSelectedClientId(initialClientId);
+    }
+  }, [initialClientId]);
+
+  useEffect(() => {
     if (selectedClientId) {
       fetchClientInvoices(selectedClientId);
-      setForm({ ...form, clientId: selectedClientId });
+      setForm(prev => ({ ...prev, clientId: selectedClientId }));
     }
   }, [selectedClientId]);
+
+  useEffect(() => {
+    if (initialInvoiceIds && initialInvoiceIds.length > 0 && invoices.length > 0) {
+      // Pre-select invoices
+      const newInvoiceIds = initialInvoiceIds.filter(id => 
+        invoices.some(inv => inv.id === id && inv.balance > 0)
+      );
+      if (newInvoiceIds.length > 0) {
+        const total = newInvoiceIds.reduce((sum, id) => {
+          const invoice = invoices.find(inv => inv.id === id);
+          return sum + (invoice ? invoice.balance : 0);
+        }, 0);
+        setForm(prev => ({
+          ...prev,
+          invoiceIds: newInvoiceIds,
+          invoicePayments: newInvoiceIds.map(id => {
+            const invoice = invoices.find(inv => inv.id === id);
+            return { invoiceId: id, amount: invoice ? invoice.balance : 0 };
+          }),
+          amount: total,
+        }));
+      }
+    }
+  }, [initialInvoiceIds, invoices]);
 
   const fetchClients = async () => {
     try {
@@ -153,7 +191,12 @@ const PaymentRegisterTab = ({ onPaymentCreated }: { onPaymentCreated?: () => voi
         paymentData.invoiceIds = form.invoiceIds;
       }
 
-      await receivablesApi.createPayment(paymentData);
+      const params: any = {};
+      if (branchId) {
+        params.branchId = branchId;
+      }
+
+      await receivablesApi.createPayment(paymentData, params);
       showToast('Pago registrado exitosamente', 'success');
       
       // Reset form

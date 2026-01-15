@@ -69,49 +69,67 @@ const Cash = () => {
             : 'bg-red-50 border-red-500'
         }`}>
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Estado de Caja</p>
-              <p className={`text-2xl font-bold mt-1 flex items-center ${
-                currentCash ? 'text-green-700' : 'text-red-700'
-              }`}>
-                {currentCash ? (
-                  <>
-                    <HiLockOpen className="w-6 h-6 mr-2" />
-                    Caja Abierta
-                  </>
-                ) : (
-                  <>
-                    <HiLockClosed className="w-6 h-6 mr-2" />
-                    Caja Cerrada
-                  </>
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Estado de Caja</p>
+                  <p className={`text-2xl font-bold mt-1 flex items-center ${
+                    currentCash ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    {currentCash ? (
+                      <>
+                        <HiLockOpen className="w-6 h-6 mr-2" />
+                        Caja Abierta
+                      </>
+                    ) : (
+                      <>
+                        <HiLockClosed className="w-6 h-6 mr-2" />
+                        Caja Cerrada
+                      </>
+                    )}
+                  </p>
+                </div>
+                {currentCash && (
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">Ingresos</div>
+                    <div className="text-xl font-bold text-green-600">
+                      {formatCurrency(currentCash.summary?.totalIncome || 0)}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-2">Egresos</div>
+                    <div className="text-xl font-bold text-red-600">
+                      {formatCurrency(currentCash.summary?.totalExpenses || 0)}
+                    </div>
+                  </div>
                 )}
-              </p>
+              </div>
               {currentCash && (
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm text-gray-600">
-                    Sucursal: <span className="font-medium">{currentCash.branch?.name || 'N/A'}</span>
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Balance Actual: <span className="font-bold text-lg">{formatCurrency(currentCash.currentBalance || 0)}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Abierta por: {currentCash.openedBy?.name || 'N/A'} el {new Date(currentCash.openedAt).toLocaleDateString('es-DO')}
-                  </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Sucursal</p>
+                    <p className="text-sm font-semibold text-gray-900">{currentCash.branch?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Balance Actual</p>
+                    <p className="text-sm font-bold text-lg text-gray-900">{formatCurrency(currentCash.currentBalance || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Abierta por</p>
+                    <p className="text-sm font-semibold text-gray-900">{currentCash.openedBy?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Fecha de Apertura</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {new Date(currentCash.openedAt).toLocaleDateString('es-DO', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
-            {currentCash && (
-              <div className="text-right">
-                <div className="text-sm text-gray-600">Ingresos</div>
-                <div className="text-xl font-bold text-green-600">
-                  {formatCurrency(currentCash.summary?.totalIncome || 0)}
-                </div>
-                <div className="text-sm text-gray-600 mt-2">Egresos</div>
-                <div className="text-xl font-bold text-red-600">
-                  {formatCurrency(currentCash.summary?.totalExpenses || 0)}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -132,8 +150,10 @@ const Cash = () => {
                 }
               `}
             >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
+              <span className="inline-flex items-center">
+                <tab.icon className="w-5 h-5 mr-2" />
+                <span>{tab.label}</span>
+              </span>
             </button>
           ))}
         </nav>

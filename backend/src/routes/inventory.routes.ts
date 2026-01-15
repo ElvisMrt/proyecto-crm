@@ -4,6 +4,7 @@ import {
   getProduct,
   createProduct,
   updateProduct,
+  deleteProduct,
   getStock,
   getMovements,
   createAdjustment,
@@ -11,6 +12,7 @@ import {
   getCategories,
   createCategory,
   updateCategory,
+  deleteCategory,
 } from '../controllers/inventory.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requirePermission, PERMISSIONS } from '../middleware/permissions.middleware';
@@ -23,12 +25,14 @@ router.use(authenticate);
 router.get('/categories', requirePermission(PERMISSIONS.INVENTORY_READ), getCategories);
 router.post('/categories', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_CREATE), createCategory);
 router.put('/categories/:id', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_UPDATE), updateCategory);
+router.delete('/categories/:id', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_UPDATE), deleteCategory);
 
 // Products
 router.get('/products', requirePermission(PERMISSIONS.INVENTORY_READ), getProducts);
 router.get('/products/:id', requirePermission(PERMISSIONS.INVENTORY_READ), getProduct);
 router.post('/products', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_CREATE), createProduct);
 router.put('/products/:id', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_UPDATE), updateProduct);
+router.delete('/products/:id', requirePermission(PERMISSIONS.INVENTORY_PRODUCT_UPDATE), deleteProduct);
 
 // Stock
 router.get('/stock', requirePermission(PERMISSIONS.INVENTORY_STOCK_READ), getStock);

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { salesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiArrowLeft, HiPrinter, HiDocumentDownload, HiChat } from 'react-icons/hi';
-import { printCreditNote, downloadCreditNotePDF, sendCreditNoteWhatsApp } from '../../utils/creditNotePrint';
+import { HiArrowLeft, HiPrinter, HiDocumentDownload } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
+import { printCreditNote, downloadCreditNotePDF } from '../../utils/creditNotePrint';
+// sendCreditNoteWhatsApp disabled - WhatsApp module removed
 
 const CreditNoteDetail = () => {
   const { id } = useParams();
@@ -89,7 +91,8 @@ const CreditNoteDetail = () => {
             <HiDocumentDownload className="w-4 h-4 mr-2" />
             PDF
           </button>
-          {creditNote.invoice?.client?.phone && (
+          {/* WhatsApp button disabled */}
+          {/* {creditNote.invoice?.client?.phone && (
             <button
               onClick={() => {
                 sendCreditNoteWhatsApp(creditNote);
@@ -100,7 +103,7 @@ const CreditNoteDetail = () => {
               <HiChat className="w-4 h-4 mr-2" />
               WhatsApp
             </button>
-          )}
+          )} */}
         </div>
       </div>
 

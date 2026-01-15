@@ -16,6 +16,12 @@ const closeCashSchema = z.object({
   observations: z.string().optional(),
 });
 
+// Schema alternativo para cuando se envía desde frontend con countedAmount
+const closeCashSchemaAlt = z.object({
+  countedAmount: z.number().nonnegative(),
+  observations: z.string().optional(),
+});
+
 const createMovementSchema = z.object({
   type: z.enum(['MANUAL_ENTRY', 'MANUAL_EXIT']),
   concept: z.string().min(1),
@@ -96,6 +102,20 @@ export const openCash = async (req: AuthRequest, res: Response) => {
     }
 
     const data = openCashSchema.parse(req.body);
+
+    // Validar que el usuario tenga acceso a la sucursal seleccionada
+    if (req.user?.branchId && req.user.branchId !== data.branchId) {
+      // Si el usuario tiene una sucursal asignada, solo puede abrir caja en esa sucursal
+      // A menos que sea ADMINISTRATOR
+      if (req.user.role !== 'ADMINISTRATOR') {
+        return res.status(403).json({
+          error: {
+            code: 'BRANCH_ACCESS_DENIED',
+            message: 'No tiene permisos para abrir caja en esta sucursal. Su sucursal asignada es diferente.',
+          },
+        });
+      }
+    }
 
     // Check if there's already an open cash register for this branch
     const existingCash = await prisma.cashRegister.findFirst({
@@ -187,7 +207,19 @@ export const closeCash = async (req: AuthRequest, res: Response) => {
     }
 
     const { id } = req.params;
-    const data = closeCashSchema.parse(req.body);
+    
+    // Intentar parsear con el schema que incluye countedAmount (del frontend)
+    let parsedData;
+    try {
+      parsedData = closeCashSchemaAlt.parse(req.body);
+      // Convertir countedAmount a finalAmount
+      parsedData = { finalAmount: parsedData.countedAmount, observations: parsedData.observations };
+    } catch {
+      // Si falla, intentar con el schema original
+      parsedData = closeCashSchema.parse(req.body);
+    }
+    
+    const data = parsedData;
 
     const cashRegister = await prisma.cashRegister.findUnique({
       where: { id },

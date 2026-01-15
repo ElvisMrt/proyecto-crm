@@ -15,6 +15,62 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - crm_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --bind 0.0.0.0 --protected-mode no --tcp-keepalive 60
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_network
+
+  # Evolution API disabled - WhatsApp module removed
+  # evolution:
+  #   image: evoapicloud/evolution-api:homolog
+  #   container_name: crm_evolution
+  #   ports:
+  #     - "8081:8080"
+  #   environment:
+  #     SERVER_URL: http://localhost:8081
+  #     AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-6F0D9A02AD66-4FB4-8574-985400928FF9}
+  #     DATABASE_ENABLED: "true"
+  #     DATABASE_PROVIDER: postgresql
+  #     DATABASE_CONNECTION_URI: postgresql://postgres:postgres@postgres:5432/crm_master
+  #     REDIS_ENABLED: "true"
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: "6379"
+  #     REDIS_PASSWORD: ""
+  #     REDIS_DB: "0"
+  #     CACHE_REDIS_ENABLED: "true"
+  #     CACHE_REDIS_URI: "redis://redis:6379/0"
+  #     CACHE_REDIS_PREFIX_KEY: "evolution"
+  #     CACHE_REDIS_SAVE_INSTANCES: "false"
+  #     CACHE_LOCAL_ENABLED: "false"
+  #     CONFIG_SESSION_PHONE_CLIENT: Chrome
+  #     CONFIG_SESSION_PHONE_NAME: Chrome
+  #     QRCODE_ENABLED: "true"
+  #     QRCODE_LIMIT: 30
+  #   volumes:
+  #     - evolution_instances:/evolution/instances
+  #     - evolution_store:/evolution/store
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - crm_network
 
   backend:
     build:
@@ -30,9 +86,19 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 7d
       CORS_ORIGIN: http://localhost:5173
+      # WhatsApp/Evolution API variables disabled
+      # WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-EVOLUTION}
+      # WHATSAPP_API_URL: ${WHATSAPP_API_URL:-http://evolution:8080}
+      # EVOLUTION_INSTANCE_ID: ${EVOLUTION_INSTANCE_ID:-crm-whatsapp-instance}
+      # EVOLUTION_TOKEN: ${EVOLUTION_API_KEY:-6F0D9A02AD66-4FB4-8574-985400928FF9}
+      # EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-6F0D9A02AD66-4FB4-8574-985400928FF9}
+    networks:
+      - crm_network
     depends_on:
       postgres:
         condition: service_healthy
+      # evolution:
+      #   condition: service_started
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -51,7 +117,17 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+    networks:
+      - crm_network
 
 volumes:
   postgres_data:
+  redis_data:
+  # Evolution API volumes disabled
+  # evolution_instances:
+  # evolution_store:
+
+networks:
+  crm_network:
+    driver: bridge
 

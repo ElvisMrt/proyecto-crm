@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cashApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { HiLockClosed, HiCurrencyDollar, HiInformationCircle, HiCheckCircle, HiXCircle } from 'react-icons/hi';
 
 interface CloseCashTabProps {
   currentCash: any;
@@ -8,7 +9,7 @@ interface CloseCashTabProps {
 }
 
 const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [form, setForm] = useState({
     countedAmount: 0,
     observations: '',
@@ -48,14 +49,15 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
     }
 
     const difference = calculateDifference();
+    const confirmTitle = difference !== 0 ? 'Cerrar Caja con Diferencia' : 'Cerrar Caja';
     const confirmMessage = difference !== 0
       ? `Hay una diferencia de ${formatCurrency(Math.abs(difference))}. ¿Desea continuar con el cierre?`
       : '¿Está seguro de cerrar la caja?';
 
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
-
+    showConfirm(
+      confirmTitle,
+      confirmMessage,
+      async () => {
     try {
       setLoading(true);
       await cashApi.closeCash({
@@ -75,12 +77,17 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
     } finally {
       setLoading(false);
     }
+      },
+      { type: difference !== 0 ? 'warning' : 'info', confirmText: 'Cerrar Caja', cancelText: 'Cancelar' }
+    );
   };
 
   if (!currentCash) {
     return (
       <div className="bg-white rounded-lg shadow p-12 text-center">
-        <div className="text-6xl mb-4">🔒</div>
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-4">
+          <HiLockClosed className="w-10 h-10 text-red-600" />
+        </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">No Hay Caja Abierta</h2>
         <p className="text-gray-600">
           Debe abrir la caja primero para poder cerrarla
@@ -96,7 +103,10 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Formulario */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Cerrar Caja</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <HiLockClosed className="w-5 h-5 mr-2 text-gray-400" />
+          Cerrar Caja
+        </h2>
 
         {/* Resumen Automático */}
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -130,7 +140,8 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Monto Contado */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <HiCurrencyDollar className="w-4 h-4 mr-1 text-gray-400" />
               Monto Contado Físicamente (RD$) *
             </label>
             <input
@@ -156,8 +167,15 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
                 : 'bg-red-50 border border-red-200'
             }`}>
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">Diferencia:</span>
-                <span className={`text-lg font-bold ${
+                <span className="text-sm font-medium text-gray-700 flex items-center">
+                  {difference === 0 ? (
+                    <HiCheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                  ) : (
+                    <HiXCircle className="w-5 h-5 mr-2 text-red-600" />
+                  )}
+                  Diferencia:
+                </span>
+                <span className={`text-lg font-bold flex items-center ${
                   difference === 0 ? 'text-green-700' : 'text-red-700'
                 }`}>
                   {difference >= 0 ? '+' : ''}{formatCurrency(difference)}
@@ -203,22 +221,25 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
       {/* Información */}
       <div className="space-y-4">
         <div className="bg-blue-50 rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">ℹ️ Información</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <HiInformationCircle className="w-5 h-5 mr-2 text-blue-600" />
+            Información
+          </h3>
           <ul className="space-y-3 text-sm text-gray-700">
             <li className="flex items-start">
-              <span className="mr-2">✓</span>
+              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
               <span>Una caja cerrada no se puede modificar</span>
             </li>
             <li className="flex items-start">
-              <span className="mr-2">✓</span>
+              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
               <span>Las diferencias quedan registradas para auditoría</span>
             </li>
             <li className="flex items-start">
-              <span className="mr-2">✓</span>
+              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
               <span>Requiere permiso de cierre</span>
             </li>
             <li className="flex items-start">
-              <span className="mr-2">✓</span>
+              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
               <span>Cuente físicamente el efectivo antes de cerrar</span>
             </li>
           </ul>

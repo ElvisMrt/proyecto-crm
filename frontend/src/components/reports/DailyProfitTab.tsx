@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { reportsApi, branchesApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
-import { HiDownload, HiDocumentDownload } from 'react-icons/hi';
+import { HiDownload, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
 import { useToast } from '../../contexts/ToastContext';
 
 const DailyProfitTab = () => {
@@ -38,8 +38,10 @@ const DailyProfitTab = () => {
 
       const response = await reportsApi.getDailyProfit(params);
       setData(response);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching daily profit:', error);
+      showToast(error?.response?.data?.error?.message || 'Error al cargar el reporte de ganancia diaria', 'error');
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -143,7 +145,7 @@ const DailyProfitTab = () => {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
@@ -151,7 +153,7 @@ const DailyProfitTab = () => {
             <select
               value={branchId}
               onChange={(e) => setBranchId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Todas</option>
               {branches.map((branch) => (
@@ -161,6 +163,18 @@ const DailyProfitTab = () => {
               ))}
             </select>
           </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => {
+              setSelectedDate(new Date().toISOString().split('T')[0]);
+              setBranchId('');
+            }}
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <HiXCircle className="w-4 h-4" />
+            <span>Limpiar Filtros</span>
+          </button>
         </div>
       </div>
 

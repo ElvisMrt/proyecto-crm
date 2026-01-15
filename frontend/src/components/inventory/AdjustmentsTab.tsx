@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { inventoryApi } from '../../services/api';
-import axios from 'axios';
+import { inventoryApi, branchesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 interface AdjustmentsTabProps {
@@ -28,16 +27,11 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
 
   const fetchBranches = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/branches`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      setBranches(response.data?.data || response.data || []);
-      if (response.data?.data && response.data.data.length > 0) {
-        setForm({ ...form, branchId: response.data.data[0].id });
-      } else if (response.data && response.data.length > 0) {
-        setForm({ ...form, branchId: response.data[0].id });
+      const response = await branchesApi.getBranches();
+      const branchesData = response?.data || response || [];
+      setBranches(branchesData);
+      if (branchesData.length > 0) {
+        setForm({ ...form, branchId: branchesData[0].id });
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
@@ -88,10 +82,6 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
       return;
     }
 
-    if (!form.reason.trim()) {
-      showToast('El motivo es obligatorio', 'error');
-      return;
-    }
 
     if (form.items.length === 0) {
       showToast('Agregue al menos un producto', 'error');
@@ -160,14 +150,13 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Motivo (Opcional)</label>
             <textarea
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
-              required
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="Describa el motivo del ajuste..."
+              placeholder="Describa el motivo del ajuste (opcional)..."
             />
           </div>
 
@@ -260,10 +249,10 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
       <div className="bg-blue-50 rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">ℹ️ Información</h3>
         <ul className="space-y-2 text-sm text-gray-700">
-          <li>• Los ajustes requieren motivo obligatorio</li>
-          <li>• Impactan el stock inmediatamente</li>
+          <li>• Los ajustes impactan el stock inmediatamente</li>
           <li>• Quedan auditados con usuario y fecha</li>
           <li>• Requieren permiso especial</li>
+          <li>• El motivo es opcional pero recomendado</li>
         </ul>
       </div>
     </div>

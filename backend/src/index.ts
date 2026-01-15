@@ -15,8 +15,8 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // Aumentar límite para imágenes base64
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -36,7 +36,8 @@ import reportsRoutes from './routes/reports.routes';
 import settingsRoutes from './routes/settings.routes';
 import branchesRoutes from './routes/branches.routes';
 import ncfRoutes from './routes/ncf.routes';
-import whatsappRoutes from './routes/whatsapp.routes';
+// WhatsApp module disabled
+// import whatsappRoutes from './routes/whatsapp.routes';
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
@@ -50,7 +51,8 @@ app.use('/api/v1/reports', reportsRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/branches', branchesRoutes);
 app.use('/api/v1/ncf', ncfRoutes);
-app.use('/api/v1/whatsapp', whatsappRoutes);
+// WhatsApp routes disabled
+// app.use('/api/v1/whatsapp', whatsappRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

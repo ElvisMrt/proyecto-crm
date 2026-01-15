@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { receivablesApi, clientsApi } from '../../services/api';
+import { exportAccountStatusToPDF } from '../../utils/exportUtils';
+// WhatsApp module disabled
+// import { sendAccountStatusWhatsApp } from '../../utils/whatsappSender';
+import { useToast } from '../../contexts/ToastContext';
+import { HiDocumentDownload } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
 
 interface Client {
   id: string;
@@ -26,9 +33,17 @@ interface Invoice {
   }>;
 }
 
-const AccountStatusTab = () => {
+interface AccountStatusTabProps {
+  branchId?: string;
+  initialClientId?: string;
+  onNavigateToInvoice?: (invoiceId: string) => void;
+}
+
+const AccountStatusTab = ({ branchId, initialClientId, onNavigateToInvoice }: AccountStatusTabProps) => {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId || '');
   const [accountStatus, setAccountStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,10 +53,16 @@ const AccountStatusTab = () => {
   }, []);
 
   useEffect(() => {
+    if (initialClientId && initialClientId !== selectedClientId) {
+      setSelectedClientId(initialClientId);
+    }
+  }, [initialClientId]);
+
+  useEffect(() => {
     if (selectedClientId) {
       fetchAccountStatus(selectedClientId);
     }
-  }, [selectedClientId]);
+  }, [selectedClientId, branchId]);
 
   const fetchClients = async () => {
     try {
@@ -55,7 +76,11 @@ const AccountStatusTab = () => {
   const fetchAccountStatus = async (clientId: string) => {
     try {
       setLoading(true);
-      const data = await receivablesApi.getStatus(clientId);
+      const params: any = {};
+      if (branchId) {
+        params.branchId = branchId;
+      }
+      const data = await receivablesApi.getStatus(clientId, params);
       setAccountStatus(data);
     } catch (error) {
       console.error('Error fetching account status:', error);
@@ -136,9 +161,35 @@ const AccountStatusTab = () => {
         <div className="space-y-4">
           {/* Resumen del Cliente */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Estado de Cuenta - {accountStatus.client.name}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                Estado de Cuenta - {accountStatus.client.name}
+              </h2>
+              <div className="flex items-center space-x-2">
+                {/* WhatsApp button disabled - WhatsApp module removed */}
+                <button
+                  onClick={() => {
+                    const selectedClient = clients.find(c => c.id === selectedClientId);
+                    if (selectedClient && accountStatus) {
+                      exportAccountStatusToPDF(
+                        {
+                          name: accountStatus.client.name,
+                          identification: accountStatus.client.identification || '',
+                          email: accountStatus.client.email || undefined,
+                          phone: accountStatus.client.phone || undefined,
+                          address: accountStatus.client.address || undefined,
+                        },
+                        accountStatus
+                      );
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center space-x-2"
+                >
+                  <HiDocumentDownload className="w-4 h-4" />
+                  <span>Exportar PDF</span>
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Total por Cobrar</p>
@@ -225,9 +276,26 @@ const AccountStatusTab = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                             <div className="flex justify-end space-x-2">
-                              <button className="text-blue-600 hover:text-blue-900">Ver</button>
+                              <button 
+                                onClick={() => {
+                                  navigate(`/sales/invoices/${invoice.id}`);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 font-medium"
+                              >
+                                Ver
+                              </button>
                               {invoice.balance > 0 && (
-                                <button className="text-green-600 hover:text-green-900">Cobrar</button>
+                                <button 
+                                  onClick={() => {
+                                    if (onNavigateToInvoice) {
+                                      // Navigate to payments tab with this invoice
+                                      navigate(`/receivables?tab=payments&clientId=${selectedClientId}&invoiceId=${invoice.id}`);
+                                    }
+                                  }}
+                                  className="text-green-600 hover:text-green-900 font-medium"
+                                >
+                                  Cobrar
+                                </button>
                               )}
                             </div>
                           </td>

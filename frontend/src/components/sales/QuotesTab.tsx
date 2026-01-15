@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesApi, clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiDotsVertical, HiPencil, HiDocumentDownload, HiChat, HiPrinter } from 'react-icons/hi';
+import { HiDotsVertical, HiPencil, HiDocumentDownload, HiPrinter } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
 import ConvertQuoteModal from './ConvertQuoteModal';
 import { printQuote, downloadQuotePDF } from '../../utils/quotePrint';
-import { sendQuoteWhatsApp } from '../../utils/whatsappSender';
+// WhatsApp module disabled
+// import { sendQuoteWhatsApp } from '../../utils/whatsappSender';
 
 interface Quote {
   id: string;
@@ -21,7 +23,7 @@ interface Quote {
 }
 
 const QuotesTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const navigate = useNavigate();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,20 +154,21 @@ const QuotesTab = () => {
     }
   };
 
-  const handleSendWhatsApp = async (quote: Quote) => {
-    try {
-      const quoteData = await salesApi.getQuote(quote.id);
-      const result = await sendQuoteWhatsApp(quoteData);
-      if (result.success) {
-        showToast('Mensaje WhatsApp enviado exitosamente', 'success');
-      } else {
-        showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
-      }
-    } catch (error: any) {
-      console.error('Error fetching quote for WhatsApp:', error);
-      showToast(error.response?.data?.error?.message || 'Error al cargar la cotización', 'error');
-    }
-  };
+  // WhatsApp function disabled
+  // const handleSendWhatsApp = async (quote: Quote) => {
+  //   try {
+  //     const quoteData = await salesApi.getQuote(quote.id);
+  //     const result = await sendQuoteWhatsApp(quoteData);
+  //     if (result.success) {
+  //       showToast('Mensaje WhatsApp enviado exitosamente', 'success');
+  //     } else {
+  //       showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
+  //     }
+  //   } catch (error: any) {
+  //     console.error('Error fetching quote for WhatsApp:', error);
+  //     showToast(error.response?.data?.error?.message || 'Error al cargar la cotización', 'error');
+  //   }
+  // };
 
   return (
     <div className="space-y-4">
@@ -347,18 +350,22 @@ const QuotesTab = () => {
                                           Editar
                                         </button>
                                         <button
-                                          onClick={async () => {
-                                            if (window.confirm(`¿Está seguro de eliminar la cotización ${quote.number}?`)) {
-                                              try {
-                                                await salesApi.deleteQuote(quote.id);
-                                                showToast('Cotización eliminada exitosamente', 'success');
-                                                fetchQuotes();
-                                                setActionMenuOpen(null);
-                                              } catch (error: any) {
-                                                showToast(error.response?.data?.error?.message || 'Error al eliminar la cotización', 'error');
-                                                setActionMenuOpen(null);
-                                              }
-                                            }
+                                          onClick={() => {
+                                            setActionMenuOpen(null);
+                                            showConfirm(
+                                              'Eliminar Cotización',
+                                              `¿Está seguro de eliminar la cotización ${quote.number}? Esta acción no se puede deshacer.`,
+                                              async () => {
+                                                try {
+                                                  await salesApi.deleteQuote(quote.id);
+                                                  showToast('Cotización eliminada exitosamente', 'success');
+                                                  fetchQuotes();
+                                                } catch (error: any) {
+                                                  showToast(error.response?.data?.error?.message || 'Error al eliminar la cotización', 'error');
+                                                }
+                                              },
+                                              { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+                                            );
                                           }}
                                           className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
                                         >
@@ -395,7 +402,8 @@ const QuotesTab = () => {
                                       <HiDocumentDownload className="w-4 h-4 mr-2" />
                                       Descargar PDF
                                     </button>
-                                    <button
+                                    {/* WhatsApp button disabled */}
+                                    {/* <button
                                       onClick={() => {
                                         handleSendWhatsApp(quote);
                                         setActionMenuOpen(null);
@@ -404,7 +412,7 @@ const QuotesTab = () => {
                                     >
                                       <HiChat className="w-4 h-4 mr-2" />
                                       Enviar WhatsApp
-                                    </button>
+                                    </button> */}
                                   </div>
                                 </div>
                               </>

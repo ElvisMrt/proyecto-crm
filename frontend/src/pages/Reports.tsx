@@ -12,7 +12,6 @@ import {
   HiCash,
   HiCube,
   HiStar,
-  HiDownload,
 } from 'react-icons/hi';
 
 type TabType = 'summary' | 'sales' | 'receivables' | 'cash' | 'inventory' | 'profit';
@@ -33,10 +32,6 @@ const Reports = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Reportes</h1>
-        <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md flex items-center space-x-2">
-          <HiDownload className="w-4 h-4" />
-          <span>Exportar</span>
-        </button>
       </div>
 
       {/* Tabs */}
@@ -55,8 +50,10 @@ const Reports = () => {
                 }
               `}
             >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
+              <span className="inline-flex items-center">
+                <tab.icon className="w-4 h-4 mr-2" />
+                <span>{tab.label}</span>
+              </span>
             </button>
           ))}
         </nav>

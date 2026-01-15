@@ -8,7 +8,7 @@ import { validateIdentification } from '../utils/identificationValidator';
 const prisma = new PrismaClient();
 
 const createInvoiceSchema = z.object({
-  clientId: z.string().uuid().optional(),
+  clientId: z.string().uuid().optional(), // Cliente es opcional
   type: z.enum(['FISCAL', 'NON_FISCAL']),
   paymentMethod: z.enum(['CASH', 'TRANSFER', 'CARD', 'CREDIT', 'MIXED']),
   issueDate: z.string().datetime().optional(),
@@ -25,6 +25,7 @@ const createInvoiceSchema = z.object({
   observations: z.string().optional(),
   saveAsDraft: z.boolean().optional().default(false),
   amountReceived: z.number().nonnegative().optional(), // For POS: amount received in cash
+  includeTax: z.boolean().optional(), // ITBIS opcional (si no se proporciona, usa type === 'FISCAL' como default)
 });
 
 export const getInvoices = async (req: AuthRequest, res: Response) => {
@@ -116,36 +117,47 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
     ]);
 
     const now = new Date();
-    
+
     res.json({
       data: invoices.map((invoice) => {
-        // Calculate dynamic status: OVERDUE if dueDate has passed and balance > 0
+        // Calculate dynamic status based on current balance and due date
         let calculatedStatus = invoice.status;
-        if (
+        const balance = Number(invoice.balance);
+        
+        // If fully paid (balance = 0), always mark as PAID regardless of stored status
+        if (balance === 0) {
+          calculatedStatus = InvoiceStatus.PAID;
+        }
+        // If has balance and due date passed, mark as OVERDUE (only if currently ISSUED)
+        else if (
           invoice.status === InvoiceStatus.ISSUED &&
           invoice.dueDate &&
           invoice.dueDate < now &&
-          Number(invoice.balance) > 0
+          balance > 0
         ) {
           calculatedStatus = InvoiceStatus.OVERDUE;
         }
-        // If fully paid, mark as PAID
-        else if (Number(invoice.balance) === 0 && invoice.status === InvoiceStatus.ISSUED) {
-          calculatedStatus = InvoiceStatus.PAID;
+        // If status is PAID but has balance, correct to ISSUED or OVERDUE
+        else if (invoice.status === InvoiceStatus.PAID && balance > 0) {
+          if (invoice.dueDate && invoice.dueDate < now) {
+            calculatedStatus = InvoiceStatus.OVERDUE;
+          } else {
+            calculatedStatus = InvoiceStatus.ISSUED;
+          }
         }
         
         return {
-          id: invoice.id,
-          number: invoice.number,
-          ncf: invoice.ncf,
-          client: invoice.client,
-          branch: invoice.branch,
+        id: invoice.id,
+        number: invoice.number,
+        ncf: invoice.ncf,
+        client: invoice.client,
+        branch: invoice.branch,
           status: calculatedStatus,
-          type: invoice.type,
-          paymentMethod: invoice.paymentMethod,
-          total: Number(invoice.total),
-          balance: Number(invoice.balance),
-          issueDate: invoice.issueDate,
+        type: invoice.type,
+        paymentMethod: invoice.paymentMethod,
+        total: Number(invoice.total),
+          balance: balance,
+        issueDate: invoice.issueDate,
           dueDate: invoice.dueDate,
         };
       }),
@@ -229,12 +241,6 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
             name: true,
           },
         },
-        cancelledByUser: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
       },
     });
 
@@ -260,20 +266,31 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
       cancelledByUser = cancelledBy;
     }
 
-    // Calculate dynamic status: OVERDUE if dueDate has passed and balance > 0
+    // Calculate dynamic status based on current balance and due date
     const now = new Date();
     let calculatedStatus = invoice.status;
-    if (
+    const balance = Number(invoice.balance);
+    
+    // If fully paid (balance = 0), always mark as PAID regardless of stored status
+    if (balance === 0) {
+      calculatedStatus = InvoiceStatus.PAID;
+    }
+    // If has balance and due date passed, mark as OVERDUE (only if currently ISSUED)
+    else if (
       invoice.status === InvoiceStatus.ISSUED &&
       invoice.dueDate &&
       invoice.dueDate < now &&
-      Number(invoice.balance) > 0
+      balance > 0
     ) {
       calculatedStatus = InvoiceStatus.OVERDUE;
     }
-    // If fully paid, mark as PAID
-    else if (Number(invoice.balance) === 0 && invoice.status === InvoiceStatus.ISSUED) {
-      calculatedStatus = InvoiceStatus.PAID;
+    // If status is PAID but has balance, correct to ISSUED or OVERDUE
+    else if (invoice.status === InvoiceStatus.PAID && balance > 0) {
+      if (invoice.dueDate && invoice.dueDate < now) {
+        calculatedStatus = InvoiceStatus.OVERDUE;
+      } else {
+        calculatedStatus = InvoiceStatus.ISSUED;
+      }
     }
 
     res.json({
@@ -317,8 +334,9 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
     const data = createInvoiceSchema.parse(req.body);
 
-    // Validar RNC/Cédula del cliente si es factura fiscal
-    if (data.type === 'FISCAL' && data.clientId) {
+    // Validar RNC/Cédula del cliente SOLO si es factura fiscal, hay cliente, y NO es borrador
+    // Las facturas no fiscales o borradores no requieren validación de identificación
+    if (data.type === 'FISCAL' && data.clientId && !data.saveAsDraft) {
       const client = await prisma.client.findUnique({
         where: { id: data.clientId },
         select: { identification: true, name: true },
@@ -378,11 +396,12 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
     });
 
     subtotal -= data.discount;
-    const tax = data.type === 'FISCAL' ? subtotal * 0.18 : 0; // 18% ITBIS
+    // ITBIS es opcional - se calcula solo si includeTax está marcado o si es FISCAL (compatibilidad hacia atrás)
+    const tax = (data.includeTax !== undefined ? data.includeTax : data.type === 'FISCAL') ? subtotal * 0.18 : 0;
     const total = subtotal + tax;
     const balance = data.paymentMethod === 'CREDIT' ? total : 0;
 
-    // Cliente es opcional - usar undefined si no se proporciona (para omitirlo del objeto data)
+    // Cliente es opcional - usar undefined si no se proporciona
     const clientId = data.clientId || undefined;
 
     // Obtener branchId del formulario o del primer branch activo
@@ -429,7 +448,9 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
             const availableStock = stock ? Number(stock.quantity) : 0;
 
-            if (availableStock < item.quantity) {
+            // Solo validar si hay stock disponible (permitir si stock es 0 o negativo para permitir ajustes)
+            // Pero si hay stock y es insuficiente, bloquear
+            if (availableStock > 0 && availableStock < item.quantity) {
               return res.status(400).json({
                 error: {
                   code: 'INSUFFICIENT_STOCK',
@@ -515,7 +536,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
         },
       };
 
-      // Solo incluir clientId si se proporciona
+      // Cliente es opcional - solo incluir si se proporciona
       if (clientId) {
         invoiceData.clientId = clientId;
       }
@@ -530,9 +551,9 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
       // Only update stock if not a draft
       if (!data.saveAsDraft) {
-        // Update stock for each product
-        for (const item of data.items) {
-          if (item.productId && branchId) {
+      // Update stock for each product
+      for (const item of data.items) {
+        if (item.productId && branchId) {
           // Find or create stock record
           const stock = await tx.stock.findFirst({
             where: {
@@ -606,6 +627,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
               method: PaymentMethod.CASH,
               invoiceId: newInvoice.id,
               userId: req.user!.id,
+              movementDate: new Date(), // Fecha explícita del movimiento
             },
           });
         }
@@ -815,7 +837,8 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
     });
 
     subtotal -= data.discount;
-    const tax = data.type === 'FISCAL' ? subtotal * 0.18 : 0;
+    // ITBIS es opcional - se calcula solo si includeTax está marcado o si es FISCAL (compatibilidad hacia atrás)
+    const tax = (data.includeTax !== undefined ? data.includeTax : data.type === 'FISCAL') ? subtotal * 0.18 : 0;
     const total = subtotal + tax;
     const balance = data.paymentMethod === 'CREDIT' ? total : 0;
 
@@ -911,7 +934,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
                   },
                 });
               }
-            } else if (availableStock < item.quantity) {
+            } else if (availableStock > 0 && availableStock < item.quantity) {
               // New item or increased quantity beyond available
               return res.status(400).json({
                 error: {
@@ -1049,9 +1072,11 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
         },
       };
 
+      // Cliente es opcional - solo incluir si se proporciona
       if (data.clientId) {
         invoiceData.clientId = data.clientId;
       } else if (existingInvoice.clientId) {
+        // Si se está eliminando el cliente, establecerlo como null
         invoiceData.clientId = null;
       }
 
@@ -1067,6 +1092,21 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
       // Update stock for new items
       for (const item of data.items) {
         if (item.productId && branchId) {
+          // Get product to check if it controls stock and get minStock
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { 
+              id: true,
+              controlsStock: true,
+              minStock: true,
+            },
+          });
+
+          // Only process if product controls stock
+          if (!product || !product.controlsStock) {
+            continue;
+          }
+
           const stock = await tx.stock.findFirst({
             where: {
               productId: item.productId,
@@ -1108,12 +1148,14 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
               },
             });
           } else {
-            // Create stock record if it doesn't exist
+            // Create stock record if it doesn't exist (start with 0, then subtract)
+            const newQuantity = 0 - Number(item.quantity);
             await tx.stock.create({
               data: {
                 productId: item.productId,
                 branchId: branchId,
-                quantity: -item.quantity,
+                quantity: newQuantity,
+                minStock: Number(product.minStock) || 0,
               },
             });
 
@@ -1124,7 +1166,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
                 branchId: branchId,
                 type: 'SALE',
                 quantity: -item.quantity,
-                balance: -item.quantity,
+                balance: newQuantity,
                 documentType: 'Invoice',
                 documentId: id,
                 userId: req.user!.id,
@@ -1493,6 +1535,7 @@ const createQuoteSchema = z.object({
   discount: z.number().nonnegative().default(0),
   validUntil: z.string().datetime().optional(),
   observations: z.string().optional(),
+  includeTax: z.boolean().optional().default(false), // ITBIS opcional
 });
 
 export const getQuotes = async (req: AuthRequest, res: Response) => {
@@ -1650,23 +1693,11 @@ export const createQuote = async (req: AuthRequest, res: Response) => {
     });
 
     subtotal -= data.discount;
-    const tax = subtotal * 0.18; // 18% ITBIS (solo para referencia)
+    const tax = data.includeTax ? subtotal * 0.18 : 0; // 18% ITBIS solo si está marcado
     const total = subtotal + tax;
 
-    // clientId es requerido para cotizaciones según el schema
-    if (!data.clientId) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Client ID is required for quotes',
-        },
-      });
-    }
-
-    const quote = await prisma.quote.create({
-      data: {
+    const quoteData: any = {
         number: quoteNumber,
-        clientId: data.clientId,
         status: QuoteStatus.OPEN,
         subtotal,
         tax,
@@ -1684,7 +1715,15 @@ export const createQuote = async (req: AuthRequest, res: Response) => {
             subtotal: item.quantity * item.price - item.discount,
           })),
         },
-      },
+    };
+
+    // Solo incluir clientId si se proporciona
+    if (data.clientId) {
+      quoteData.clientId = data.clientId;
+    }
+
+    const quote = await prisma.quote.create({
+      data: quoteData,
       include: {
         client: true,
         items: true,
@@ -1767,18 +1806,8 @@ export const updateQuote = async (req: AuthRequest, res: Response) => {
     });
 
     subtotal -= data.discount;
-    const tax = subtotal * 0.18; // 18% ITBIS (solo para referencia)
+    const tax = data.includeTax ? subtotal * 0.18 : 0; // 18% ITBIS solo si está marcado
     const total = subtotal + tax;
-
-    // clientId is required for quotes
-    if (!data.clientId) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Client ID is required for quotes',
-        },
-      });
-    }
 
     // Update quote in transaction
     const updatedQuote = await prisma.$transaction(async (tx) => {
@@ -1788,27 +1817,33 @@ export const updateQuote = async (req: AuthRequest, res: Response) => {
       });
 
       // Update quote
+      const updateData: any = {
+        subtotal,
+        tax,
+        discount: data.discount,
+        total,
+        validUntil: data.validUntil ? new Date(data.validUntil) : null,
+        observations: data.observations,
+        items: {
+          create: data.items.map((item) => ({
+            productId: item.productId || null,
+            description: item.description,
+            quantity: item.quantity,
+            price: item.price,
+            discount: item.discount,
+            subtotal: item.quantity * item.price - item.discount,
+          })),
+        },
+      };
+
+      // Solo incluir clientId si se proporciona, o establecerlo como null si se está eliminando
+      if (data.clientId !== undefined) {
+        updateData.clientId = data.clientId || null;
+      }
+
       const updated = await tx.quote.update({
         where: { id },
-        data: {
-          clientId: data.clientId,
-          subtotal,
-          tax,
-          discount: data.discount,
-          total,
-          validUntil: data.validUntil ? new Date(data.validUntil) : null,
-          observations: data.observations,
-          items: {
-            create: data.items.map((item) => ({
-              productId: item.productId || null,
-              description: item.description,
-              quantity: item.quantity,
-              price: item.price,
-              discount: item.discount,
-              subtotal: item.quantity * item.price - item.discount,
-            })),
-          },
-        },
+        data: updateData,
         include: {
           client: true,
           items: true,
@@ -2189,13 +2224,14 @@ export const createPOSSale = async (req: AuthRequest, res: Response) => {
     // Validate amountReceived for cash payments
     if (data.paymentMethod === 'CASH' && data.amountReceived !== undefined) {
       // Calculate total first to validate
-      const total = data.items.reduce((sum, item) => {
+      const subtotal = data.items.reduce((sum, item) => {
         const itemSubtotal = item.quantity * item.price - item.discount;
         return sum + itemSubtotal;
       }, 0) - (data.discount || 0);
       
-      const tax = data.type === 'FISCAL' ? total * 0.18 : 0;
-      const finalTotal = total + tax;
+      // ITBIS es opcional - se calcula solo si includeTax está marcado o si es FISCAL (compatibilidad hacia atrás)
+      const tax = (data.includeTax !== undefined ? data.includeTax : data.type === 'FISCAL') ? subtotal * 0.18 : 0;
+      const finalTotal = subtotal + tax;
 
       if (data.amountReceived < finalTotal) {
         return res.status(400).json({
@@ -2292,6 +2328,7 @@ export const getCreditNotes = async (req: AuthRequest, res: Response) => {
         total: Number(cn.total),
         issueDate: cn.issueDate,
         createdAt: cn.createdAt,
+        reason: cn.reason,
       })),
       pagination: {
         page,
@@ -2634,6 +2671,29 @@ export const getCancelledInvoices = async (req: AuthRequest, res: Response) => {
         { ncf: { contains: req.query.search as string, mode: 'insensitive' } },
         { client: { name: { contains: req.query.search as string, mode: 'insensitive' } } },
       ];
+    }
+
+    // Filter by cancellation date
+    if (req.query.startDate || req.query.endDate) {
+      where.cancelledAt = {};
+      if (req.query.startDate) {
+        where.cancelledAt.gte = new Date(req.query.startDate as string);
+      }
+      if (req.query.endDate) {
+        const endDate = new Date(req.query.endDate as string);
+        endDate.setHours(23, 59, 59, 999);
+        where.cancelledAt.lte = endDate;
+      }
+    }
+
+    // Filter by user who cancelled
+    if (req.query.cancelledBy) {
+      where.cancelledBy = req.query.cancelledBy;
+    }
+
+    // Filter by cancellation reason
+    if (req.query.reason) {
+      where.cancellationReason = { contains: req.query.reason as string, mode: 'insensitive' };
     }
 
     const [invoices, total] = await Promise.all([

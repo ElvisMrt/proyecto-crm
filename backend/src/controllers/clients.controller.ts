@@ -9,13 +9,13 @@ const prisma = new PrismaClient();
 const createClientSchema = z.object({
   name: z.string().min(1),
   identification: z.string().min(1),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().optional().or(z.literal('')),
-  address: z.string().optional().or(z.literal('')),
+  email: z.union([z.string().email(), z.literal(''), z.undefined()]).optional(),
+  phone: z.union([z.string(), z.literal(''), z.undefined()]).optional(),
+  address: z.union([z.string(), z.literal(''), z.undefined()]).optional(),
   creditLimit: z.number().nonnegative().optional(),
   creditDays: z.number().int().positive().default(30),
   clientType: z.enum(['CASH', 'CREDIT']).default('CASH'),
-  observations: z.string().optional().or(z.literal('')),
+  observations: z.union([z.string(), z.literal(''), z.undefined()]).optional(),
 });
 
 export const getClients = async (req: AuthRequest, res: Response) => {
@@ -49,6 +49,24 @@ export const getClients = async (req: AuthRequest, res: Response) => {
         { email: { contains: req.query.search as string, mode: 'insensitive' } },
         { phone: { contains: req.query.search as string, mode: 'insensitive' } },
       ];
+    }
+
+    // Filtros avanzados
+    if (req.query.minCreditLimit) {
+      where.creditLimit = { ...where.creditLimit, gte: parseFloat(req.query.minCreditLimit as string) };
+    }
+    if (req.query.maxCreditLimit) {
+      where.creditLimit = { ...where.creditLimit, lte: parseFloat(req.query.maxCreditLimit as string) };
+    }
+    if (req.query.hasOverdue === 'true') {
+      // Clientes con facturas vencidas
+      where.invoices = {
+        some: {
+          status: { not: 'PAID' },
+          dueDate: { lt: new Date() },
+          balance: { gt: 0 },
+        },
+      };
     }
 
     if (req.query.startDate || req.query.endDate) {
@@ -201,7 +219,7 @@ export const createClient = async (req: AuthRequest, res: Response) => {
     const normalizedIdentification = normalizeIdentification(data.identification);
 
     // Check for duplicate identification
-    const existing = await prisma.client.findUnique({
+    const existing = await prisma.client.findFirst({
       where: { identification: normalizedIdentification },
     });
 
@@ -267,10 +285,21 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const data = createClientSchema.partial().parse(req.body);
 
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email || null;
+    if (data.phone !== undefined) updateData.phone = data.phone || null;
+    if (data.address !== undefined) updateData.address = data.address || null;
+    if (data.creditLimit !== undefined) updateData.creditLimit = data.creditLimit;
+    if (data.creditDays !== undefined) updateData.creditDays = data.creditDays;
+
     // Check for duplicate identification if identification is being updated
     if (data.identification) {
-      const existing = await prisma.client.findUnique({
-        where: { identification: data.identification },
+      // Normalizar identificación
+      const normalizedIdentification = normalizeIdentification(data.identification);
+      
+      const existing = await prisma.client.findFirst({
+        where: { identification: normalizedIdentification },
       });
 
       if (existing && existing.id !== id) {
@@ -281,16 +310,10 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
           },
         });
       }
+      
+      // Actualizar con la identificación normalizada
+      updateData.identification = normalizedIdentification;
     }
-
-    const updateData: any = {};
-    if (data.name) updateData.name = data.name;
-    if (data.identification) updateData.identification = data.identification;
-    if (data.email !== undefined) updateData.email = data.email || null;
-    if (data.phone !== undefined) updateData.phone = data.phone || null;
-    if (data.address !== undefined) updateData.address = data.address || null;
-    if (data.creditLimit !== undefined) updateData.creditLimit = data.creditLimit;
-    if (data.creditDays !== undefined) updateData.creditDays = data.creditDays;
 
     const client = await prisma.client.update({
       where: { id },
@@ -360,6 +383,241 @@ export const toggleClientStatus = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error updating client status',
+      },
+    });
+  }
+};
+
+export const getClientInvoices = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { clientId: id },
+        skip,
+        take: limit,
+        orderBy: { issueDate: 'desc' },
+        include: {
+          branch: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.invoice.count({ where: { clientId: id } }),
+    ]);
+
+    res.json({
+      data: invoices.map((invoice) => ({
+        ...invoice,
+        subtotal: Number(invoice.subtotal),
+        tax: Number(invoice.tax),
+        discount: Number(invoice.discount),
+        total: Number(invoice.total),
+        balance: Number(invoice.balance),
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Get client invoices error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching client invoices',
+      },
+    });
+  }
+};
+
+export const getClientQuotes = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const [quotes, total] = await Promise.all([
+      prisma.quote.findMany({
+        where: { clientId: id },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.quote.count({ where: { clientId: id } }),
+    ]);
+
+    res.json({
+      data: quotes.map((quote) => ({
+        ...quote,
+        subtotal: Number(quote.subtotal),
+        tax: Number(quote.tax),
+        discount: Number(quote.discount),
+        total: Number(quote.total),
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Get client quotes error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching client quotes',
+      },
+    });
+  }
+};
+
+export const getClientPayments = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where: { clientId: id },
+        skip,
+        take: limit,
+        orderBy: { paymentDate: 'desc' },
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              number: true,
+              ncf: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.payment.count({ where: { clientId: id } }),
+    ]);
+
+    res.json({
+      data: payments.map((payment) => ({
+        ...payment,
+        amount: Number(payment.amount),
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Get client payments error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching client payments',
+      },
+    });
+  }
+};
+
+export const deleteClient = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if client has history (invoices, payments, quotes, tasks)
+    const client = await prisma.client.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            invoices: true,
+            payments: true,
+            quotes: true,
+            tasks: true,
+          },
+        },
+      },
+    });
+
+    if (!client) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Client not found',
+        },
+      });
+    }
+
+    const hasHistory = 
+      client._count.invoices > 0 ||
+      client._count.payments > 0 ||
+      client._count.quotes > 0 ||
+      client._count.tasks > 0;
+
+    if (hasHistory) {
+      return res.status(400).json({
+        error: {
+          code: 'CLIENT_HAS_HISTORY',
+          message: 'No se puede eliminar el cliente porque tiene historial (facturas, pagos, cotizaciones o tareas). Solo se puede desactivar.',
+        },
+      });
+    }
+
+    // Delete client
+    await prisma.client.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Client deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Client not found',
+        },
+      });
+    }
+
+    console.error('Delete client error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error deleting client',
       },
     });
   }

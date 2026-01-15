@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { cashApi } from '../../services/api';
-import axios from 'axios';
+import { cashApi, branchesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { HiUser, HiOfficeBuilding, HiCurrencyDollar, HiDocumentText } from 'react-icons/hi';
 
 interface OpenCashTabProps {
   onCashOpened: () => void;
@@ -10,6 +11,7 @@ interface OpenCashTabProps {
 
 const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [branches, setBranches] = useState<any[]>([]);
   const [form, setForm] = useState({
     branchId: '',
@@ -24,21 +26,44 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
 
   const fetchBranches = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/branches`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      setBranches(response.data?.data || response.data || []);
-      if (response.data?.data && response.data.data.length > 0) {
-        setForm({ ...form, branchId: response.data.data[0].id });
-      } else if (response.data && response.data.length > 0) {
-        setForm({ ...form, branchId: response.data[0].id });
+      // Intentar primero con /api/v1/branches (sin permisos especiales)
+      let branchesData: any[] = [];
+      
+      try {
+        const response = await branchesApi.getBranches();
+        branchesData = response?.data || response || [];
+      } catch (error: any) {
+        // Si falla por permisos, intentar con el endpoint directo
+        if (error.response?.status === 403 || error.response?.status === 401) {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+          const token = localStorage.getItem('token');
+          const directResponse = await fetch(`${API_BASE_URL}/branches`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          
+          if (directResponse.ok) {
+            const data = await directResponse.json();
+            branchesData = data?.data || data || [];
+          } else {
+            throw new Error('No se pudo obtener las sucursales');
+          }
+        } else {
+          throw error;
+        }
       }
-    } catch (error) {
+      
+      setBranches(branchesData);
+      
+      if (branchesData.length > 0) {
+        setForm((prev) => ({ ...prev, branchId: branchesData[0].id }));
+      } else {
+        showToast('No hay sucursales disponibles. Contacte al administrador para crear una.', 'warning');
+      }
+    } catch (error: any) {
       console.error('Error fetching branches:', error);
-      // Si no existe el endpoint, usar lista vacía
       setBranches([]);
+      const errorMessage = error.response?.data?.error?.message || error.message || 'Error al cargar sucursales';
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -89,16 +114,50 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <div className="text-center py-8">
-          <div className="text-6xl mb-4">🔓</div>
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
+            <HiOfficeBuilding className="w-10 h-10 text-green-600" />
+          </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Caja Ya Está Abierta</h2>
-          <p className="text-gray-600 mb-4">
-            La caja está actualmente abierta en la sucursal <strong>{currentCash.branch?.name}</strong>
-          </p>
-          <div className="bg-gray-50 rounded-lg p-4 inline-block">
-            <p className="text-sm text-gray-600">Balance Actual</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {formatCurrency(currentCash.currentBalance || 0)}
-            </p>
+          
+          {/* Información de la caja abierta */}
+          <div className="mt-6 space-y-4 max-w-md mx-auto">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid grid-cols-2 gap-4 text-left">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Sucursal</p>
+                  <p className="font-semibold text-gray-900 flex items-center">
+                    <HiOfficeBuilding className="w-4 h-4 mr-1" />
+                    {currentCash.branch?.name || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Balance Actual</p>
+                  <p className="font-bold text-lg text-gray-900 flex items-center">
+                    <HiCurrencyDollar className="w-4 h-4 mr-1" />
+                    {formatCurrency(currentCash.currentBalance || 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Abierta por</p>
+                  <p className="font-semibold text-gray-900 flex items-center">
+                    <HiUser className="w-4 h-4 mr-1" />
+                    {currentCash.openedBy?.name || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Fecha de Apertura</p>
+                  <p className="font-semibold text-gray-900">
+                    {new Date(currentCash.openedAt).toLocaleDateString('es-DO', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -109,32 +168,72 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Formulario */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Abrir Caja</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-6">Abrir Caja</h2>
+        
+        {/* Información del Usuario Actual */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <HiUser className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-blue-600 font-medium">Usuario Actual</p>
+              <p className="text-sm font-semibold text-gray-900">{user?.name || 'N/A'}</p>
+              <p className="text-xs text-gray-500">{user?.email || ''}</p>
+            </div>
+          </div>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Sucursal */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <HiOfficeBuilding className="w-4 h-4 mr-1" />
               Sucursal *
             </label>
             <select
               value={form.branchId}
               onChange={(e) => setForm({ ...form, branchId: e.target.value })}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              disabled={branches.length === 0}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+                branches.length === 0 ? 'bg-gray-100 cursor-not-allowed' : ''
+              }`}
             >
-              <option value="">Seleccione una sucursal</option>
+              <option value="">
+                {branches.length === 0 
+                  ? 'No hay sucursales disponibles' 
+                  : 'Seleccione una sucursal'}
+              </option>
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
                 </option>
               ))}
             </select>
+            {branches.length === 0 && (
+              <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-xs text-yellow-800 font-medium">
+                  ⚠️ No hay sucursales disponibles
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  Para abrir caja, primero debe crear al menos una sucursal en Configuración.
+                </p>
+              </div>
+            )}
+            {branches.length > 0 && form.branchId && (
+              <p className="mt-1 text-xs text-green-600">
+                ✓ Sucursal seleccionada: {branches.find(b => b.id === form.branchId)?.name}
+              </p>
+            )}
           </div>
 
           {/* Monto Inicial */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <HiCurrencyDollar className="w-4 h-4 mr-1" />
               Monto Inicial (RD$) *
             </label>
             <input
@@ -144,17 +243,23 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
               value={form.initialAmount}
               onChange={(e) => setForm({ ...form, initialAmount: parseFloat(e.target.value) || 0 })}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
               placeholder="0.00"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Efectivo con el que inicia la jornada
+              Efectivo físico con el que inicia la jornada
             </p>
+            {form.initialAmount > 0 && (
+              <p className="mt-1 text-sm font-semibold text-green-600">
+                {formatCurrency(form.initialAmount)}
+              </p>
+            )}
           </div>
 
           {/* Observaciones */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <HiDocumentText className="w-4 h-4 mr-1" />
               Observaciones
             </label>
             <textarea
@@ -177,27 +282,76 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
         </form>
       </div>
 
-      {/* Información */}
-      <div className="bg-blue-50 rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">ℹ️ Información</h3>
-        <ul className="space-y-3 text-sm text-gray-700">
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>Solo puede haber una caja abierta por sucursal</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>No se pueden registrar ventas sin caja abierta</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>La apertura queda registrada y auditada</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>El monto inicial debe ser el efectivo físico disponible</span>
-          </li>
-        </ul>
+      {/* Información y Flujo */}
+      <div className="space-y-6">
+        {/* Información */}
+        <div className="bg-blue-50 rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <HiDocumentText className="w-5 h-5 mr-2" />
+            Información Importante
+          </h3>
+          <ul className="space-y-3 text-sm text-gray-700">
+            <li className="flex items-start">
+              <span className="mr-2 text-green-600 font-bold">✓</span>
+              <span>Solo puede haber una caja abierta por sucursal</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2 text-green-600 font-bold">✓</span>
+              <span>No se pueden registrar ventas sin caja abierta</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2 text-green-600 font-bold">✓</span>
+              <span>La apertura queda registrada y auditada con tu usuario</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2 text-green-600 font-bold">✓</span>
+              <span>El monto inicial debe ser el efectivo físico disponible</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Flujo de Trabajo */}
+        <div className="bg-gray-50 rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Flujo de Trabajo</h3>
+          <div className="space-y-3">
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-sm">1</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Seleccionar Sucursal</p>
+                <p className="text-xs text-gray-600">Elige la sucursal donde trabajarás</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-sm">2</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Ingresar Monto Inicial</p>
+                <p className="text-xs text-gray-600">Cuenta el efectivo físico disponible</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-sm">3</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Abrir Caja</p>
+                <p className="text-xs text-gray-600">Confirma la apertura para comenzar a operar</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 font-bold text-sm">✓</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Operar</p>
+                <p className="text-xs text-gray-600">Realiza ventas y movimientos normalmente</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

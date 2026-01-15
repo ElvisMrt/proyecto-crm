@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { clientsApi } from '../../services/api';
+import { clientsApi, crmApi } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../contexts/ToastContext';
+import { HiDocumentText, HiReceiptTax, HiCurrencyDollar, HiPlusCircle } from 'react-icons/hi';
 
 interface ClientCardTabProps {
   clientId: string;
@@ -10,11 +12,33 @@ interface ClientCardTabProps {
 const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
   const [client, setClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'invoices' | 'quotes' | 'payments'>('invoices');
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [invoicesPagination, setInvoicesPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [quotesPagination, setQuotesPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [paymentsPagination, setPaymentsPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH', dueDate: '' });
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchClient();
   }, [clientId]);
+
+  useEffect(() => {
+    if (clientId) {
+      if (activeTab === 'invoices') {
+        fetchInvoices();
+      } else if (activeTab === 'quotes') {
+        fetchQuotes();
+      } else if (activeTab === 'payments') {
+        fetchPayments();
+      }
+    }
+  }, [clientId, activeTab, invoicesPagination.page, quotesPagination.page, paymentsPagination.page]);
 
   const fetchClient = async () => {
     try {
@@ -25,6 +49,67 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
       console.error('Error fetching client:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInvoices = async () => {
+    try {
+      const data = await clientsApi.getClientInvoices(clientId, {
+        page: invoicesPagination.page,
+        limit: invoicesPagination.limit,
+      });
+      setInvoices(data.data || []);
+      setInvoicesPagination(data.pagination || invoicesPagination);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+    }
+  };
+
+  const fetchQuotes = async () => {
+    try {
+      const data = await clientsApi.getClientQuotes(clientId, {
+        page: quotesPagination.page,
+        limit: quotesPagination.limit,
+      });
+      setQuotes(data.data || []);
+      setQuotesPagination(data.pagination || quotesPagination);
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+    }
+  };
+
+  const fetchPayments = async () => {
+    try {
+      const data = await clientsApi.getClientPayments(clientId, {
+        page: paymentsPagination.page,
+        limit: paymentsPagination.limit,
+      });
+      setPayments(data.data || []);
+      setPaymentsPagination(data.pagination || paymentsPagination);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    }
+  };
+
+  const handleCreateTask = async () => {
+    if (!taskForm.title.trim()) {
+      showToast('El título de la tarea es obligatorio', 'error');
+      return;
+    }
+
+    try {
+      await crmApi.createTask({
+        title: taskForm.title,
+        description: taskForm.description || undefined,
+        priority: taskForm.priority,
+        dueDate: taskForm.dueDate || undefined,
+        clientId: clientId,
+      });
+      showToast('Tarea creada exitosamente', 'success');
+      setShowTaskModal(false);
+      setTaskForm({ title: '', description: '', priority: 'MEDIUM', dueDate: '' });
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Error al crear la tarea', 'error');
     }
   };
 
@@ -159,7 +244,7 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
       {/* Acciones Rápidas */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <button
             onClick={onEdit}
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md"
@@ -177,6 +262,13 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
             className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-md"
           >
             🛒 Nueva Venta
+          </button>
+          <button
+            onClick={() => setShowTaskModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-md inline-flex items-center justify-center"
+          >
+            <HiPlusCircle className="w-5 h-5 mr-2" />
+            Crear Tarea CRM
           </button>
         </div>
       </div>
@@ -206,6 +298,94 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Crear Tarea */}
+      {showTaskModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="task-modal-title"
+          aria-describedby="task-modal-description"
+        >
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 id="task-modal-title" className="text-lg font-semibold text-gray-900 mb-4">Crear Tarea CRM</h3>
+            <p id="task-modal-description" className="sr-only">
+              Formulario para crear una nueva tarea CRM relacionada con este cliente.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Título *
+                </label>
+                <input
+                  type="text"
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Ej: Seguimiento de pago pendiente"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  value={taskForm.description}
+                  onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Detalles de la tarea..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Prioridad
+                  </label>
+                  <select
+                    value={taskForm.priority}
+                    onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value as 'LOW' | 'MEDIUM' | 'HIGH' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="LOW">Baja</option>
+                    <option value="MEDIUM">Media</option>
+                    <option value="HIGH">Alta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Fecha Límite
+                  </label>
+                  <input
+                    type="date"
+                    value={taskForm.dueDate}
+                    onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <button
+                  onClick={() => {
+                    setShowTaskModal(false);
+                    setTaskForm({ title: '', description: '', priority: 'MEDIUM', dueDate: '' });
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateTask}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+                >
+                  Crear Tarea
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

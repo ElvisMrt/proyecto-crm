@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { HiDotsVertical, HiPrinter, HiDocumentDownload, HiChat, HiEye } from 'react-icons/hi';
+import { HiDotsVertical, HiPrinter, HiDocumentDownload, HiEye } from 'react-icons/hi';
+// HiChat disabled - WhatsApp module removed
 import { printCreditNote, downloadCreditNotePDF } from '../../utils/creditNotePrint';
-import { sendCreditNoteWhatsApp } from '../../utils/whatsappSender';
+// WhatsApp module disabled
+// import { sendCreditNoteWhatsApp } from '../../utils/whatsappSender';
 
 interface CreditNote {
   id: string;
@@ -93,20 +95,21 @@ const CreditNotesTab = () => {
     }
   };
 
-  const handleSendWhatsApp = async (creditNote: CreditNote) => {
-    try {
-      const creditNoteData = await salesApi.getCreditNote(creditNote.id);
-      const result = await sendCreditNoteWhatsApp(creditNoteData);
-      if (result.success) {
-        showToast('Mensaje WhatsApp enviado exitosamente', 'success');
-      } else {
-        showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
-      }
-    } catch (error: any) {
-      console.error('Error fetching credit note for WhatsApp:', error);
-      showToast(error.response?.data?.error?.message || 'Error al cargar la nota de crédito', 'error');
-    }
-  };
+  // WhatsApp function disabled
+  // const handleSendWhatsApp = async (creditNote: CreditNote) => {
+  //   try {
+  //     const creditNoteData = await salesApi.getCreditNote(creditNote.id);
+  //     const result = await sendCreditNoteWhatsApp(creditNoteData);
+  //     if (result.success) {
+  //       showToast('Mensaje WhatsApp enviado exitosamente', 'success');
+  //     } else {
+  //       showToast(result.error || 'Error al enviar mensaje WhatsApp', 'error');
+  //     }
+  //   } catch (error: any) {
+  //     console.error('Error fetching credit note for WhatsApp:', error);
+  //     showToast(error.response?.data?.error?.message || 'Error al cargar la nota de crédito', 'error');
+  //   }
+  // };
 
   return (
     <div className="space-y-4">
@@ -264,7 +267,8 @@ const CreditNotesTab = () => {
                                     <HiDocumentDownload className="w-4 h-4 mr-2" />
                                     Descargar PDF
                                   </button>
-                                  <button
+                                  {/* WhatsApp button disabled */}
+                                  {/* <button
                                     onClick={() => {
                                       handleSendWhatsApp(creditNote);
                                       setActionMenuOpen(null);
@@ -273,7 +277,7 @@ const CreditNotesTab = () => {
                                   >
                                     <HiChat className="w-4 h-4 mr-2" />
                                     Enviar WhatsApp
-                                  </button>
+                                  </button> */}
                                 </div>
                               </div>
                             </>

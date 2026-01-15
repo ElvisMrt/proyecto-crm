@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { HiDotsVertical, HiEye, HiPencil, HiTrash, HiCheckCircle, HiXCircle, HiSearch, HiFilter, HiCalendar, HiDocumentDownload } from 'react-icons/hi';
+import { exportClientsToExcel, exportClientsToPDF } from '../../utils/exportUtils';
 
 interface ClientsListTabProps {
   onClientSelect: (clientId: string) => void;
@@ -8,7 +10,7 @@ interface ClientsListTabProps {
 }
 
 const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -17,15 +19,22 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
     clientType: '',
     startDate: '',
     endDate: '',
+    minCreditLimit: '',
+    maxCreditLimit: '',
+    hasOverdue: '',
     page: 1,
     limit: 20,
   });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
     total: 0,
     totalPages: 0,
   });
+  const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
 
   useEffect(() => {
     fetchClients();
@@ -43,6 +52,9 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
       if (filters.clientType) params.clientType = filters.clientType;
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.minCreditLimit) params.minCreditLimit = filters.minCreditLimit;
+      if (filters.maxCreditLimit) params.maxCreditLimit = filters.maxCreditLimit;
+      if (filters.hasOverdue) params.hasOverdue = filters.hasOverdue;
 
       const response = await clientsApi.getClients(params);
       setClients(response.data || []);
@@ -55,10 +67,11 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
   };
 
   const handleToggleStatus = async (client: any) => {
-    if (!window.confirm(`¿Está seguro de ${client.isActive ? 'desactivar' : 'activar'} este cliente?`)) {
-      return;
-    }
-
+    setActionMenuOpen(null);
+    showConfirm(
+      client.isActive ? 'Desactivar Cliente' : 'Activar Cliente',
+      `¿Está seguro de ${client.isActive ? 'desactivar' : 'activar'} el cliente "${client.name}"?`,
+      async () => {
     try {
       await clientsApi.toggleClientStatus(client.id, !client.isActive);
       showToast(`Cliente ${client.isActive ? 'desactivado' : 'activado'} exitosamente`, 'success');
@@ -66,6 +79,27 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Error al cambiar el estado', 'error');
     }
+      },
+      { type: client.isActive ? 'warning' : 'info', confirmText: client.isActive ? 'Desactivar' : 'Activar', cancelText: 'Cancelar' }
+    );
+  };
+
+  const handleDelete = async (client: any) => {
+    setActionMenuOpen(null);
+    showConfirm(
+      'Eliminar Cliente',
+      `¿Está seguro de eliminar el cliente "${client.name}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          await clientsApi.deleteClient(client.id);
+          showToast('Cliente eliminado exitosamente', 'success');
+          fetchClients();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al eliminar el cliente', 'error');
+        }
+      },
+      { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+    );
   };
 
   const formatCurrency = (amount: number) => {
@@ -80,26 +114,134 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
     return client.creditLimit && client.creditLimit > 0 ? 'Crédito' : 'Contado';
   };
 
+  // Búsqueda con sugerencias
+  const handleSearchChange = async (value: string) => {
+    setFilters({ ...filters, search: value, page: 1 });
+    
+    if (value.length >= 2) {
+      try {
+        const response = await clientsApi.getClients({ search: value, limit: 5 });
+        setSearchSuggestions(response.data || []);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
+      }
+    } else {
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (client: any) => {
+    setFilters({ ...filters, search: client.name, page: 1 });
+    setShowSuggestions(false);
+    fetchClients();
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      isActive: 'true',
+      clientType: '',
+      startDate: '',
+      endDate: '',
+      minCreditLimit: '',
+      maxCreditLimit: '',
+      hasOverdue: '',
+      page: 1,
+      limit: 20,
+    });
+    setShowAdvancedFilters(false);
+    fetchClients();
+  };
+
+  const handleExportExcel = () => {
+    try {
+      exportClientsToExcel(clients);
+      showToast('Exportando a Excel...', 'info');
+    } catch (error) {
+      showToast('Error al exportar a Excel', 'error');
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      exportClientsToPDF(clients);
+      showToast('Exportando a PDF...', 'info');
+    } catch (error) {
+      showToast('Error al exportar a PDF', 'error');
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Header con botones de exportación */}
+      {clients.length > 0 && (
+        <div className="flex justify-end space-x-2">
+          <button
+            onClick={handleExportExcel}
+            className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center"
+          >
+            <HiDocumentDownload className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </button>
+          <button
+            onClick={handleExportPDF}
+            className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center"
+          >
+            <HiDocumentDownload className="w-4 h-4 mr-2" />
+            Exportar PDF
+          </button>
+        </div>
+      )}
+
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1 inline-flex items-center">
+              <HiSearch className="w-4 h-4 mr-1 text-gray-400" />
+              Buscar
+            </label>
             <input
               type="text"
               placeholder="Nombre, documento, email..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => {
+                if (searchSuggestions.length > 0) setShowSuggestions(true);
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowSuggestions(false), 200);
+              }}
               onKeyPress={(e) => {
-                if (e.key === 'Enter') fetchClients();
+                if (e.key === 'Enter') {
+                  setShowSuggestions(false);
+                  fetchClients();
+                }
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                {searchSuggestions.map((client) => (
+                  <div
+                    key={client.id}
+                    onClick={() => handleSelectSuggestion(client)}
+                    className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div className="font-medium text-sm">{client.name}</div>
+                    <div className="text-xs text-gray-500">{client.identification}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 inline-flex items-center">
+              <HiFilter className="w-4 h-4 mr-1 text-gray-400" />
+              Estado
+            </label>
             <select
               value={filters.isActive}
               onChange={(e) => setFilters({ ...filters, isActive: e.target.value, page: 1 })}
@@ -111,7 +253,10 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 inline-flex items-center">
+              <HiFilter className="w-4 h-4 mr-1 text-gray-400" />
+              Tipo
+            </label>
             <select
               value={filters.clientType}
               onChange={(e) => setFilters({ ...filters, clientType: e.target.value, page: 1 })}
@@ -123,7 +268,10 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 inline-flex items-center">
+              <HiCalendar className="w-4 h-4 mr-1 text-gray-400" />
+              Desde
+            </label>
             <input
               type="date"
               value={filters.startDate}
@@ -131,15 +279,77 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end space-x-2">
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center justify-center"
+            >
+              <HiFilter className="w-4 h-4 mr-2" />
+              {showAdvancedFilters ? 'Ocultar' : 'Avanzados'}
+            </button>
             <button
               onClick={fetchClients}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center justify-center"
             >
+              <HiSearch className="w-4 h-4 mr-2" />
               Buscar
             </button>
           </div>
         </div>
+
+        {/* Filtros Avanzados */}
+        {showAdvancedFilters && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Límite de Crédito Mínimo
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={filters.minCreditLimit}
+                  onChange={(e) => setFilters({ ...filters, minCreditLimit: e.target.value, page: 1 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Límite de Crédito Máximo
+                </label>
+                <input
+                  type="number"
+                  placeholder="Sin límite"
+                  value={filters.maxCreditLimit}
+                  onChange={(e) => setFilters({ ...filters, maxCreditLimit: e.target.value, page: 1 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Morosidad
+                </label>
+                <select
+                  value={filters.hasOverdue}
+                  onChange={(e) => setFilters({ ...filters, hasOverdue: e.target.value, page: 1 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="true">Con facturas vencidas</option>
+                  <option value="false">Sin facturas vencidas</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={clearFilters}
+                  className="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-md"
+                >
+                  Limpiar Filtros
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla */}
@@ -190,28 +400,73 @@ const ClientsListTab = ({ onClientSelect, onClientEdit }: ClientsListTabProps) =
                           {client.isActive ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <div className="flex justify-end space-x-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="relative inline-block">
                           <button
-                            onClick={() => onClientSelect(client.id)}
-                            className="text-blue-600 hover:text-blue-900"
+                            onClick={() => setActionMenuOpen(actionMenuOpen === client.id ? null : client.id)}
+                            className="p-1 text-gray-400 hover:text-gray-600 focus:outline-none"
                           >
+                            <HiDotsVertical className="w-5 h-5" />
+                          </button>
+                          {actionMenuOpen === client.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setActionMenuOpen(null)}
+                              ></div>
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200">
+                                <div className="py-1">
+                                  <button
+                                    onClick={() => {
+                                      onClientSelect(client.id);
+                                      setActionMenuOpen(null);
+                                    }}
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <HiEye className="w-4 h-4 mr-2" />
                             Ver
                           </button>
                           <button
-                            onClick={() => onClientEdit(client)}
-                            className="text-green-600 hover:text-green-900"
+                                    onClick={() => {
+                                      onClientEdit(client);
+                                      setActionMenuOpen(null);
+                                    }}
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                           >
+                                    <HiPencil className="w-4 h-4 mr-2" />
                             Editar
                           </button>
                           <button
                             onClick={() => handleToggleStatus(client)}
-                            className={`${
-                              client.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'
+                                    className={`block w-full text-left px-4 py-2 text-sm flex items-center ${
+                                      client.isActive 
+                                        ? 'text-orange-700 hover:bg-orange-50' 
+                                        : 'text-green-700 hover:bg-green-50'
                             }`}
                           >
-                            {client.isActive ? 'Desactivar' : 'Activar'}
+                                    {client.isActive ? (
+                                      <>
+                                        <HiXCircle className="w-4 h-4 mr-2" />
+                                        Desactivar
+                                      </>
+                                    ) : (
+                                      <>
+                                        <HiCheckCircle className="w-4 h-4 mr-2" />
+                                        Activar
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(client)}
+                                    className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center"
+                                  >
+                                    <HiTrash className="w-4 h-4 mr-2" />
+                                    Eliminar
                           </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -5,7 +5,7 @@ import { HiDotsVertical, HiPencil, HiTrash, HiSearch, HiDocumentDownload, HiXCir
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 const BranchesTab = () => {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const [branches, setBranches] = useState<any[]>([]);
   const [filteredBranches, setFilteredBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,19 +89,21 @@ const BranchesTab = () => {
   };
 
   const handleDelete = async (branch: any) => {
-    if (!window.confirm(`¿Está seguro de eliminar la sucursal "${branch.name}"?`)) {
-      setActionMenuOpen(null);
-      return;
-    }
-    try {
-      await settingsApi.deleteBranch(branch.id);
-      showToast('Sucursal eliminada exitosamente', 'success');
-      fetchBranches();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Error al eliminar la sucursal', 'error');
-    } finally {
-      setActionMenuOpen(null);
-    }
+    setActionMenuOpen(null);
+    showConfirm(
+      'Eliminar Sucursal',
+      `¿Está seguro de eliminar la sucursal "${branch.name}"? Esta acción puede desactivar la sucursal si tiene datos asociados.`,
+      async () => {
+        try {
+          await settingsApi.deleteBranch(branch.id);
+          showToast('Sucursal eliminada exitosamente', 'success');
+          fetchBranches();
+        } catch (error: any) {
+          showToast(error.response?.data?.error?.message || 'Error al eliminar la sucursal', 'error');
+        }
+      },
+      { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+    );
   };
 
   const handleNew = () => {
@@ -241,12 +243,21 @@ const BranchesTab = () => {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="branch-modal-title"
+          aria-describedby="branch-modal-description"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <h3 id="branch-modal-title" className="text-lg font-semibold text-gray-900 mb-4">
                 {editingBranch ? 'Editar Sucursal' : 'Nueva Sucursal'}
               </h3>
+              <p id="branch-modal-description" className="sr-only">
+                Formulario para {editingBranch ? 'editar' : 'crear'} una sucursal.
+              </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>

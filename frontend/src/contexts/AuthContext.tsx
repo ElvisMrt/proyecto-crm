@@ -27,8 +27,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const storedUser = localStorage.getItem('user');
 
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        // Validar que el token no esté expirado (básico - solo verifica formato)
+        const tokenParts = storedToken.split('.');
+        if (tokenParts.length === 3) {
+          // Decodificar payload del JWT (sin verificar firma)
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const expirationTime = payload.exp * 1000; // Convertir a milisegundos
+          
+          // Si el token está expirado, limpiar
+          if (expirationTime < Date.now()) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            return;
+          }
+        }
+
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        // Si hay error al parsear, limpiar datos corruptos
+        console.error('Error parsing stored auth data:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
   }, []);
 

@@ -70,15 +70,15 @@ const Sales = () => {
                 }
               `}
             >
-              <div className="flex items-center">
+              <span className="inline-flex items-center">
                 <tab.icon className="w-4 h-4 mr-2" />
                 {tab.label}
                 {tab.badge && tab.badge > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full min-w-[20px] text-center">
                     {tab.badge}
                   </span>
                 )}
-              </div>
+              </span>
             </button>
           ))}
         </nav>

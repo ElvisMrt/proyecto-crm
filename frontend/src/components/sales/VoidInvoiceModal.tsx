@@ -45,12 +45,19 @@ const VoidInvoiceModal = ({ isOpen, onClose, onConfirm, invoiceNumber }: VoidInv
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div 
+      className="fixed inset-0 z-50 overflow-y-auto" 
+      role="dialog" 
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      aria-describedby="modal-description"
+    >
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div
           className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           onClick={handleClose}
+          aria-hidden="true"
         ></div>
 
         {/* Center modal */}
@@ -69,6 +76,9 @@ const VoidInvoiceModal = ({ isOpen, onClose, onConfirm, invoiceNumber }: VoidInv
                   <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
                     Anular Factura
                   </h3>
+                  <p id="modal-description" className="sr-only">
+                    Formulario para anular una factura. Ingrese el motivo de anulación.
+                  </p>
                   {invoiceNumber && (
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
