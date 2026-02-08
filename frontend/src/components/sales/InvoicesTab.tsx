@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesApi, branchesApi, clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import VoidInvoiceModal from './VoidInvoiceModal';
 import { HiDotsVertical, HiPrinter, HiDocumentDownload, HiReceiptTax } from 'react-icons/hi';
 // HiChat disabled - WhatsApp module removed
@@ -31,6 +32,7 @@ interface Invoice {
 
 const InvoicesTab = () => {
   const { showToast, showConfirm } = useToast();
+  const { user } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -516,7 +518,7 @@ const InvoicesTab = () => {
                                         {invoice.status === 'DRAFT' ? 'Continuar Edición' : 'Editar'}
                                       </button>
                                     )}
-                                    {invoice.status === 'DRAFT' && (
+                                    {invoice.status === 'DRAFT' && user?.role === 'ADMINISTRATOR' && (
                                       <button
                                         onClick={() => {
                                           setActionMenuOpen(null);

@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { inventoryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { HiDotsVertical, HiPencil, HiTrash } from 'react-icons/hi';
 
 const ProductsTab = () => {
   const { showToast, showConfirm } = useToast();
+  const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,6 +253,7 @@ const ProductsTab = () => {
               controlsStock: true,
               minStock: 0,
               isActive: true,
+              imageUrl: '',
             });
           }}
           className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
@@ -629,21 +632,23 @@ const ProductsTab = () => {
                             });
                             setImagePreview(product.imageUrl || null);
                             setShowForm(true);
-                                      setActionMenuOpen(null);
+                            setActionMenuOpen(null);
                           }}
-                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                         >
-                                    <HiPencil className="w-4 h-4 mr-2" />
+                          <HiPencil className="w-4 h-4 mr-2" />
                           Editar
                         </button>
-                                  <button
-                                    onClick={() => handleDelete(product)}
-                                    className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center"
-                                  >
-                                    <HiTrash className="w-4 h-4 mr-2" />
-                                    Eliminar
-                                  </button>
-                                </div>
+                        {user?.role === 'ADMINISTRATOR' && (
+                          <button
+                            onClick={() => handleDelete(product)}
+                            className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center"
+                          >
+                            <HiTrash className="w-4 h-4 mr-2" />
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
                               </div>
                             </>
                           )}

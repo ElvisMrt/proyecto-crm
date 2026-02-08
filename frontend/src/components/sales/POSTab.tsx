@@ -3,7 +3,7 @@ import { salesApi, inventoryApi, clientsApi, cashApi } from '../../services/api'
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HiSearch } from 'react-icons/hi';
-import { printInvoice, printReceipt, printThermalTicket } from '../../utils/invoicePrint';
+import { printInvoice, printThermalTicket } from '../../utils/invoicePrint';
 // WhatsApp module disabled
 // import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
 
@@ -363,9 +363,13 @@ const POSTab = () => {
     checkCashStatus();
   };
 
-  const handlePrint = () => {
+  const handlePrint = (type: 'invoice' | 'thermal') => {
     if (saleResult?.invoice) {
-      printInvoice(saleResult.invoice);
+      if (type === 'thermal') {
+        printThermalTicket(saleResult.invoice);
+      } else {
+        printInvoice(saleResult.invoice);
+      }
     }
   };
 

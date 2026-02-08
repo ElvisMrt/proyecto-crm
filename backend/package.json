@@ -11,6 +11,10 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx --require dotenv/config prisma/seed.ts",
+    "prisma:seed:pharmacy": "tsx --require dotenv/config prisma/seed-pharmacy.ts",
+    "prisma:seed:pharmacy-products": "tsx --require dotenv/config prisma/seed-pharmacy-products.ts",
+    "prisma:seed:pharmacy-data": "tsx --require dotenv/config prisma/seed-pharmacy-data.ts",
+    "prisma:seed:clean": "tsx --require dotenv/config prisma/seed-clean.ts",
     "lint": "eslint src --ext .ts",
     "test": "jest"
   },

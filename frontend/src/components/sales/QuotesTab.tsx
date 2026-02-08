@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesApi, clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { HiDotsVertical, HiPencil, HiDocumentDownload, HiPrinter } from 'react-icons/hi';
 // HiChat disabled - WhatsApp module removed
 import ConvertQuoteModal from './ConvertQuoteModal';
@@ -24,6 +25,7 @@ interface Quote {
 
 const QuotesTab = () => {
   const { showToast, showConfirm } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,28 +351,30 @@ const QuotesTab = () => {
                                           <HiPencil className="w-4 h-4 mr-2" />
                                           Editar
                                         </button>
-                                        <button
-                                          onClick={() => {
-                                            setActionMenuOpen(null);
-                                            showConfirm(
-                                              'Eliminar Cotización',
-                                              `¿Está seguro de eliminar la cotización ${quote.number}? Esta acción no se puede deshacer.`,
-                                              async () => {
-                                                try {
-                                                  await salesApi.deleteQuote(quote.id);
-                                                  showToast('Cotización eliminada exitosamente', 'success');
-                                                  fetchQuotes();
-                                                } catch (error: any) {
-                                                  showToast(error.response?.data?.error?.message || 'Error al eliminar la cotización', 'error');
-                                                }
-                                              },
-                                              { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
-                                            );
-                                          }}
-                                          className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                                        >
-                                          Eliminar
-                                        </button>
+                                        {user?.role === 'ADMINISTRATOR' && (
+                                          <button
+                                            onClick={() => {
+                                              setActionMenuOpen(null);
+                                              showConfirm(
+                                                'Eliminar Cotización',
+                                                `¿Está seguro de eliminar la cotización ${quote.number}? Esta acción no se puede deshacer.`,
+                                                async () => {
+                                                  try {
+                                                    await salesApi.deleteQuote(quote.id);
+                                                    showToast('Cotización eliminada exitosamente', 'success');
+                                                    fetchQuotes();
+                                                  } catch (error: any) {
+                                                    showToast(error.response?.data?.error?.message || 'Error al eliminar la cotización', 'error');
+                                                  }
+                                                },
+                                                { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+                                              );
+                                            }}
+                                            className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                          >
+                                            Eliminar
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => {
                                             handleConvertClick(quote);
