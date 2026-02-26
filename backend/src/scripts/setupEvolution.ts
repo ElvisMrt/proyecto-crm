@@ -49,11 +49,11 @@ async function setupEvolution() {
     });
 
     if (qrResponse.ok) {
-      const qrData = await qrResponse.json();
+      const qrData: any = await qrResponse.json();
       if (qrData.qrcode) {
         console.log('\n📱 ESCANEA ESTE CÓDIGO QR CON TU WHATSAPP:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('URL del QR:', qrData.qrcode.base64 ? 'Base64 generado' : qrData.qrcode.code);
+        console.log('URL del QR:', (qrData.qrcode as any).base64 ? 'Base64 generado' : (qrData.qrcode as any).code);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         console.log('💡 Puedes ver el QR en: http://localhost:8080/instance/connect/' + INSTANCE_NAME);
         console.log('💡 O usar el panel web en: http://localhost:8080\n');
@@ -72,7 +72,7 @@ async function setupEvolution() {
     });
 
     if (statusResponse.ok) {
-      const instances = await statusResponse.json();
+      const instances: any = await statusResponse.json();
       const instance = instances.find((inst: any) => inst.instance.instanceName === INSTANCE_NAME);
       if (instance) {
         console.log('✅ Estado:', instance.instance.status);

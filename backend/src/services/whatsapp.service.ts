@@ -250,13 +250,13 @@ class WhatsAppService {
         const data = await response.json();
         
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/43b96eb6-9b87-4fa0-8226-73f51dc2add4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.service.ts:141',message:'message sent successfully',data:{messageId:data.key?.id||data.messageId,fullResponse:data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/43b96eb6-9b87-4fa0-8226-73f51dc2add4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.service.ts:141',message:'message sent successfully',data:{messageId:(data as any).key?.id||(data as any).messageId,fullResponse:data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
         
         console.log('Mensaje enviado exitosamente:', data);
         return {
           success: true,
-          messageId: data.key?.id || data.messageId || `evol_${Date.now()}`,
+          messageId: (data as any).key?.id || (data as any).messageId || `evol_${Date.now()}`,
         };
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
@@ -326,13 +326,13 @@ class WhatsAppService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error ${response.status} al enviar mensaje`);
+        throw new Error((errorData as any).message || `Error ${response.status} al enviar mensaje`);
       }
 
       const data = await response.json();
       return {
         success: true,
-        messageId: data.sid,
+        messageId: (data as any).sid,
       };
     } catch (error: any) {
       console.error('Twilio error:', error);
