@@ -130,11 +130,11 @@ export async function getSupplierInvoices(req: TenantRequest, res: Response) {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    let invoices = [];
+    let invoices: any[] = [];
     let total = 0;
     
     try {
-      [invoices, total] = await Promise.all([
+      [invoices, total] = await Promise.all<any[]>([
         prisma.supplierInvoice.findMany({
           where,
           include: {

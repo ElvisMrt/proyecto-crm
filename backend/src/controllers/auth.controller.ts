@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { getTenantPrisma, TenantRequest } from '../middleware/tenant.middleware';
 import { z } from 'zod';
@@ -71,7 +71,7 @@ export const login = async (req: TenantRequest, res: Response) => {
         branchId: user.branchId,
       },
       jwtSecret as string,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') } as SignOptions
     );
 
     // Actualizar lastLogin en background (no bloquear respuesta)

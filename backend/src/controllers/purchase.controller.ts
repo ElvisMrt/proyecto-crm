@@ -19,11 +19,11 @@ export async function getPurchases(req: TenantRequest, res: Response) {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    let purchases = [];
+    let purchases: any[] = [];
     let total = 0;
 
     try {
-      [purchases, total] = await Promise.all([
+      [purchases, total] = await Promise.all<any[]>([
         prisma.purchase.findMany({
           where,
           include: {
