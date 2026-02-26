@@ -11,8 +11,13 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Instalar dependencias
-RUN npm ci --only=production
+# Limpiar cache e instalar dependencias
+RUN npm cache clean --force
+RUN npm install --no-fund --no-audit
+
+# Copiar Prisma schema y generar cliente
+COPY prisma/ ./prisma/
+RUN npx prisma generate
 
 # Copiar código fuente
 COPY src/ ./src/
@@ -38,6 +43,7 @@ RUN adduser -S nodejs -u 1001
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/prisma ./prisma
 
 # Crear directorios necesarios
 RUN mkdir -p /app/uploads /app/backups /app/logs
