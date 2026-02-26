@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { login, logout, me } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { tenantMiddleware } from '../middleware/tenant.middleware';
 
 const router = Router();
 
-router.post('/login', login);
-router.post('/logout', authenticate, logout);
-router.get('/me', authenticate, me);
+// Login con detección de tenant (por header o subdominio)
+router.post('/login', tenantMiddleware, login);
+
+router.post('/logout', tenantMiddleware, authenticate, logout);
+router.get('/me', tenantMiddleware, authenticate, me);
 
 export default router;
 

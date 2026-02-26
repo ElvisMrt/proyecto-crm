@@ -12,10 +12,9 @@ const PrivateRoute = ({ children }: PrivateRouteProps) => {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Dar tiempo para que el AuthContext cargue el token del localStorage
     const timer = setTimeout(() => {
       setIsChecking(false);
-    }, 100);
+    }, 50);
 
     return () => clearTimeout(timer);
   }, []);

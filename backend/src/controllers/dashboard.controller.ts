@@ -1,11 +1,12 @@
 import { Response } from 'express';
-import { PrismaClient, InvoiceStatus, CashStatus } from '@prisma/client';
+import { InvoiceStatus, CashStatus } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 
-const prisma = new PrismaClient();
 
 export const getSummary = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -93,6 +94,26 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // Cuentas por pagar (facturas de proveedores con saldo > 0)
+    const payables = await prisma.supplierInvoice.aggregate({
+      where: {
+        balance: { gt: 0 },
+        status: { in: ['PENDING', 'PARTIAL'] }
+      },
+      _sum: {
+        balance: true
+      }
+    });
+
+    // Facturas de proveedores vencidas
+    const overduePayables = await prisma.supplierInvoice.count({
+      where: {
+        balance: { gt: 0 },
+        dueDate: { lt: today },
+        status: { in: ['PENDING', 'PARTIAL'] }
+      }
+    });
+
     // Facturas vencidas (dueDate < hoy y saldo > 0)
     const overdueInvoices = await prisma.invoice.findMany({
       where: {
@@ -148,11 +169,14 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Stock bajo (qtyOnHand <= minStock)
+    // Stock bajo (qtyOnHand <= minStock) - Solo productos que controlan stock
     const lowStock = await prisma.stock.findMany({
       where: {
         quantity: {
           lte: prisma.stock.fields.minStock,
+        },
+        product: {
+          controlsStock: true,
         },
         ...(branchId ? { branchId } : {}),
       },
@@ -224,6 +248,10 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
         total: Number(receivables._sum.balance || 0),
         overdue: overdueCount,
       },
+      payables: {
+        total: Number(payables._sum.balance || 0),
+        overdue: overduePayables,
+      },
       cash: {
         currentBalance,
         status: currentCash?.status || CashStatus.CLOSED,
@@ -258,6 +286,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
 
 export const getSalesTrend = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const days = parseInt(req.query.days as string) || 7;
     const branchId = req.query.branchId as string | undefined;
     const startDate = new Date();
@@ -323,6 +352,7 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
 
 export const getRecentActivity = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const limit = parseInt(req.query.limit as string) || 10;
     const branchId = req.query.branchId as string | undefined;
     const branchFilter = branchId ? { branchId } : {};

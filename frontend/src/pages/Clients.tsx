@@ -43,33 +43,26 @@ const Clients = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
-        {activeTab === 'list' && (
-          <button
-            onClick={handleNewClient}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
-          >
-            + Nuevo Cliente
-          </button>
-        )}
-        {activeTab !== 'list' && (
-          <button
-            onClick={handleBackToList}
-            className="bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md"
-          >
-            ← Volver al Listado
-          </button>
-        )}
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestión de clientes y contactos</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Módulo activo</p>
+          <p className="text-sm font-medium text-gray-900">Clientes</p>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <nav className="flex space-x-8 px-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => {
                 if (tab.id === 'list') {
                   handleBackToList();
@@ -80,7 +73,7 @@ const Clients = () => {
                 }
               }}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors inline-flex items-center
+                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -88,40 +81,40 @@ const Clients = () => {
                 }
               `}
             >
-              <span className="inline-flex items-center">
-                <tab.icon className="w-5 h-5 mr-2" />
+              <span className="inline-flex items-center gap-2">
+                <tab.icon className="w-5 h-5" />
                 <span>{tab.label}</span>
               </span>
             </button>
           ))}
         </nav>
-      </div>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'list' && (
-          <ClientsListTab
-            onClientSelect={handleClientSelect}
-            onClientEdit={handleEditClient}
-          />
-        )}
-        {activeTab === 'form' && (
-          <ClientFormTab
-            client={editingClient}
-            onSave={() => {
-              handleBackToList();
-            }}
-            onCancel={handleBackToList}
-          />
-        )}
-        {activeTab === 'card' && selectedClientId && (
-          <ClientCardTab
-            clientId={selectedClientId}
-            onEdit={() => {
-              // Will be handled by fetching client data
-            }}
-          />
-        )}
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'list' && (
+            <ClientsListTab
+              onClientSelect={handleClientSelect}
+              onClientEdit={handleEditClient}
+            />
+          )}
+          {activeTab === 'form' && (
+            <ClientFormTab
+              client={editingClient}
+              onSave={() => {
+                handleBackToList();
+              }}
+              onCancel={handleBackToList}
+            />
+          )}
+          {activeTab === 'card' && selectedClientId && (
+            <ClientCardTab
+              clientId={selectedClientId}
+              onEdit={() => {
+                // Will be handled by fetching client data
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

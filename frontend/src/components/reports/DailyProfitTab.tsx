@@ -200,21 +200,21 @@ const DailyProfitTab = () => {
 
       {/* Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Ventas Totales</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.sales)}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Costos</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.costs)}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Gastos</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.expenses)}

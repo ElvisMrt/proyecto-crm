@@ -1,7 +1,11 @@
 import axios from 'axios';
+import { getTenantSubdomain } from './tenant.service';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
+// ============================================
+// API para CRM (usa token del tenant)
+// ============================================
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -9,33 +13,66 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const subdomain = getTenantSubdomain();
+    if (subdomain) {
+      config.headers['X-Tenant-Subdomain'] = subdomain;
+    }
+
     return config;
   },
+  (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
   (error) => {
+    // Solo manejar 401 sin redirigir automáticamente (causa loops)
+    // La redirección debe ser manejada por los componentes
     return Promise.reject(error);
   }
 );
 
-// Response interceptor to handle errors
-api.interceptors.response.use(
+// ============================================
+// API para SaaS Admin (usa saasToken)
+// ============================================
+const saasApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+saasApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('saasToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+saasApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Solo redirigir si no estamos ya en la página de login
     if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      localStorage.removeItem('saasToken');
+      localStorage.removeItem('saasUser');
       window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
+
+export { saasApi };
 
 export const authApi = {
   login: async (email: string, password: string) => {
@@ -197,6 +234,10 @@ export const cashApi = {
   closeCash: async (data: any) => {
     const { cashRegisterId, ...rest } = data;
     const response = await api.post(`/cash/close/${cashRegisterId}`, rest);
+    return response.data;
+  },
+  updateCash: async (id: string, data: any) => {
+    const response = await api.put(`/cash/${id}`, data);
     return response.data;
   },
   getHistory: async (params?: any) => {
@@ -537,3 +578,28 @@ export const settingsApi = {
     return response.data;
   },
 };
+
+export const appointmentApi = {
+  getAppointments: async (params?: any) => {
+    const response = await api.get('/appointments', { params });
+    return response.data;
+  },
+  getAppointment: async (id: string) => {
+    const response = await api.get(`/appointments/${id}`);
+    return response.data;
+  },
+  createAppointment: async (data: any) => {
+    const response = await api.post('/appointments', data);
+    return response.data;
+  },
+  updateAppointment: async (id: string, data: any) => {
+    const response = await api.put(`/appointments/${id}`, data);
+    return response.data;
+  },
+  deleteAppointment: async (id: string) => {
+    const response = await api.delete(`/appointments/${id}`);
+    return response.data;
+  },
+};
+
+export default api;

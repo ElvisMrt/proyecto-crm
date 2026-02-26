@@ -13,8 +13,8 @@ import {
   HiChartBar,
   HiCurrencyDollar,
   HiExclamationCircle,
-  HiQuestionMarkCircle,
 } from 'react-icons/hi';
+import { MinimalStatCard } from '../components/MinimalStatCard';
 
 type TabType = 'status' | 'payments' | 'overdue' | 'history' | 'summary';
 
@@ -31,6 +31,7 @@ const Receivables = () => {
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [navigationState, setNavigationState] = useState<NavigationState | null>(null);
+  const [topDebtors, setTopDebtors] = useState<any[]>([]);
 
   useEffect(() => {
     fetchBranches();
@@ -61,7 +62,7 @@ const Receivables = () => {
       // Si falla por permisos, intentar con el endpoint directo
       if (error.response?.status === 403 || error.response?.status === 401) {
         try {
-          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
           const token = localStorage.getItem('token');
           const directResponse = await fetch(`${API_BASE_URL}/branches`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -92,6 +93,11 @@ const Receivables = () => {
       }
       const data = await receivablesApi.getSummary(params);
       setSummary(data);
+      
+      // Extract top debtors from summary
+      if (data?.topDebtors) {
+        setTopDebtors(data.topDebtors);
+      }
     } catch (error) {
       console.error('Error fetching summary:', error);
     }
@@ -114,88 +120,159 @@ const Receivables = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Cuentas por Cobrar</h1>
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">Sucursal:</label>
-          <select
-            value={selectedBranchId}
-            onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Todas</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </select>
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Cuentas por Cobrar</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestión de cobros y deudores</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Sucursal activa</p>
+          <p className="text-sm font-medium text-gray-900">
+            {branches.find(b => b.id === selectedBranchId)?.name || 'Todas'}
+          </p>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Selector de Sucursal */}
+      <div className="mb-6">
+        <select
+          value={selectedBranchId}
+          onChange={(e) => setSelectedBranchId(e.target.value)}
+          className="text-sm px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+        >
+          <option value="">Todas las sucursales</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Dashboard Grid con KPIs y Deudores */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total por Cobrar</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(summary.totalReceivable || 0)}
-                </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <div className="bg-blue-100 rounded-lg p-2">
+                <HiCurrencyDollar className="w-6 h-6 text-blue-600" />
               </div>
-              <HiCurrencyDollar className="w-10 h-10 text-green-500" />
+              <span className="text-xs font-medium text-gray-500">Por Cobrar</span>
             </div>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalReceivable || 0)}</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Vencido</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(summary.totalOverdue || 0)}
-                </p>
+          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <div className="bg-red-100 rounded-lg p-2">
+                <HiExclamationCircle className="w-6 h-6 text-red-600" />
               </div>
-              <HiClock className="w-10 h-10 text-red-500" />
+              <span className="text-xs font-medium text-gray-500">Vencido</span>
             </div>
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalOverdue || 0)}</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Clientes Morosos</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {summary.delinquentClients || 0}
-                </p>
+          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <div className="bg-orange-100 rounded-lg p-2">
+                <HiClock className="w-6 h-6 text-orange-600" />
               </div>
-              <HiQuestionMarkCircle className="w-10 h-10 text-purple-500" />
+              <span className="text-xs font-medium text-gray-500">Morosos</span>
             </div>
+            <p className="text-2xl font-bold text-orange-600">{summary.delinquentClients || 0}</p>
+            <p className="text-sm text-gray-500">clientes</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-gray-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Vencidas 0-30 Días</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(summary.byAge?.['0-30'] || 0)}
-                </p>
+          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <div className="bg-purple-100 rounded-lg p-2">
+                <HiChartBar className="w-6 h-6 text-purple-600" />
               </div>
-              <HiChartBar className="w-10 h-10 text-gray-500" />
+              <span className="text-xs font-medium text-gray-500">0-30 Días</span>
             </div>
+            <p className="text-2xl font-bold text-purple-600">{formatCurrency(summary.byAge?.['0-30'] || 0)}</p>
           </div>
         </div>
       )}
 
+      {/* Top Deudores */}
+      {topDebtors && topDebtors.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <HiExclamationCircle className="w-5 h-5 text-red-600 mr-2" />
+              <h3 className="text-lg font-semibold text-gray-900">Top Deudores</h3>
+            </div>
+          </div>
+          <div className="overflow-y-auto max-h-96">
+            {topDebtors.slice(0, 10).map((debtor: any, index: number) => {
+              const overduePercentage = debtor.totalBalance > 0 
+                ? (debtor.overdueBalance / debtor.totalBalance) * 100 
+                : 0;
+              const getRankColor = (pos: number) => {
+                if (pos === 0) return 'bg-red-500';
+                if (pos === 1) return 'bg-orange-500';
+                if (pos === 2) return 'bg-yellow-500';
+                return 'bg-gray-400';
+              };
+              
+              return (
+                <div 
+                  key={debtor.clientId} 
+                  className="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setNavigationState({ targetTab: 'status', clientId: debtor.clientId });
+                  }}
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className={`w-6 h-6 rounded-full ${getRankColor(index)} flex items-center justify-center flex-shrink-0`}>
+                      <span className="text-white text-sm font-bold">{index + 1}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{debtor.clientName}</p>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Total:</span>
+                          <span className="font-semibold text-gray-900">{formatCurrency(debtor.totalBalance)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Vencido:</span>
+                          <span className="font-semibold text-red-600">{formatCurrency(debtor.overdueBalance)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                          <div 
+                            className="h-full bg-red-500 rounded-full"
+                            style={{ width: `${overduePercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {topDebtors.length > 10 && (
+            <div className="px-6 py-3 bg-gray-50 text-center border-t border-gray-200">
+              <button
+                onClick={() => setActiveTab('overdue')}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Ver todos ({topDebtors.length}) →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <nav className="flex space-x-8 px-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -203,51 +280,51 @@ const Receivables = () => {
                 }
               `}
             >
-              <span className="inline-flex items-center">
-                <tab.icon className="w-5 h-5 mr-2" />
+              <span className="inline-flex items-center gap-2">
+                <tab.icon className="w-5 h-5" />
                 <span>{tab.label}</span>
               </span>
             </button>
           ))}
         </nav>
-      </div>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'status' && (
-          <AccountStatusTab 
-            branchId={selectedBranchId} 
-            initialClientId={navigationState?.clientId}
-            onNavigateToInvoice={(invoiceId) => {
-              // Navigate to Sales module to view invoice
-              window.location.href = `/sales/invoices/${invoiceId}`;
-            }}
-          />
-        )}
-        {activeTab === 'payments' && (
-          <PaymentRegisterTab 
-            branchId={selectedBranchId} 
-            initialClientId={navigationState?.clientId}
-            initialInvoiceIds={navigationState?.invoiceIds}
-            onPaymentCreated={fetchSummary}
-            onNavigateToStatus={(clientId) => {
-              setNavigationState({ targetTab: 'status', clientId });
-            }}
-          />
-        )}
-        {activeTab === 'overdue' && (
-          <OverdueInvoicesTab 
-            branchId={selectedBranchId}
-            onNavigateToPayment={(clientId, invoiceIds) => {
-              setNavigationState({ targetTab: 'payments', clientId, invoiceIds });
-            }}
-            onNavigateToStatus={(clientId) => {
-              setNavigationState({ targetTab: 'status', clientId });
-            }}
-          />
-        )}
-        {activeTab === 'history' && <PaymentHistoryTab branchId={selectedBranchId} />}
-        {activeTab === 'summary' && <SummaryTab summary={summary} branchId={selectedBranchId} />}
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'status' && (
+            <AccountStatusTab 
+              branchId={selectedBranchId} 
+              initialClientId={navigationState?.clientId}
+              onNavigateToInvoice={(invoiceId) => {
+                // Navigate to Sales module to view invoice
+                window.location.href = `/sales/invoices/${invoiceId}`;
+              }}
+            />
+          )}
+          {activeTab === 'payments' && (
+            <PaymentRegisterTab 
+              branchId={selectedBranchId} 
+              initialClientId={navigationState?.clientId}
+              initialInvoiceIds={navigationState?.invoiceIds}
+              onPaymentCreated={fetchSummary}
+              onNavigateToStatus={(clientId) => {
+                setNavigationState({ targetTab: 'status', clientId });
+              }}
+            />
+          )}
+          {activeTab === 'overdue' && (
+            <OverdueInvoicesTab 
+              branchId={selectedBranchId}
+              onNavigateToPayment={(clientId, invoiceIds) => {
+                setNavigationState({ targetTab: 'payments', clientId, invoiceIds });
+              }}
+              onNavigateToStatus={(clientId) => {
+                setNavigationState({ targetTab: 'status', clientId });
+              }}
+            />
+          )}
+          {activeTab === 'history' && <PaymentHistoryTab branchId={selectedBranchId} />}
+          {activeTab === 'summary' && <SummaryTab summary={summary} branchId={selectedBranchId} />}
+        </div>
       </div>
     </div>
   );

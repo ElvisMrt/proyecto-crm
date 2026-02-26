@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const defaultPrisma = new PrismaClient();
 
 export interface AuthRequest extends Request {
   user?: {
@@ -13,6 +13,7 @@ export interface AuthRequest extends Request {
     tenantId?: string;
   };
   tenantId?: string;
+  tenantPrisma?: PrismaClient;
 }
 
 export const authenticate = async (
@@ -39,13 +40,11 @@ export const authenticate = async (
       throw new Error('JWT_SECRET is not configured');
     }
 
-    // Verificar token primero (más rápido que consultar BD)
-    // Si el token es inválido, no necesitamos consultar la base de datos
+    // Verificar token primero
     let decoded: any;
     try {
       decoded = jwt.verify(token, jwtSecret) as any;
     } catch (jwtError: any) {
-      // Manejar errores de JWT antes de consultar la BD
       if (jwtError.name === 'JsonWebTokenError') {
         return res.status(401).json({
           error: {
@@ -67,8 +66,10 @@ export const authenticate = async (
       throw jwtError;
     }
 
-    // Solo consultar BD si el token es válido
-    // Optimización: solo seleccionar campos necesarios
+    // Usar prisma del tenant si está disponible, sino el default
+    const prisma = req.tenantPrisma || defaultPrisma;
+
+    // Buscar usuario en la BD correspondiente
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -101,8 +102,6 @@ export const authenticate = async (
 
     next();
   } catch (error: any) {
-    // Errores de JWT ya fueron manejados arriba
-    // Este catch maneja otros errores inesperados
     console.error('Authentication middleware error:', error);
     next(error);
   }

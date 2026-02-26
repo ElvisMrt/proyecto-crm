@@ -224,19 +224,19 @@ const CashReportTab = () => {
       {/* Summary */}
       {data?.summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Total Ingresos</p>
             <p className="text-2xl font-bold text-gray-900 mt-2">
               {formatCurrency(data.summary.totalIncome)}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Total Egresos</p>
             <p className="text-2xl font-bold text-gray-900 mt-2">
               {formatCurrency(data.summary.totalExpenses)}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Total Diferencias</p>
             <p className="text-2xl font-bold text-gray-900 mt-2">
               {formatCurrency(data.summary.totalDifference)}

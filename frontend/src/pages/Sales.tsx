@@ -13,10 +13,10 @@ import {
   HiFolder,
 } from 'react-icons/hi';
 
-type TabType = 'invoices' | 'quotes' | 'pos' | 'credit-notes' | 'cancelled';
+type TabType = 'pos' | 'invoices' | 'quotes' | 'credit-notes' | 'cancelled';
 
 const Sales = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('invoices');
+  const [activeTab, setActiveTab] = useState<TabType>('pos');
   const [cancelledCount, setCancelledCount] = useState(0);
 
   useEffect(() => {
@@ -36,9 +36,9 @@ const Sales = () => {
   }, []);
 
   const tabs = [
+    { id: 'pos' as TabType, label: 'Punto de Venta', icon: HiReceiptTax },
     { id: 'invoices' as TabType, label: 'Facturas', icon: HiDocumentText },
     { id: 'quotes' as TabType, label: 'Cotizaciones', icon: HiPencil },
-    { id: 'pos' as TabType, label: 'Punto de Venta', icon: HiReceiptTax },
     { id: 'credit-notes' as TabType, label: 'Notas de Crédito', icon: HiRefresh },
     { 
       id: 'cancelled' as TabType, 
@@ -49,20 +49,28 @@ const Sales = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Ventas</h1>
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Ventas</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestión de ventas y facturación</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Módulo activo</p>
+          <p className="text-sm font-medium text-gray-900">Ventas</p>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <nav className="flex space-x-8 px-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors relative
+                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -70,11 +78,11 @@ const Sales = () => {
                 }
               `}
             >
-              <span className="inline-flex items-center">
-                <tab.icon className="w-4 h-4 mr-2" />
-                {tab.label}
+              <span className="inline-flex items-center gap-2">
+                <tab.icon className="w-5 h-5" />
+                <span>{tab.label}</span>
                 {tab.badge && tab.badge > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full min-w-[20px] text-center">
+                  <span className="bg-red-100 text-red-600 py-1 px-2 rounded-full text-xs font-medium">
                     {tab.badge}
                   </span>
                 )}
@@ -82,15 +90,15 @@ const Sales = () => {
             </button>
           ))}
         </nav>
-      </div>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'invoices' && <InvoicesTab />}
-        {activeTab === 'quotes' && <QuotesTab />}
-        {activeTab === 'pos' && <POSTab />}
-        {activeTab === 'credit-notes' && <CreditNotesTab />}
-        {activeTab === 'cancelled' && <CancelledTab />}
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'invoices' && <InvoicesTab />}
+          {activeTab === 'quotes' && <QuotesTab />}
+          {activeTab === 'pos' && <POSTab />}
+          {activeTab === 'credit-notes' && <CreditNotesTab />}
+          {activeTab === 'cancelled' && <CancelledTab />}
+        </div>
       </div>
     </div>
   );

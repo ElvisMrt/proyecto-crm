@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { getStatus, getOverdue, createPayment, getPayments, getSummary } from '../controllers/receivables.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { tenantMiddleware } from '../middleware/tenant.middleware';
 import { requirePermission, PERMISSIONS } from '../middleware/permissions.middleware';
 
 const router = Router();
 
+router.use(tenantMiddleware);
 router.use(authenticate);
 
 router.get('/status/:clientId', requirePermission(PERMISSIONS.RECEIVABLES_READ), getStatus);

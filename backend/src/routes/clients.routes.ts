@@ -1,10 +1,22 @@
 import { Router } from 'express';
-import { getClients, getClient, createClient, updateClient, toggleClientStatus, deleteClient, getClientInvoices, getClientQuotes, getClientPayments } from '../controllers/clients.controller';
+import {
+  getClients,
+  getClient,
+  createClient,
+  updateClient,
+  toggleClientStatus,
+  deleteClient,
+  getClientInvoices,
+  getClientQuotes,
+  getClientPayments,
+} from '../controllers/clients.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { tenantMiddleware } from '../middleware/tenant.middleware';
 import { requirePermission, PERMISSIONS } from '../middleware/permissions.middleware';
 
 const router = Router();
 
+router.use(tenantMiddleware);
 router.use(authenticate);
 
 router.get('/', requirePermission(PERMISSIONS.CLIENTS_READ), getClients);

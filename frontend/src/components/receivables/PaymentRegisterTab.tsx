@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { receivablesApi, clientsApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { HiSearch, HiUser, HiCheckCircle, HiCash } from 'react-icons/hi';
 
 interface Client {
   id: string;
   name: string;
+  identification: string;
 }
 
 interface Invoice {
@@ -50,6 +52,9 @@ const PaymentRegisterTab = ({ branchId, initialClientId, initialInvoiceIds, onPa
   });
   const [loading, setLoading] = useState(false);
   const [distributionMode, setDistributionMode] = useState<'auto' | 'manual'>('auto');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   useEffect(() => {
     fetchClients();
@@ -232,6 +237,40 @@ const PaymentRegisterTab = ({ branchId, initialClientId, initialInvoiceIds, onPa
     }).format(amount);
   };
 
+  const filteredClients = clients.filter((client) =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (client.identification && client.identification.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleSelectClient = (client: Client) => {
+    setSelectedClientId(client.id);
+    setSearchTerm(client.name);
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => 
+        prev < filteredClients.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < filteredClients.length) {
+        handleSelectClient(filteredClients[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Formulario */}
@@ -239,22 +278,96 @@ const PaymentRegisterTab = ({ branchId, initialClientId, initialInvoiceIds, onPa
         <h2 className="text-xl font-bold text-gray-900 mb-4">Registrar Pago</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Cliente */}
+          {/* Cliente con Buscador */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-            <select
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Seleccione un cliente</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <HiSearch className="w-4 h-4 mr-1 text-blue-600" />
+              Buscar Cliente *
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <HiUser className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Haz click para ver clientes o escribe para buscar..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setShowSuggestions(true);
+                  setHighlightedIndex(-1);
+                  if (!e.target.value) {
+                    setSelectedClientId('');
+                    setInvoices([]);
+                  }
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onClick={() => setShowSuggestions(true)}
+                onKeyDown={handleKeyDown}
+                className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+              
+              {/* Sugerencias */}
+              {showSuggestions && filteredClients.length > 0 && (
+                <div className="absolute z-20 w-full mt-2 bg-white border-2 border-blue-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
+                  <div className="px-3 py-2 bg-blue-50 border-b border-blue-100">
+                    <p className="text-xs font-medium text-blue-800">
+                      {filteredClients.length} cliente(s) encontrado(s)
+                    </p>
+                  </div>
+                  {filteredClients.map((client, index) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => handleSelectClient(client)}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      className={`w-full text-left px-3 py-3 hover:bg-blue-50 transition-all border-b border-gray-100 last:border-b-0 ${
+                        index === highlightedIndex ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <HiUser className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 text-sm">{client.name}</p>
+                            {client.identification && (
+                              <p className="text-xs text-gray-500">ID: {client.identification}</p>
+                            )}
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* No hay resultados */}
+              {showSuggestions && searchTerm && filteredClients.length === 0 && (
+                <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                  <p className="text-gray-500 text-sm text-center">No se encontraron clientes</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Cliente seleccionado */}
+            {selectedClientId && clients.find(c => c.id === selectedClientId) && (
+              <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
+                <div className="flex items-center">
+                  <HiCheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase">Cliente Seleccionado</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {clients.find(c => c.id === selectedClientId)?.name}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Modo de Distribución */}
@@ -289,8 +402,11 @@ const PaymentRegisterTab = ({ branchId, initialClientId, initialInvoiceIds, onPa
           {/* Facturas Pendientes */}
           {selectedClientId && invoices.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Facturas Pendientes</label>
-              <div className="border border-gray-200 rounded-md max-h-64 overflow-y-auto">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <HiCash className="w-4 h-4 mr-1 text-green-600" />
+                Facturas Pendientes ({invoices.length})
+              </label>
+              <div className="border-2 border-gray-200 rounded-lg max-h-64 overflow-y-auto">
                 {invoices.map((invoice) => (
                   <div key={invoice.id} className="p-3 border-b border-gray-100 hover:bg-gray-50">
                     <div className="flex items-center justify-between">

@@ -1,11 +1,11 @@
 import { Response } from 'express';
-import { PrismaClient, InvoiceStatus, PaymentMethod, InvoiceType, QuoteStatus } from '@prisma/client';
+import { InvoiceStatus, PaymentMethod, InvoiceType, QuoteStatus } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 import { getNextNcf } from './ncf.controller';
 import { validateIdentification } from '../utils/identificationValidator';
 
-const prisma = new PrismaClient();
 
 const createInvoiceSchema = z.object({
   clientId: z.string().uuid().optional(), // Cliente es opcional
@@ -30,6 +30,7 @@ const createInvoiceSchema = z.object({
 
 export const getInvoices = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -181,6 +182,7 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
 
 export const getInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const invoice = await prisma.invoice.findUnique({
@@ -323,6 +325,7 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
 
 export const createInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -495,7 +498,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
     // Obtener NCF del sistema de secuencias si es factura fiscal (solo si no es borrador)
     let ncf: string | null = null;
     if (data.type === 'FISCAL' && !data.saveAsDraft) {
-      ncf = await getNextNcf('FACE', branchId);
+      ncf = await getNextNcf(prisma, 'FACE', branchId || null);
       if (!ncf) {
         return res.status(400).json({
           error: {
@@ -554,6 +557,14 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
       // Update stock for each product
       for (const item of data.items) {
         if (item.productId && branchId) {
+          // Check if product controls stock
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { controlsStock: true },
+          });
+
+          // Only update stock if product controls stock
+          if (product && product.controlsStock) {
           // Find or create stock record
           const stock = await tx.stock.findFirst({
             where: {
@@ -604,6 +615,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
               userId: req.user!.id,
             },
           });
+          }
         }
         }
       }
@@ -743,6 +755,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
 export const updateInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -988,7 +1001,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
           await tx.cashMovement.delete({
             where: { id: existingCashMovement.id },
           });
-        } else if (existingCashMovement.amount !== total) {
+        } else if (Number(existingCashMovement.amount) !== total) {
           // If still cash but amount changed, update cash movement
           await tx.cashMovement.update({
             where: { id: existingCashMovement.id },
@@ -1027,6 +1040,14 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
       // Restore old stock
       for (const oldItem of existingInvoice.items) {
         if (oldItem.productId && branchId) {
+          // Check if product controls stock
+          const product = await tx.product.findUnique({
+            where: { id: oldItem.productId },
+            select: { controlsStock: true },
+          });
+
+          // Only restore stock if product controls stock
+          if (product && product.controlsStock) {
           const stock = await tx.stock.findFirst({
             where: {
               productId: oldItem.productId,
@@ -1043,6 +1064,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
                 },
               },
             });
+          }
           }
         }
       }
@@ -1211,6 +1233,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
 
 export const duplicateInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1311,6 +1334,7 @@ export const duplicateInvoice = async (req: AuthRequest, res: Response) => {
 
 export const cancelInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1398,6 +1422,14 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
       // Restore stock
       for (const item of invoice.items) {
         if (item.productId && branchId) {
+          // Check if product controls stock
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { controlsStock: true },
+          });
+
+          // Only restore stock if product controls stock
+          if (product && product.controlsStock) {
           const stock = await tx.stock.findFirst({
             where: {
               productId: item.productId,
@@ -1439,6 +1471,7 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
               observations: `Anulación: ${reason}`,
             },
           });
+          }
         }
       }
     });
@@ -1463,6 +1496,7 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
 
 export const deleteInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1540,6 +1574,7 @@ const createQuoteSchema = z.object({
 
 export const getQuotes = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -1608,6 +1643,7 @@ export const getQuotes = async (req: AuthRequest, res: Response) => {
 
 export const getQuote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const quote = await prisma.quote.findUnique({
@@ -1658,6 +1694,7 @@ export const getQuote = async (req: AuthRequest, res: Response) => {
 
 export const createQuote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1759,6 +1796,7 @@ export const createQuote = async (req: AuthRequest, res: Response) => {
 
 export const updateQuote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1882,6 +1920,7 @@ export const updateQuote = async (req: AuthRequest, res: Response) => {
 
 export const deleteQuote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -1938,6 +1977,7 @@ export const deleteQuote = async (req: AuthRequest, res: Response) => {
 
 export const convertQuoteToInvoice = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -2023,7 +2063,7 @@ export const convertQuoteToInvoice = async (req: AuthRequest, res: Response) => 
       });
       branchId = firstBranch?.id || null;
       
-      ncf = await getNextNcf('FACE', branchId);
+      ncf = await getNextNcf(prisma, 'FACE', branchId || null);
       if (!ncf) {
         return res.status(400).json({
           error: {
@@ -2090,6 +2130,14 @@ export const convertQuoteToInvoice = async (req: AuthRequest, res: Response) => 
       // Update stock for each product
       for (const item of quote.items) {
         if (item.productId && branchId) {
+          // Check if product controls stock
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { controlsStock: true },
+          });
+
+          // Only update stock if product controls stock
+          if (product && product.controlsStock) {
           const stock = await tx.stock.findFirst({
             where: {
               productId: item.productId,
@@ -2129,6 +2177,7 @@ export const convertQuoteToInvoice = async (req: AuthRequest, res: Response) => 
                 userId: req.user!.id,
               },
             });
+          }
           }
         }
       }
@@ -2185,6 +2234,7 @@ export const convertQuoteToInvoice = async (req: AuthRequest, res: Response) => 
 
 export const createPOSSale = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -2284,6 +2334,7 @@ const createCreditNoteSchema = z.object({
 
 export const getCreditNotes = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -2350,6 +2401,7 @@ export const getCreditNotes = async (req: AuthRequest, res: Response) => {
 
 export const getCreditNote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const creditNote = await prisma.creditNote.findUnique({
@@ -2398,6 +2450,7 @@ export const getCreditNote = async (req: AuthRequest, res: Response) => {
 
 export const createCreditNote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -2501,7 +2554,7 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
     // Obtener NCF del sistema de secuencias si la factura original era fiscal
     let ncf: string | null = null;
     if (invoice.type === 'FISCAL') {
-      ncf = await getNextNcf('NCE', invoice.branchId);
+      ncf = await getNextNcf(prisma, 'NCE', invoice.branchId || null);
       if (!ncf) {
         return res.status(400).json({
           error: {
@@ -2556,6 +2609,14 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
       // Restore stock for each product
       for (const item of data.items) {
         if (item.productId && branchId) {
+          // Check if product controls stock
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { controlsStock: true },
+          });
+
+          // Only restore stock if product controls stock
+          if (product && product.controlsStock) {
           const stock = await tx.stock.findFirst({
             where: {
               productId: item.productId,
@@ -2597,6 +2658,7 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
               observations: `Nota de crédito: ${data.reason}`,
             },
           });
+          }
         }
       }
 
@@ -2636,6 +2698,7 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
 
 export const getCancelledInvoicesCount = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const count = await prisma.invoice.count({
       where: {
         status: InvoiceStatus.CANCELLED,
@@ -2657,6 +2720,7 @@ export const getCancelledInvoicesCount = async (req: AuthRequest, res: Response)
 
 export const getCancelledInvoices = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;

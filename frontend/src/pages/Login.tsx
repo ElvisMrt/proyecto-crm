@@ -1,7 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiShieldCheck } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiEye, HiEyeOff } from 'react-icons/hi';
+import logoSrc from '../utils/3.svg';
+
+// Icon wrapper for crisp rendering
+const CrispIcon = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <span className={className} style={{ 
+    shapeRendering: 'geometricPrecision',
+    imageRendering: 'crisp-edges',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  }}>
+    {children}
+  </span>
+);
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -81,12 +95,12 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-gray-50 via-blue-50 to-gray-100">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob" style={{ backgroundColor: '#1D79C4' }}></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-2000" style={{ backgroundColor: '#1f2937' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-4000" style={{ backgroundColor: '#1D79C4' }}></div>
       </div>
 
       {/* Login Card */}
@@ -94,10 +108,10 @@ const Login = () => {
         <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 transform transition-all duration-300 hover:shadow-3xl">
           {/* Logo/Brand Section */}
           <div className="text-center mb-8 animate-fade-in">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg mb-4 transform transition-transform duration-300 hover:scale-110">
-              <HiShieldCheck className="w-8 h-8 text-white" />
+            <div className="flex justify-center mb-6">
+              <img src={logoSrc} alt="Neypier" className="h-16 w-auto" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+            <h1 className="text-3xl font-bold mb-2" style={{ color: '#1f2937' }}>
               Bienvenido
             </h1>
             <p className="text-gray-500 text-sm">Inicia sesión en tu cuenta CRM</p>
@@ -122,9 +136,11 @@ const Login = () => {
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <HiMail className={`h-5 w-5 transition-colors duration-200 ${
-                    emailError ? 'text-red-400' : 'text-gray-400 group-focus-within:text-blue-500'
-                  }`} />
+                  <CrispIcon className={`h-5 w-5 transition-colors duration-200 ${
+                    emailError ? 'text-red-400' : 'text-gray-400 group-focus-within:text-[#1D79C4]'
+                  }`}>
+                    <HiMail size={20} />
+                  </CrispIcon>
                 </div>
                 <input
                   ref={emailInputRef}
@@ -140,7 +156,7 @@ const Login = () => {
                   className={`block w-full pl-12 pr-4 py-3.5 border-2 rounded-xl shadow-sm bg-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-offset-0 transition-all duration-200 ${
                     emailError 
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
-                      : 'border-gray-200 focus:border-blue-500 focus:ring-blue-500/20'
+                      : 'border-gray-200 focus:ring-[#1D79C4]'
                   } ${loading ? 'bg-gray-100 cursor-not-allowed opacity-60' : 'hover:border-gray-300'}`}
                   placeholder="tu@correo.com"
                 />
@@ -162,7 +178,9 @@ const Login = () => {
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <HiLockClosed className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                  <CrispIcon className="h-5 w-5 text-gray-400 group-focus-within:text-[#1D79C4] transition-colors duration-200">
+                    <HiLockClosed size={20} />
+                  </CrispIcon>
                 </div>
                 <input
                   id="password"
@@ -173,7 +191,7 @@ const Login = () => {
                   value={password}
                   onChange={handlePasswordChange}
                   disabled={loading}
-                  className={`block w-full pl-12 pr-12 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm bg-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200 ${
+                  className={`block w-full pl-12 pr-12 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm bg-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-[#1D79C4] transition-all duration-200 ${
                     loading ? 'bg-gray-100 cursor-not-allowed opacity-60' : 'hover:border-gray-300'
                   }`}
                   placeholder="••••••••"
@@ -186,9 +204,13 @@ const Login = () => {
                   tabIndex={-1}
                 >
                   {showPassword ? (
-                    <HiEyeOff className="h-5 w-5" />
+                    <CrispIcon className="h-5 w-5">
+                      <HiEyeOff size={20} />
+                    </CrispIcon>
                   ) : (
-                    <HiEye className="h-5 w-5" />
+                    <CrispIcon className="h-5 w-5">
+                      <HiEye size={20} />
+                    </CrispIcon>
                   )}
                 </button>
               </div>
@@ -223,21 +245,21 @@ const Login = () => {
                 disabled={loading || !!emailError || !email || !password}
                 className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-base font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] disabled:transform-none"
                 style={{ 
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
+                  backgroundColor: '#1D79C4',
                   boxShadow: loading || !!emailError || !email || !password 
                     ? '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
-                    : '0 10px 25px -5px rgba(59, 130, 246, 0.5)',
+                    : '0 10px 25px -5px rgba(29, 121, 196, 0.5)',
                 }}
                 onMouseEnter={(e) => {
                   if (!loading && !emailError && email && password) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)';
-                    e.currentTarget.style.boxShadow = '0 15px 35px -5px rgba(59, 130, 246, 0.6)';
+                    e.currentTarget.style.backgroundColor = '#1565a8';
+                    e.currentTarget.style.boxShadow = '0 15px 35px -5px rgba(29, 121, 196, 0.6)';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!loading && !emailError && email && password) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)';
-                    e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(59, 130, 246, 0.5)';
+                    e.currentTarget.style.backgroundColor = '#1D79C4';
+                    e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(29, 121, 196, 0.5)';
                   }
                 }}
               >

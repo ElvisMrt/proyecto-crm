@@ -8,12 +8,14 @@ import {
   getNcfStats,
 } from '../controllers/ncf.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { tenantMiddleware } from '../middleware/tenant.middleware';
 import { requirePermission } from '../middleware/permissions.middleware';
 import { PERMISSIONS } from '../middleware/permissions.middleware';
 
 const router = Router();
 
-// Todas las rutas requieren autenticación
+// Todas las rutas requieren tenant + autenticación
+router.use(tenantMiddleware);
 router.use(authenticate);
 
 // Obtener estadísticas de NCF

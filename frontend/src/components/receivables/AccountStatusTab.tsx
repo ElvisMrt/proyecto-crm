@@ -5,7 +5,7 @@ import { exportAccountStatusToPDF } from '../../utils/exportUtils';
 // WhatsApp module disabled
 // import { sendAccountStatusWhatsApp } from '../../utils/whatsappSender';
 import { useToast } from '../../contexts/ToastContext';
-import { HiDocumentDownload } from 'react-icons/hi';
+import { HiDocumentDownload, HiSearch, HiUser, HiCheckCircle } from 'react-icons/hi';
 // HiChat disabled - WhatsApp module removed
 
 interface Client {
@@ -47,6 +47,8 @@ const AccountStatusTab = ({ branchId, initialClientId, onNavigateToInvoice }: Ac
   const [accountStatus, setAccountStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   useEffect(() => {
     fetchClients();
@@ -117,38 +119,137 @@ const AccountStatusTab = ({ branchId, initialClientId, onNavigateToInvoice }: Ac
     client.identification.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleSelectClient = (client: Client) => {
+    setSelectedClientId(client.id);
+    setSearchTerm(client.name);
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => 
+        prev < filteredClients.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < filteredClients.length) {
+        handleSelectClient(filteredClients[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Selector de Cliente */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Seleccionar Cliente
-        </label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <input
-              type="text"
-              placeholder="Buscar cliente por nombre o identificación..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <select
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Seleccione un cliente</option>
-              {filteredClients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name} - {client.identification}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Buscador de Cliente con Sugerencias */}
+      <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg shadow-lg p-6 border border-blue-100">
+        <div className="flex items-center mb-3">
+          <HiSearch className="w-6 h-6 text-blue-600 mr-2" />
+          <label className="text-lg font-semibold text-gray-800">
+            Buscar Cliente
+          </label>
         </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Escribe para buscar por nombre o identificación
+        </p>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <HiUser className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            placeholder="Haz click para ver todos los clientes o escribe para buscar..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setShowSuggestions(true);
+              setHighlightedIndex(-1);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onClick={() => setShowSuggestions(true)}
+            onKeyDown={handleKeyDown}
+            className="w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-blue-400"
+          />
+          
+          {/* Sugerencias Dropdown */}
+          {showSuggestions && filteredClients.length > 0 && (
+            <div className="absolute z-20 w-full mt-2 bg-white border-2 border-blue-200 rounded-xl shadow-2xl max-h-96 overflow-y-auto">
+              <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+                <p className="text-xs font-medium text-blue-800">
+                  {filteredClients.length} cliente(s) encontrado(s)
+                </p>
+              </div>
+              {filteredClients.map((client, index) => (
+                <button
+                  key={client.id}
+                  onClick={() => handleSelectClient(client)}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  className={`w-full text-left px-4 py-4 hover:bg-blue-50 transition-all border-b border-gray-100 last:border-b-0 ${
+                    index === highlightedIndex ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <HiUser className="w-6 h-6 text-blue-600" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{client.name}</p>
+                        <p className="text-sm text-gray-500 flex items-center">
+                          <span className="mr-1">ID:</span>
+                          {client.identification}
+                        </p>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* No hay resultados */}
+          {showSuggestions && searchTerm && clients.length > 0 && filteredClients.length === 0 && (
+            <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
+              <p className="text-gray-500 text-center">No se encontraron clientes</p>
+            </div>
+          )}
+        </div>
+        
+        {/* Cliente seleccionado */}
+        {selectedClientId && accountStatus && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl shadow-sm">
+            <div className="flex items-center">
+              <HiCheckCircle className="w-6 h-6 text-green-600 mr-3" />
+              <div>
+                <p className="text-xs font-medium text-green-700 uppercase tracking-wide">
+                  Cliente Seleccionado
+                </p>
+                <p className="text-lg font-bold text-gray-900">
+                  {accountStatus.client.name}
+                </p>
+                {accountStatus.client.identification && (
+                  <p className="text-sm text-gray-600">
+                    ID: {accountStatus.client.identification}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Estado de Cuenta */}

@@ -15,10 +15,12 @@ import {
   getLateCollections,
 } from '../controllers/crm.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { tenantMiddleware } from '../middleware/tenant.middleware';
 import { requirePermission, PERMISSIONS } from '../middleware/permissions.middleware';
 
 const router = Router();
 
+router.use(tenantMiddleware);
 router.use(authenticate);
 
 // Tasks

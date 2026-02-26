@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Fill Demo - Formulario de Citas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-4">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">Demo Automático - Formulario de Citas</h1>
+        
+        <!-- Botón para auto-llenar y enviar -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-4">
+            <button id="autoFillBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
+                🚀 Auto Llenar y Enviar Formulario
+            </button>
+            <p class="text-sm text-gray-600 mt-2">Este botón automáticamente llenará el formulario y lo enviará en modo demo</p>
+        </div>
+
+        <!-- Log de acciones -->
+        <div class="bg-gray-800 text-green-400 rounded-lg p-4 font-mono text-sm">
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <!-- Iframe con el formulario -->
+    <div class="max-w-2xl mx-auto mt-8">
+        <iframe id="formFrame" src="appointment-form.html" width="100%" height="600" frameborder="0"></iframe>
+    </div>
+
+    <script>
+        const log = document.getElementById('log');
+        const autoFillBtn = document.getElementById('autoFillBtn');
+        const formFrame = document.getElementById('formFrame');
+
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        async function autoFillAndSubmit() {
+            addLog('🚀 Iniciando demo automático...');
+            
+            // Esperar a que el iframe cargue
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            try {
+                const frameDoc = formFrame.contentDocument || formFrame.contentWindow.document;
+                
+                // Verificar modo demo
+                const demoIndicator = frameDoc.getElementById('demoIndicator');
+                if (demoIndicator && demoIndicator.style.display !== 'none') {
+                    addLog('✅ Modo demo detectado');
+                } else {
+                    addLog('ℹ️ Modo normal (con conexión)');
+                }
+
+                // Llenar formulario
+                addLog('📝 Llenando campos...');
+                
+                // Nombre
+                const nameField = frameDoc.getElementById('clientName');
+                if (nameField) {
+                    nameField.value = 'Juan Pérez Demo';
+                    addLog('✅ Nombre: Juan Pérez Demo');
+                }
+
+                // Email
+                const emailField = frameDoc.getElementById('clientEmail');
+                if (emailField) {
+                    emailField.value = 'juan.perez@demo.com';
+                    addLog('✅ Email: juan.perez@demo.com');
+                }
+
+                // Teléfono
+                const phoneField = frameDoc.getElementById('clientPhone');
+                if (phoneField) {
+                    phoneField.value = '809-123-4567';
+                    addLog('✅ Teléfono: 809-123-4567');
+                }
+
+                // Fecha y hora (mañana a las 10 AM)
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(10, 0, 0, 0);
+                
+                const dateField = frameDoc.getElementById('appointmentDate');
+                if (dateField) {
+                    const isoString = tomorrow.toISOString().slice(0, 16);
+                    dateField.value = isoString;
+                    addLog(`✅ Fecha: ${isoString}`);
+                }
+
+                // Duración
+                const durationField = frameDoc.getElementById('duration');
+                if (durationField) {
+                    durationField.value = '60';
+                    addLog('✅ Duración: 60 minutos');
+                }
+
+                // Sucursal
+                const branchField = frameDoc.getElementById('branchId');
+                if (branchField && branchField.options.length > 1) {
+                    branchField.selectedIndex = 1;
+                    const selectedBranch = branchField.options[branchField.selectedIndex].text;
+                    addLog(`✅ Sucursal: ${selectedBranch}`);
+                }
+
+                // Notas
+                const notesField = frameDoc.getElementById('notes');
+                if (notesField) {
+                    notesField.value = 'Cita de prueba generada automáticamente en modo demo';
+                    addLog('✅ Notas: Cita de prueba automática');
+                }
+
+                addLog('⏳ Esperando 2 segundos antes de enviar...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Enviar formulario
+                addLog('📤 Enviando formulario...');
+                const form = frameDoc.getElementById('appointmentForm');
+                if (form) {
+                    form.dispatchEvent(new Event('submit'));
+                    addLog('✅ Formulario enviado');
+                }
+
+                // Esperar respuesta
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Verificar resultado
+                const successContainer = frameDoc.getElementById('successContainer');
+                const errorContainer = frameDoc.getElementById('errorContainer');
+                
+                if (successContainer && successContainer.style.display !== 'none') {
+                    addLog('🎉 ¡CITA AGENDADA EXITOSAMENTE!');
+                    
+                    // Verificar localStorage
+                    const appointments = JSON.parse(localStorage.getItem('demo_appointments') || '[]');
+                    if (appointments.length > 0) {
+                        const lastAppointment = appointments[appointments.length - 1];
+                        addLog(`💾 Cita guardada localmente con ID: ${lastAppointment.id}`);
+                        addLog(`📊 Total de citas en demo: ${appointments.length}`);
+                    }
+                } else if (errorContainer && errorContainer.style.display !== 'none') {
+                    addLog('❌ Error al agendar cita');
+                } else {
+                    addLog('⏳ Procesando...');
+                }
+
+            } catch (error) {
+                addLog(`❌ Error: ${error.message}`);
+            }
+        }
+
+        autoFillBtn.addEventListener('click', autoFillAndSubmit);
+
+        // Log inicial
+        addLog('🔧 Demo listo para ejecutar');
+        addLog('📋 Haz clic en el botón para iniciar');
+    </script>
+</body>
+</html>

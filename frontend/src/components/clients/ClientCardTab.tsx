@@ -205,7 +205,7 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
       {/* Indicadores Rápidos */}
       {client.summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Total Ventas</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               {formatCurrency(client.summary.totalSales || 0)}
@@ -215,7 +215,7 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
             </p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Balance Pendiente</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               {formatCurrency(client.summary.totalReceivable || 0)}
@@ -223,7 +223,7 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
             <p className="text-xs text-gray-500 mt-1">Cuentas por Cobrar</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Pagos Recibidos</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               {client.summary.paymentCount || 0}
@@ -231,7 +231,7 @@ const ClientCardTab = ({ clientId, onEdit }: ClientCardTabProps) => {
             <p className="text-xs text-gray-500 mt-1">Registros de pago</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+          <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-600">Cotizaciones</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               {client.summary.quoteCount || 0}

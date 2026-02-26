@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agendar Cita</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .crm-appointment-form {
+      max-width: 500px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .crm-form-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .crm-form-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .crm-form-group {
+      margin-bottom: 20px;
+    }
+    .crm-form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+    .crm-form-input,
+    .crm-form-select,
+    .crm-form-textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .crm-form-input:focus,
+    .crm-form-select:focus,
+    .crm-form-textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    .crm-form-textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+    .crm-form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .crm-submit-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .crm-submit-btn:hover {
+      background: #2563eb;
+    }
+    .crm-submit-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    .crm-success-message {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #166534;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .crm-error-message {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #dc2626;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .crm-error-message.show {
+      display: block;
+    }
+    @media (max-width: 480px) {
+      .crm-form-row {
+        grid-template-columns: 1fr;
+      }
+      .crm-appointment-form {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="crm-appointment-container"></div>
+
+  <script>
+    (function() {
+      // Configuración - Modifica estos valores
+      const CONFIG = {
+        apiUrl: 'http://localhost:3001/api/v1',
+        title: 'Agendar Cita',
+        subtitle: 'Completa el formulario para programar tu cita',
+      };
+
+      // Estado del formulario
+      let branches = [];
+      let loading = false;
+
+      // Renderizar formulario
+      function renderForm() {
+        const container = document.getElementById('crm-appointment-container');
+        container.innerHTML = `
+          <div class="crm-appointment-form" id="appointmentForm">
+            <h2 class="crm-form-title">${CONFIG.title}</h2>
+            <p class="crm-form-subtitle">${CONFIG.subtitle}</p>
+            
+            <div class="crm-error-message" id="errorMessage"></div>
+            
+            <form id="crmForm">
+              <div class="crm-form-row">
+                <div class="crm-form-group">
+                  <label class="crm-form-label">Nombre *</label>
+                  <input type="text" class="crm-form-input" name="clientName" required placeholder="Tu nombre completo">
+                </div>
+                <div class="crm-form-group">
+                  <label class="crm-form-label">Teléfono *</label>
+                  <input type="tel" class="crm-form-input" name="clientPhone" required placeholder="809-555-0000">
+                </div>
+              </div>
+              
+              <div class="crm-form-group">
+                <label class="crm-form-label">Email</label>
+                <input type="email" class="crm-form-input" name="clientEmail" placeholder="tu@email.com">
+              </div>
+              
+              <div class="crm-form-row">
+                <div class="crm-form-group">
+                  <label class="crm-form-label">Sucursal *</label>
+                  <select class="crm-form-select" name="branchId" required>
+                    <option value="">Selecciona una sucursal</option>
+                    ${branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="crm-form-group">
+                  <label class="crm-form-label">Fecha y Hora *</label>
+                  <input type="datetime-local" class="crm-form-input" name="appointmentDate" required>
+                </div>
+              </div>
+              
+              <div class="crm-form-group">
+                <label class="crm-form-label">Notas / Comentarios</label>
+                <textarea class="crm-form-textarea" name="notes" placeholder="¿Algo que debamos saber?"></textarea>
+              </div>
+              
+              <button type="submit" class="crm-submit-btn" id="submitBtn">
+                Agendar Cita
+              </button>
+            </form>
+          </div>
+        `;
+
+        // Agregar event listeners
+        document.getElementById('crmForm').addEventListener('submit', handleSubmit);
+      }
+
+      // Mostrar mensaje de éxito
+      function renderSuccess(data) {
+        const container = document.getElementById('crm-appointment-container');
+        const date = new Date(data.appointmentDate).toLocaleString('es-DO', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        container.innerHTML = `
+          <div class="crm-appointment-form">
+            <div class="crm-success-message">
+              <strong>¡Cita Agendada!</strong><br>
+              Hola ${data.clientName}, tu cita ha sido programada para el ${date}.<br>
+              Te contactaremos para confirmar.
+            </div>
+            <button class="crm-submit-btn" onclick="location.reload()">
+              Agendar Otra Cita
+            </button>
+          </div>
+        `;
+      }
+
+      // Mostrar error
+      function showError(message) {
+        const errorEl = document.getElementById('errorMessage');
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+      }
+
+      // Manejar envío del formulario
+      async function handleSubmit(e) {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Enviando...';
+
+        const formData = new FormData(e.target);
+        const data = {
+          clientName: formData.get('clientName'),
+          clientEmail: formData.get('clientEmail') || undefined,
+          clientPhone: formData.get('clientPhone'),
+          branchId: formData.get('branchId'),
+          appointmentDate: formData.get('appointmentDate'),
+          notes: formData.get('notes') || undefined,
+        };
+
+        try {
+          const response = await fetch(`${CONFIG.apiUrl}/appointments/public`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            renderSuccess(result.data);
+          } else {
+            showError(result.error?.message || 'Error al agendar la cita');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Agendar Cita';
+          }
+        } catch (error) {
+          showError('Error de conexión. Intenta nuevamente.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Agendar Cita';
+        }
+      }
+
+      // Cargar configuración y sucursales
+      async function init() {
+        try {
+          const response = await fetch(`${CONFIG.apiUrl}/appointments/embed/config`);
+          const config = await response.json();
+          
+          if (config.branches) {
+            branches = config.branches;
+          }
+        } catch (error) {
+          console.error('Error cargando configuración:', error);
+          branches = [];
+        }
+        
+        renderForm();
+      }
+
+      // Iniciar cuando el DOM esté listo
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,20 +1,25 @@
 import { Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma, TenantRequest } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
+// Prisma default para rutas sin tenant (compatibilidad)
+const defaultPrisma = new PrismaClient();
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 });
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: TenantRequest, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
+
+    // Usar el Prisma del tenant si está disponible, sino el default
+    const prisma = req.tenantPrisma || defaultPrisma;
 
     // Find user - solo seleccionar campos necesarios (incluyendo password para verificación)
     const user = await prisma.user.findUnique({
@@ -65,7 +70,7 @@ export const login = async (req: Request, res: Response) => {
         role: user.role,
         branchId: user.branchId,
       },
-      jwtSecret,
+      jwtSecret as string,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
@@ -73,7 +78,7 @@ export const login = async (req: Request, res: Response) => {
     prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() }
-    }).catch(err => {
+    }).catch((err: Error) => {
       console.error('Error updating lastLogin:', err);
       // No fallar el login si falla la actualización de lastLogin
     });
@@ -127,6 +132,8 @@ export const me = async (req: AuthRequest, res: Response) => {
         }
       });
     }
+
+    const prisma = req.tenantPrisma || defaultPrisma;
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },

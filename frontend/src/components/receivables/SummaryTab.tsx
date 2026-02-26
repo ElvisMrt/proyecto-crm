@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { receivablesApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
-import { HiDocumentDownload, HiTable } from 'react-icons/hi';
+import { 
+  HiDocumentDownload, 
+  HiTable,
+  HiCurrencyDollar,
+  HiExclamationCircle,
+  HiUsers,
+  HiCalendar,
+  HiClock
+} from 'react-icons/hi';
 
 interface SummaryData {
   totalReceivable: number;
@@ -108,7 +116,9 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
                 {summary.totalInvoices} factura{summary.totalInvoices !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="text-5xl text-gray-400">💰</div>
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <HiCurrencyDollar className="w-6 h-6 text-blue-600" />
+            </div>
           </div>
         </div>
 
@@ -123,7 +133,9 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
                 {overduePercentage}% del total
               </p>
             </div>
-            <div className="text-5xl text-gray-400">⏰</div>
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <HiExclamationCircle className="w-6 h-6 text-red-600" />
+            </div>
           </div>
         </div>
 
@@ -138,7 +150,9 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
                 de {summary.totalClientsWithReceivables} clientes
               </p>
             </div>
-            <div className="text-5xl text-gray-400">❓</div>
+            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+              <HiUsers className="w-6 h-6 text-purple-600" />
+            </div>
           </div>
         </div>
       </div>
@@ -147,9 +161,11 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Antigüedad de Saldos Vencidos</h2>
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+          <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
             <div className="flex items-center">
-              <span className="text-2xl mr-3 text-gray-400">📅</span>
+              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+                <HiCalendar className="w-5 h-5 text-orange-600" />
+              </div>
               <div>
                 <p className="font-medium text-gray-900">0-30 Días</p>
                 <p className="text-sm text-gray-600">Facturas vencidas recientes</p>
@@ -162,9 +178,11 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
+          <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg">
             <div className="flex items-center">
-              <span className="text-2xl mr-3 text-gray-400">⚠️</span>
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <HiClock className="w-5 h-5 text-red-600" />
+              </div>
               <div>
                 <p className="font-medium text-gray-900">31-60 Días</p>
                 <p className="text-sm text-gray-600">Facturas con mora moderada</p>
@@ -177,9 +195,11 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-100 rounded-lg border-l-4 border-red-600">
+          <div className="flex items-center justify-between p-4 bg-red-100 rounded-lg">
             <div className="flex items-center">
-              <span className="text-2xl mr-3 text-gray-400">🔴</span>
+              <div className="w-10 h-10 bg-red-200 rounded-full flex items-center justify-center mr-3">
+                <HiExclamationCircle className="w-5 h-5 text-red-700" />
+              </div>
               <div>
                 <p className="font-medium text-gray-900">61-90 Días</p>
                 <p className="text-sm text-gray-600">Facturas con mora alta</p>
@@ -192,9 +212,11 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-200 rounded-lg border-l-4 border-red-700">
+          <div className="flex items-center justify-between p-4 bg-red-200 rounded-lg">
             <div className="flex items-center">
-              <span className="text-2xl mr-3 text-gray-400">🚨</span>
+              <div className="w-10 h-10 bg-red-300 rounded-full flex items-center justify-center mr-3">
+                <HiExclamationCircle className="w-5 h-5 text-red-800" />
+              </div>
               <div>
                 <p className="font-medium text-gray-900">Más de 90 Días</p>
                 <p className="text-sm text-gray-600">Facturas con mora crítica</p>

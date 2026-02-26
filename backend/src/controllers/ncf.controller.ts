@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
-import { AuthRequest } from '../types';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 
-const prisma = new PrismaClient();
 
 // Schema para crear secuencia NCF
 const createNcfSequenceSchema = z.object({
@@ -31,6 +30,7 @@ const updateNcfSequenceSchema = z.object({
 // Obtener todas las secuencias NCF
 export const getNcfSequences = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -105,6 +105,7 @@ export const getNcfSequences = async (req: AuthRequest, res: Response) => {
 // Obtener una secuencia NCF por ID
 export const getNcfSequence = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const sequence = await prisma.ncfSequence.findUnique({
@@ -147,6 +148,7 @@ export const getNcfSequence = async (req: AuthRequest, res: Response) => {
 // Crear nueva secuencia NCF
 export const createNcfSequence = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -256,6 +258,7 @@ export const createNcfSequence = async (req: AuthRequest, res: Response) => {
 // Actualizar secuencia NCF
 export const updateNcfSequence = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -357,6 +360,7 @@ export const updateNcfSequence = async (req: AuthRequest, res: Response) => {
 // Eliminar secuencia NCF (soft delete - desactivar)
 export const deleteNcfSequence = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -401,8 +405,9 @@ export const deleteNcfSequence = async (req: AuthRequest, res: Response) => {
 
 // Función auxiliar: Obtener el siguiente NCF disponible
 export const getNextNcf = async (
+  prisma: any,
   prefix: string,
-  branchId?: string | null
+  branchId?: string | null | undefined
 ): Promise<string | null> => {
   try {
     const now = new Date();
@@ -454,6 +459,7 @@ export const getNextNcf = async (
 // Obtener estadísticas de NCF
 export const getNcfStats = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
 
     // Secuencias activas

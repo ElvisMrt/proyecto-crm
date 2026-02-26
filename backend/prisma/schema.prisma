@@ -9,21 +9,33 @@ datasource db {
 }
 
 model Tenant {
-  id            String         @id @default(uuid())
-  name          String
-  slug          String         @unique
-  email         String
-  phone         String?
-  address       String?
-  rnc           String?
-  logo          String?
-  country       String         @default("DO")
-  status        TenantStatus   @default(ACTIVE)
-  plan          PlanType       @default(BASIC)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  users         MasterUser[]
-  subscriptions Subscription[]
+  id             String         @id @default(uuid())
+  name           String
+  slug           String         @unique
+  email          String
+  phone          String?
+  address        String?
+  country        String         @default("DO")
+  status         TenantStatus   @default(ACTIVE)
+  plan           PlanType       @default(BASIC)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  rnc            String?
+  logo           String?
+  subdomain      String         @unique @default("")
+  customDomain   String?        @unique
+  databaseName   String         @default("")
+  databaseUrl    String         @default("")
+  settings       Json?
+  limits         Json?
+  billingEmail   String         @default("")
+  subscriptionId String?
+  trialEndsAt    DateTime?      @db.Timestamp(6)
+  lastActiveAt   DateTime?      @db.Timestamp(6)
+  users          MasterUser[]
+  subscriptions  Subscription[]
+  invoices       TenantInvoice[]
+  activities     TenantActivity[]
 
   @@index([slug])
   @@index([status])
@@ -82,7 +94,10 @@ model User {
   payments             Payment[]
   quotes               Quote[]
   tasks                Task[]
+  appointments         Appointment[]
   branch               Branch?               @relation("UserBranch", fields: [branchId], references: [id])
+  purchases            Purchase[]
+  supplierPayments     SupplierPayment[]
 
   @@index([email])
   @@index([role])
@@ -131,6 +146,10 @@ model Branch {
   ncfSequences       NcfSequence[]
   stocks             Stock[]
   users              User[]                @relation("UserBranch")
+  appointments       Appointment[]
+  purchases          Purchase[]
+  supplierInvoices    SupplierInvoice[]
+  supplierPayments    SupplierPayment[]
 
   @@index([code])
   @@index([managerId])
@@ -177,6 +196,7 @@ model Product {
   category        Category                  @relation(fields: [categoryId], references: [id])
   quoteItems      QuoteItem[]
   stocks          Stock[]
+  purchaseItems   PurchaseItem[]
 
   @@index([code])
   @@index([barcode])
@@ -457,11 +477,11 @@ model Task {
   clientId    String?
   userId      String
   status      String    @default("PENDING")
-  priority    String    @default("MEDIUM")
   dueDate     DateTime?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  priority    String    @default("MEDIUM")
   client      Client?   @relation(fields: [clientId], references: [id])
   user        User      @relation(fields: [userId], references: [id])
 
@@ -506,6 +526,34 @@ model WhatsAppTemplate {
   @@index([isActive])
 }
 
+model Appointment {
+  id              String   @id @default(uuid())
+  clientName      String
+  clientEmail     String?
+  clientPhone     String
+  appointmentDate DateTime
+  duration        Int      @default(60)
+  notes           String?
+  status          String   @default("PENDING")
+  source          String   @default("MANUAL")
+  isViewed        Boolean  @default(false)
+  viewedAt        DateTime?
+  isNotified      Boolean  @default(false)
+  notifiedAt      DateTime?
+  branchId        String?
+  userId          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branch Branch? @relation(fields: [branchId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([branchId])
+  @@index([appointmentDate])
+  @@index([isViewed])
+}
+
 model AuditLog {
   id        String   @id @default(uuid())
   userId    String?
@@ -527,6 +575,7 @@ enum TenantStatus {
   ACTIVE
   SUSPENDED
   CANCELLED
+  PENDING
 }
 
 enum PlanType {
@@ -612,4 +661,246 @@ enum InventoryMovementType {
 enum AdjustmentType {
   ENTRY
   EXIT
+}
+
+// SaaS Models - Invoice for tenant billing
+model TenantInvoice {
+  id              String          @id @default(uuid())
+  tenantId        String
+  amount          Decimal         @default(0)
+  currency        String          @default("DOP")
+  status          InvoiceStatus   @default(DRAFT)
+  description     String?
+  periodStart     DateTime
+  periodEnd       DateTime
+  paidAt          DateTime?
+  paymentMethod   String?
+  paymentReference String?
+  metadata        Json?           // {plan, users, storage}
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  
+  @@index([tenantId])
+  @@index([status])
+}
+
+// SaaS Models - Activity log for tenants
+model TenantActivity {
+  id              String          @id @default(uuid())
+  tenantId        String
+  action          String          // CREATED, UPDATED, LOGIN, LOGOUT, etc.
+  description     String
+  metadata        Json?           // Additional data
+  createdAt       DateTime        @default(now())
+  
+  // Relations
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+// ============================================
+// MÓDULO DE PROVEEDORES Y COMPRAS
+// ============================================
+
+// Proveedor
+model Supplier {
+  id                String              @id @default(uuid())
+  code              String              @unique // Código único del proveedor
+  name              String
+  contactName       String?             // Nombre del contacto
+  email             String?
+  phone             String?
+  mobile            String?
+  address           String?
+  city              String?
+  country           String              @default("DO")
+  taxId             String?             // RNC/Cédula
+  website           String?
+  notes             String?
+  isActive          Boolean             @default(true)
+  creditLimit       Decimal?            @default(0) @db.Decimal(12, 2)
+  creditDays        Int?                @default(0) // Días de crédito otorgados
+  category          String?             // Categoría del proveedor
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  purchases         Purchase[]
+  invoices          SupplierInvoice[]
+  payments          SupplierPayment[]
+  
+  @@index([code])
+  @@index([name])
+  @@index([isActive])
+}
+
+// Compra/Orden de Compra
+model Purchase {
+  id                String              @id @default(uuid())
+  code              String              @unique // Código de compra
+  supplierId        String
+  branchId          String?
+  userId            String              // Usuario que registra
+  purchaseDate      DateTime            @default(now())
+  deliveryDate      DateTime?
+  status            PurchaseStatus      @default(PENDING)
+  subtotal          Decimal             @default(0) @db.Decimal(12, 2)
+  tax               Decimal             @default(0) @db.Decimal(12, 2)
+  discount          Decimal             @default(0) @db.Decimal(12, 2)
+  total             Decimal             @default(0) @db.Decimal(12, 2)
+  paid              Decimal             @default(0) @db.Decimal(12, 2) // Monto pagado
+  balance           Decimal             @default(0) @db.Decimal(12, 2) // Saldo pendiente
+  notes             String?
+  reference         String?             // Referencia externa
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  branch            Branch?             @relation(fields: [branchId], references: [id])
+  user              User                @relation(fields: [userId], references: [id])
+  items             PurchaseItem[]
+  invoice           SupplierInvoice?
+  paymentDetails    PurchasePaymentDetail[] // Pagos aplicados a esta compra
+  
+  @@index([code])
+  @@index([supplierId])
+  @@index([status])
+  @@index([purchaseDate])
+}
+
+// Items de la compra
+model PurchaseItem {
+  id                String              @id @default(uuid())
+  purchaseId        String
+  productId         String?
+  description       String              // Descripción del producto/servicio
+  quantity          Decimal             @default(1) @db.Decimal(10, 2)
+  unitPrice         Decimal             @default(0) @db.Decimal(12, 2)
+  tax               Decimal             @default(0) @db.Decimal(12, 2)
+  discount          Decimal             @default(0) @db.Decimal(12, 2)
+  total             Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  purchase          Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product           Product?            @relation(fields: [productId], references: [id])
+  
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// Factura del Proveedor (Cuenta por Pagar)
+model SupplierInvoice {
+  id                String              @id @default(uuid())
+  code              String              @unique // Número de factura
+  supplierId        String
+  purchaseId        String?             @unique // Opcional: vinculada a una compra
+  branchId          String?
+  invoiceDate       DateTime            @default(now())
+  dueDate           DateTime            // Fecha de vencimiento
+  status            SupplierInvoiceStatus @default(PENDING)
+  subtotal          Decimal             @default(0) @db.Decimal(12, 2)
+  tax               Decimal             @default(0) @db.Decimal(12, 2)
+  discount          Decimal             @default(0) @db.Decimal(12, 2)
+  total             Decimal             @default(0) @db.Decimal(12, 2)
+  paid              Decimal             @default(0) @db.Decimal(12, 2)
+  balance           Decimal             @default(0) @db.Decimal(12, 2)
+  notes             String?
+  reference         String?             // Referencia del proveedor
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  purchase          Purchase?           @relation(fields: [purchaseId], references: [id])
+  branch            Branch?             @relation(fields: [branchId], references: [id])
+  payments          SupplierPaymentDetail[]
+  
+  @@index([code])
+  @@index([supplierId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([invoiceDate])
+}
+
+// Pago a Proveedor
+model SupplierPayment {
+  id                String              @id @default(uuid())
+  code              String              @unique // Código del pago
+  supplierId        String
+  branchId          String?
+  userId            String              // Usuario que registra el pago
+  paymentDate       DateTime            @default(now())
+  amount            Decimal             @default(0) @db.Decimal(12, 2)
+  paymentMethod     PaymentMethod       @default(CASH)
+  reference         String?             // Referencia bancaria, cheque, etc.
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  branch            Branch?             @relation(fields: [branchId], references: [id])
+  user              User                @relation(fields: [userId], references: [id])
+  details           SupplierPaymentDetail[]    // Pagos aplicados a facturas
+  purchaseDetails   PurchasePaymentDetail[]    // Pagos aplicados a compras
+  
+  @@index([code])
+  @@index([supplierId])
+  @@index([paymentDate])
+}
+
+// Detalle de aplicación de pago (qué facturas se pagaron)
+model SupplierPaymentDetail {
+  id                String              @id @default(uuid())
+  paymentId         String
+  invoiceId         String
+  amount            Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime            @default(now())
+  
+  // Relations
+  payment           SupplierPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice           SupplierInvoice     @relation(fields: [invoiceId], references: [id])
+  
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+// Detalle de aplicación de pago a compras (qué compras se pagaron)
+model PurchasePaymentDetail {
+  id                String              @id @default(uuid())
+  paymentId         String
+  purchaseId        String
+  amount            Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime            @default(now())
+  
+  // Relations
+  payment           SupplierPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  purchase          Purchase            @relation(fields: [purchaseId], references: [id])
+  
+  @@index([paymentId])
+  @@index([purchaseId])
+}
+
+// Enums para el módulo de proveedores
+enum PurchaseStatus {
+  PENDING           // Pendiente
+  RECEIVED          // Recibida
+  PARTIAL           // Parcialmente recibida
+  CANCELLED         // Cancelada
+}
+
+enum SupplierInvoiceStatus {
+  PENDING           // Pendiente de pago
+  PARTIAL           // Parcialmente pagada
+  PAID              // Pagada completamente
+  OVERDUE           // Vencida
+  CANCELLED         // Cancelada
 }

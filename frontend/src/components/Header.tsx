@@ -3,7 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { HiBell, HiLogout, HiX, HiCheckCircle, HiMoon, HiSun } from 'react-icons/hi';
+import { HiBell, HiLogout, HiX, HiCheckCircle, HiMoon, HiSun, HiMenu } from 'react-icons/hi';
 import { crmApi, dashboardApi, inventoryApi } from '../services/api';
 
 interface Notification {
@@ -19,7 +19,11 @@ interface Notification {
   productId?: string; // ID del producto si es una notificación de stock
 }
 
-const Header = () => {
+interface HeaderProps {
+  onMobileMenuClick?: () => void;
+}
+
+const Header = ({ onMobileMenuClick }: HeaderProps) => {
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
@@ -30,10 +34,10 @@ const Header = () => {
 
   // Fetch notifications from API - tasks and alerts
   useEffect(() => {
-    fetchNotifications();
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    // Deshabilitar temporalmente para evitar loops cuando el backend falla
+    // fetchNotifications();
+    // const interval = setInterval(fetchNotifications, 30000);
+    // return () => clearInterval(interval);
   }, []);
 
   const fetchNotifications = async () => {
@@ -219,9 +223,17 @@ const Header = () => {
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+        {/* Mobile Menu Button */}
+        <button
+          onClick={onMobileMenuClick}
+          className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors mr-2"
+        >
+          <HiMenu className="w-6 h-6" />
+        </button>
+
         {/* Search Bar */}
-        <div className="flex-1 max-w-md">
+        <div className="flex-1 max-w-md hidden md:block">
           <div className="relative">
             <input
               type="text"
@@ -242,11 +254,11 @@ const Header = () => {
         </div>
         
         {/* Right Section */}
-        <div className="flex items-center space-x-4 ml-6">
-          {/* Theme Toggle */}
+        <div className="flex items-center space-x-2 sm:space-x-4 ml-2 sm:ml-6">
+          {/* Theme Toggle - Hidden on mobile */}
           <button
             onClick={toggleTheme}
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="hidden sm:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             {theme === 'dark' ? (
@@ -271,7 +283,7 @@ const Header = () => {
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col">
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
                   <h3 className="font-semibold text-gray-900">Notificaciones</h3>
                   {unreadCount > 0 && (
@@ -388,11 +400,11 @@ const Header = () => {
           </div>
           
           {/* User Profile */}
-          <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+          <div className="flex items-center space-x-2 sm:space-x-3 pl-2 sm:pl-4 border-l border-gray-200">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
               {user?.name.charAt(0).toUpperCase()}
             </div>
-            <div className="hidden md:block">
+            <div className="hidden lg:block">
               <p className="text-sm font-medium text-gray-900">{user?.name}</p>
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>

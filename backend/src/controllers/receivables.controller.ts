@@ -1,9 +1,17 @@
 import { Response } from 'express';
-import { PrismaClient, InvoiceStatus } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
+// Enums como constantes
+const InvoiceStatus = {
+  DRAFT: 'DRAFT',
+  ISSUED: 'ISSUED',
+  PAID: 'PAID',
+  OVERDUE: 'OVERDUE',
+  CANCELLED: 'CANCELLED'
+} as const;
+
 
 const createPaymentSchema = z.object({
   clientId: z.string().uuid(),
@@ -21,6 +29,7 @@ const createPaymentSchema = z.object({
 
 export const getStatus = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { clientId } = req.params;
     const branchId = req.query.branchId as string | undefined;
 
@@ -132,6 +141,7 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
 
 export const getOverdue = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -247,6 +257,7 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
 
 export const createPayment = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -674,6 +685,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
 
 export const getPayments = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -769,6 +781,7 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
 export const getSummary = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     const date30 = new Date(now);
     date30.setDate(date30.getDate() - 30);
@@ -841,13 +854,19 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     const totalClientsWithReceivables = allClientIds.size;
 
     // Get top 10 clients by receivable amount
-    const clientReceivables = new Map<string, { clientId: string; total: number; invoiceCount: number }>();
+    const clientReceivables = new Map<string, { clientId: string; total: number; overdue: number; invoiceCount: number }>();
     
     allInvoices.forEach((inv) => {
       if (!inv.clientId) return;
-      const existing = clientReceivables.get(inv.clientId) || { clientId: inv.clientId, total: 0, invoiceCount: 0 };
+      const existing = clientReceivables.get(inv.clientId) || { clientId: inv.clientId, total: 0, overdue: 0, invoiceCount: 0 };
       existing.total += Number(inv.balance);
       existing.invoiceCount += 1;
+      
+      // Check if this invoice is overdue
+      if (inv.dueDate && inv.dueDate < now) {
+        existing.overdue += Number(inv.balance);
+      }
+      
       clientReceivables.set(inv.clientId, existing);
     });
 
@@ -874,6 +893,32 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       })
     );
 
+    // Get top debtors (clients with highest balances)
+    const topDebtorsData = Array.from(clientReceivables.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    const topDebtors = await Promise.all(
+      topDebtorsData.map(async (data) => {
+        const client = await prisma.client.findUnique({
+          where: { id: data.clientId },
+          select: {
+            id: true,
+            name: true,
+            identification: true,
+          },
+        });
+        return {
+          clientId: data.clientId,
+          clientName: client?.name || 'Cliente eliminado',
+          clientIdentification: client?.identification || '',
+          totalBalance: data.total,
+          overdueBalance: data.overdue,
+          invoiceCount: data.invoiceCount,
+        };
+      })
+    );
+
     res.json({
       totalReceivable,
       totalOverdue,
@@ -883,6 +928,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       overdueCount: overdue.length,
       totalInvoices: allInvoices.length,
       topClients,
+      topDebtors,
     });
   } catch (error) {
     console.error('Get summary error:', error);

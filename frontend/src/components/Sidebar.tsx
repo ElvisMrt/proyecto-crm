@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   HiHome,
   HiShoppingCart,
@@ -15,7 +15,9 @@ import {
   HiChevronLeft,
   HiChevronRight,
   HiLogout,
+  HiTruck,
 } from 'react-icons/hi';
+import ManualDownloader from './ManualDownloader';
 import logoSrc from '../utils/Logos.svg';
 import logo2Src from '../utils/Logos 2.svg';
 import logo3Src from '../utils/3.svg';
@@ -24,6 +26,7 @@ const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: HiHome },
   { path: '/sales', label: 'Ventas', icon: HiShoppingCart },
   { path: '/receivables', label: 'Cuentas por Cobrar', icon: HiCurrencyDollar },
+  { path: '/suppliers-dashboard', label: 'Proveedores y Compras', icon: HiTruck },
   { path: '/cash', label: 'Caja', icon: HiCash },
   { path: '/inventory', label: 'Inventario', icon: HiCube },
   { path: '/clients', label: 'Clientes', icon: HiUsers },
@@ -36,12 +39,41 @@ const generalItems = [
   { path: '#', label: 'Cerrar Sesión', icon: HiLogout, action: 'logout' },
 ];
 
-const Sidebar = () => {
+interface SidebarProps {
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+const Sidebar = ({ isMobileOpen = false, onMobileClose }: SidebarProps) => {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Cerrar sidebar móvil al cambiar de ruta
+  useEffect(() => {
+    if (isMobileOpen && onMobileClose) {
+      onMobileClose();
+    }
+  }, [location.pathname]);
+  // const [unreadCount, setUnreadCount] = useState(0);
+
+  // Notifications endpoint disabled - not implemented in backend
+  // useEffect(() => {
+  //   fetchUnreadCount();
+  //   const interval = setInterval(fetchUnreadCount, 30000);
+  //   return () => clearInterval(interval);
+  // }, []);
+
+  // const fetchUnreadCount = async () => {
+  //   try {
+  //     const response = await api.get('/appointments/notifications/unread');
+  //     setUnreadCount(response.data.count);
+  //   } catch (error) {
+  //     console.error('Error fetching notifications:', error);
+  //   }
+  // };
   
   // Seleccionar logo según el tema cuando está expandido
   const expandedLogoSrc = theme === 'light' ? logo3Src : logoSrc;
@@ -54,7 +86,24 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 relative shadow-sm`}>
+    <>
+      {/* Overlay para móvil */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+      
+      {/* Sidebar */}
+      <aside className={`
+        ${isCollapsed ? 'w-16' : 'w-64'} 
+        bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 
+        flex flex-col transition-all duration-300 relative shadow-sm
+        fixed lg:static inset-y-0 left-0 z-50
+        transform lg:transform-none
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
       {/* Logo Section */}
       <div className={`${isCollapsed ? 'px-3 py-4' : 'px-6 py-4'} border-b border-gray-200 dark:border-gray-700 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
         {!isCollapsed ? (
@@ -113,11 +162,21 @@ const Sidebar = () => {
               }`}
               title={isCollapsed ? item.label : ''}
             >
-              <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} />
+              <div className="relative">
+                <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} />
+                {/* Notifications badge disabled - endpoint not implemented
+                {item.path === '/crm' && unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center text-[10px]">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+                */}
+              </div>
               {!isCollapsed && <span className="truncate text-sm">{item.label}</span>}
               {isCollapsed && (
                 <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
                   {item.label}
+                  {/* {item.path === '/crm' && unreadCount > 0 && ` (${unreadCount} nuevas)`} */}
                   <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
                 </span>
               )}
@@ -133,15 +192,31 @@ const Sidebar = () => {
         )}
         {generalItems.map((item) => {
           const isActive = location.pathname === item.path;
-          const Component = item.action === 'logout' ? 'button' : Link;
-          const props = item.action === 'logout' 
-            ? { onClick: () => handleItemClick(item) }
-            : { to: item.path };
+          
+          if (item.action === 'logout') {
+            return (
+              <button
+                key={item.path}
+                onClick={() => handleItemClick(item)}
+                className={`flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2'} rounded-lg transition-all group relative w-full text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700`}
+                title={isCollapsed ? item.label : ''}
+              >
+                <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 text-gray-500 dark:text-gray-400`} />
+                {!isCollapsed && <span className="truncate text-sm">{item.label}</span>}
+                {isCollapsed && (
+                  <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
+                    {item.label}
+                    <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
+                  </span>
+                )}
+              </button>
+            );
+          }
           
           return (
-            <Component
+            <Link
               key={item.path}
-              {...props}
+              to={item.path}
               className={`flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2'} rounded-lg transition-all group relative w-full ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
@@ -157,9 +232,21 @@ const Sidebar = () => {
                   <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
                 </span>
               )}
-            </Component>
+            </Link>
           );
         })}
+
+        {/* Manual Download Button */}
+        {!isCollapsed && (
+          <div className="px-3 py-2">
+            <ManualDownloader variant="menu" />
+          </div>
+        )}
+        {isCollapsed && (
+          <div className="flex justify-center py-2">
+            <ManualDownloader variant="icon" />
+          </div>
+        )}
       </div>
 
       {/* User Profile Section */}
@@ -189,7 +276,8 @@ const Sidebar = () => {
         </div>
       )}
 
-    </aside>
+      </aside>
+    </>
   );
 };
 

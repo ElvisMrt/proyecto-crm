@@ -12,7 +12,34 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (como mobile apps o curl)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:5175',
+      'http://admin.neypier.com:5173',
+      'http://admin.neypier.com:5174',
+      'http://mi-empresa-demo.neypier.com:5173',
+      'http://mi-empresa-demo.neypier.com:5174',
+      /https?:\/\/.*\.localhost(:\d+)?$/, // Cualquier subdominio de localhost
+      /https?:\/\/.*\.neypier\.com(:\d+)?$/, // Cualquier subdominio de neypier.com
+      /https?:\/\/.*\.tudominio\.com(:\d+)?$/, // Cualquier subdominio de tudominio.com
+    ];
+    
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed instanceof RegExp) return allowed.test(origin);
+      return allowed === origin;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' })); // Aumentar límite para imágenes base64
@@ -36,6 +63,10 @@ import reportsRoutes from './routes/reports.routes';
 import settingsRoutes from './routes/settings.routes';
 import branchesRoutes from './routes/branches.routes';
 import ncfRoutes from './routes/ncf.routes';
+import appointmentsRoutes from './routes/appointments.routes';
+import publicRoutes from './routes/public.routes';
+import saasRoutes from './routes/saas.routes';
+import supplierRoutes from './routes/supplier.routes';
 // WhatsApp module disabled
 // import whatsappRoutes from './routes/whatsapp.routes';
 
@@ -51,6 +82,10 @@ app.use('/api/v1/reports', reportsRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/branches', branchesRoutes);
 app.use('/api/v1/ncf', ncfRoutes);
+app.use('/api/v1/appointments', appointmentsRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/v1/saas', saasRoutes);
+app.use('/api/v1', supplierRoutes);
 // WhatsApp routes disabled
 // app.use('/api/v1/whatsapp', whatsappRoutes);
 

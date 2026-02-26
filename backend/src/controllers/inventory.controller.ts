@@ -1,9 +1,8 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
 
 const createProductSchema = z.object({
   code: z.string().optional(),
@@ -35,6 +34,7 @@ const createAdjustmentSchema = z.object({
 
 export const getProducts = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -116,6 +116,7 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 
 export const getProduct = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const product = await prisma.product.findUnique({
@@ -159,6 +160,7 @@ export const getProduct = async (req: AuthRequest, res: Response) => {
 
 export const createProduct = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = createProductSchema.parse(req.body);
 
     // Generar código automático si no se proporciona
@@ -276,13 +278,41 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 
 export const updateProduct = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = createProductSchema.partial().parse(req.body);
+
+    // Get current product state to check if controlsStock is changing
+    const currentProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { controlsStock: true },
+    });
+
+    if (!currentProduct) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        },
+      });
+    }
+
+    // Check if we're disabling stock control
+    const isDisablingStockControl = 
+      currentProduct.controlsStock === true && 
+      data.controlsStock === false;
 
     const product = await prisma.product.update({
       where: { id },
       data,
     });
+
+    // If disabling stock control, delete all stock records without creating movements
+    if (isDisablingStockControl) {
+      await prisma.stock.deleteMany({
+        where: { productId: id },
+      });
+    }
 
     res.json({
       id: product.id,
@@ -311,6 +341,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 
 export const getStock = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -366,9 +397,9 @@ export const getStock = async (req: AuthRequest, res: Response) => {
         },
       });
 
-      // Filter by lowStock in memory
+      // Filter by lowStock in memory - Solo productos que controlan stock
       const lowStockItems = allStocks.filter(
-        (stock) => Number(stock.quantity) <= Number(stock.minStock)
+        (stock) => stock.product.controlsStock && Number(stock.quantity) <= Number(stock.minStock)
       );
 
       total = lowStockItems.length;
@@ -410,13 +441,16 @@ export const getStock = async (req: AuthRequest, res: Response) => {
     ]);
     }
 
-    const mappedStocks = stocks.map((stock) => ({
+    // Filtrar solo productos que controlan stock y evitar mostrar stock negativo
+    const mappedStocks = stocks
+      .filter((stock) => stock.product.controlsStock)
+      .map((stock) => ({
         id: stock.id,
         product: stock.product,
         branch: stock.branch,
-        quantity: Number(stock.quantity),
+        quantity: Math.max(0, Number(stock.quantity)), // No mostrar stock negativo
         minStock: Number(stock.minStock),
-        status: Number(stock.quantity) === 0 ? 'OUT' :
+        status: Number(stock.quantity) <= 0 ? 'OUT' :
           Number(stock.quantity) <= Number(stock.minStock) ? 'LOW' : 'OK',
     }));
 
@@ -425,8 +459,8 @@ export const getStock = async (req: AuthRequest, res: Response) => {
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: mappedStocks.length, // Total de productos que controlan stock
+        totalPages: Math.ceil(mappedStocks.length / limit),
       },
     });
   } catch (error) {
@@ -442,6 +476,7 @@ export const getStock = async (req: AuthRequest, res: Response) => {
 
 export const getMovements = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -531,6 +566,7 @@ export const getMovements = async (req: AuthRequest, res: Response) => {
 
 export const createAdjustment = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -635,11 +671,12 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
       }
 
       // Create adjustment record
+      const adjustmentType = (data.type === 'EXIT' ? 'EXIT' : 'ENTRY') as 'ENTRY' | 'EXIT';
       const adjustment = await tx.inventoryAdjustment.create({
         data: {
           branchId: data.branchId,
-          type: data.type as any,
-          reason: data.reason,
+          type: adjustmentType,
+          reason: data.reason || '',
           userId: req.user!.id,
           observations: data.observations,
           items: {
@@ -687,11 +724,15 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
 
 export const getLowStockAlerts = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
     
     const where: any = {
       quantity: {
         lte: prisma.stock.fields.minStock,
+      },
+      product: {
+        controlsStock: true, // Solo productos que controlan stock
       },
     };
 
@@ -707,6 +748,7 @@ export const getLowStockAlerts = async (req: AuthRequest, res: Response) => {
             id: true,
             code: true,
             name: true,
+            controlsStock: true,
             category: {
               select: {
                 name: true,
@@ -750,6 +792,7 @@ const createCategorySchema = z.object({
 
 export const getCategories = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const categories = await prisma.category.findMany({
       include: {
         _count: {
@@ -782,6 +825,7 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
 
 export const createCategory = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = createCategorySchema.parse(req.body);
 
     const category = await prisma.category.create({
@@ -824,6 +868,7 @@ export const createCategory = async (req: AuthRequest, res: Response) => {
 
 export const updateCategory = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = createCategorySchema.partial().parse(req.body);
 
@@ -858,6 +903,7 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
 
 export const deleteCategory = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     // Check if category has products
@@ -919,6 +965,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response) => {
 
 export const deleteProduct = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     // Check if product has history (invoices, movements, etc.)
@@ -929,7 +976,7 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
           select: {
             invoiceItems: true,
             quoteItems: true,
-            inventoryMovements: true,
+            movements: true,
             stocks: true,
           },
         },
@@ -946,9 +993,9 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
     }
 
     const hasHistory = 
-      product._count.invoiceItems > 0 ||
-      product._count.quoteItems > 0 ||
-      product._count.inventoryMovements > 0;
+      (product as any)._count.invoiceItems > 0 ||
+      (product as any)._count.quoteItems > 0 ||
+      (product as any)._count.movements > 0;
 
     if (hasHistory) {
       return res.status(400).json({

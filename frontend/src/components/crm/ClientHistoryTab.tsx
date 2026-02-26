@@ -1,16 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { crmApi, clientsApi } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
+import { HiSearch, HiUser } from 'react-icons/hi';
 
 const ClientHistoryTab = () => {
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [history, setHistory] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const searchRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchClients();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -54,24 +69,113 @@ const ClientHistoryTab = () => {
     return new Date(dateString).toLocaleDateString('es-DO');
   };
 
+  const filteredClients = clients.filter((client) =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (client.identification && client.identification.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleSelectClient = (client: any) => {
+    setSelectedClientId(client.id);
+    setSearchTerm(client.name);
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || filteredClients.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev < filteredClients.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      handleSelectClient(filteredClients[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Vista 360° del Cliente</h2>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Cliente</label>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">Seleccione un cliente...</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name} - {client.identification}
-              </option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <HiSearch className="w-4 h-4 mr-1 text-blue-600" />
+            Buscar Cliente
+          </label>
+          <div className="relative" ref={searchRef}>
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <HiUser className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Haz click para ver clientes o escribe para buscar..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setShowSuggestions(true);
+                setHighlightedIndex(-1);
+                if (!e.target.value) {
+                  setSelectedClientId('');
+                }
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onClick={() => setShowSuggestions(true)}
+              onKeyDown={handleKeyDown}
+              className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            />
+            
+            {/* Dropdown de Sugerencias */}
+            {showSuggestions && filteredClients.length > 0 && (
+              <div className="absolute z-20 w-full mt-2 bg-white border-2 border-blue-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
+                <div className="px-3 py-2 bg-blue-50 border-b border-blue-100">
+                  <p className="text-xs font-medium text-blue-800">
+                    {filteredClients.length} cliente(s) encontrado(s)
+                  </p>
+                </div>
+                {filteredClients.map((client, index) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => handleSelectClient(client)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    className={`w-full text-left px-3 py-3 hover:bg-blue-50 transition-all border-b border-gray-100 last:border-b-0 ${
+                      index === highlightedIndex ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <HiUser className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">{client.name}</p>
+                          {client.identification && (
+                            <p className="text-xs text-gray-500">ID: {client.identification}</p>
+                          )}
+                        </div>
+                      </div>
+                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* No hay resultados */}
+            {showSuggestions && searchTerm && clients.length > 0 && filteredClients.length === 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
+                <p className="text-gray-500 text-center text-sm">No se encontraron clientes</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -107,7 +211,7 @@ const ClientHistoryTab = () => {
           {/* Resumen */}
           {history.summary && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+              <div className="bg-white rounded-lg shadow p-6">
                 <p className="text-sm font-medium text-gray-600">Total Ventas</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(history.summary.totalSales || 0)}
@@ -116,19 +220,19 @@ const ClientHistoryTab = () => {
                   {history.summary.invoiceCount || 0} factura{history.summary.invoiceCount !== 1 ? 's' : ''}
                 </p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+              <div className="bg-white rounded-lg shadow p-6">
                 <p className="text-sm font-medium text-gray-600">Balance Pendiente</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(history.summary.totalReceivable || 0)}
                 </p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+              <div className="bg-white rounded-lg shadow p-6">
                 <p className="text-sm font-medium text-gray-600">Pagos Recibidos</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {history.summary.paymentCount || 0}
                 </p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+              <div className="bg-white rounded-lg shadow p-6">
                 <p className="text-sm font-medium text-gray-600">Tareas</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {history.summary.taskCount || 0}

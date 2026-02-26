@@ -20,6 +20,17 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
   });
   const [loading, setLoading] = useState(false);
 
+  // Ensure currentCash is always an array
+  const cashArray = Array.isArray(currentCash) ? currentCash : (currentCash ? [currentCash] : []);
+  
+  // Check if user already has an open cash register for the selected branch
+  const hasOpenCashForBranch = (branchId: string) => {
+    return cashArray.some(cash => cash.branch?.id === branchId && cash.openedBy?.id === user?.id);
+  };
+
+  // Get user's open cash registers
+  const userOpenCashRegisters = cashArray.filter(cash => cash.openedBy?.id === user?.id);
+
   useEffect(() => {
     fetchBranches();
   }, []);
@@ -35,7 +46,7 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
       } catch (error: any) {
         // Si falla por permisos, intentar con el endpoint directo
         if (error.response?.status === 403 || error.response?.status === 401) {
-          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
           const token = localStorage.getItem('token');
           const directResponse = await fetch(`${API_BASE_URL}/branches`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -110,59 +121,37 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
     }).format(amount);
   };
 
-  if (currentCash) {
-    return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-center py-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
-            <HiOfficeBuilding className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Caja Ya Está Abierta</h2>
-          
-          {/* Información de la caja abierta */}
-          <div className="mt-6 space-y-4 max-w-md mx-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid grid-cols-2 gap-4 text-left">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Sucursal</p>
-                  <p className="font-semibold text-gray-900 flex items-center">
-                    <HiOfficeBuilding className="w-4 h-4 mr-1" />
-                    {currentCash.branch?.name || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Balance Actual</p>
-                  <p className="font-bold text-lg text-gray-900 flex items-center">
-                    <HiCurrencyDollar className="w-4 h-4 mr-1" />
-                    {formatCurrency(currentCash.currentBalance || 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Abierta por</p>
-                  <p className="font-semibold text-gray-900 flex items-center">
-                    <HiUser className="w-4 h-4 mr-1" />
-                    {currentCash.openedBy?.name || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Fecha de Apertura</p>
-                  <p className="font-semibold text-gray-900">
-                    {new Date(currentCash.openedAt).toLocaleDateString('es-DO', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              </div>
+  // Show user's open cash registers and allow opening more
+  const userCashSection = userOpenCashRegisters.length > 0 && (
+    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+      <h3 className="text-sm font-medium text-green-800 mb-3 flex items-center">
+        <HiOfficeBuilding className="w-4 h-4 mr-2" />
+        Tus Cajas Abiertas ({userOpenCashRegisters.length})
+      </h3>
+      <div className="space-y-2">
+        {userOpenCashRegisters.map((cash) => (
+          <div key={cash.id} className="bg-white rounded p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{cash.branch?.name}</p>
+              <p className="text-xs text-gray-500">
+                Balance: {formatCurrency(cash.currentBalance || 0)} | 
+                Abierta: {new Date(cash.openedAt).toLocaleString('es-DO', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </p>
             </div>
+            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Abierta</span>
           </div>
-        </div>
+        ))}
       </div>
-    );
-  }
+      <p className="text-xs text-green-700 mt-3">
+        Puedes abrir otra caja siempre que no tengas una abierta en la misma sucursal.
+      </p>
+    </div>
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -186,6 +175,8 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
           </div>
         </div>
         
+        {userCashSection}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Sucursal */}
           <div>
@@ -274,7 +265,7 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
           {/* Botón Submit */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || Boolean(form.branchId && hasOpenCashForBranch(form.branchId))}
             className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Abriendo...' : 'Abrir Caja'}
@@ -293,7 +284,11 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
           <ul className="space-y-3 text-sm text-gray-700">
             <li className="flex items-start">
               <span className="mr-2 text-green-600 font-bold">✓</span>
-              <span>Solo puede haber una caja abierta por sucursal</span>
+              <span>Se pueden abrir múltiples cajas por sucursal</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2 text-green-600 font-bold">✓</span>
+              <span>Cada usuario solo puede tener una caja abierta por sucursal</span>
             </li>
             <li className="flex items-start">
               <span className="mr-2 text-green-600 font-bold">✓</span>

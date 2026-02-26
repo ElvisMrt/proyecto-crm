@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { reportsApi, branchesApi } from '../../services/api';
+import { reportsApi, branchesApi, inventoryApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { HiDownload, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
 import { useToast } from '../../contexts/ToastContext';
@@ -9,20 +9,24 @@ const InventoryReportTab = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [branchId, setBranchId] = useState('');
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   useEffect(() => {
     fetchBranches();
+    fetchCategories();
     fetchData();
   }, []);
 
   useEffect(() => {
     fetchData();
     setCurrentPage(1);
-  }, [branchId]);
+  }, [branchId, categoryIds]);
 
   const fetchBranches = async () => {
     try {
@@ -33,11 +37,21 @@ const InventoryReportTab = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const response = await inventoryApi.getCategories();
+      setCategories(response.data || response || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const params: any = {};
       if (branchId) params.branchId = branchId;
+      if (categoryIds.length > 0) params.categoryIds = categoryIds.join(',');
 
       const response = await reportsApi.getInventoryReport(params);
       setData(response);
@@ -164,21 +178,59 @@ const InventoryReportTab = () => {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
-          <select
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+            <select
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Todas</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </select>
+            >
+              <option value="">Todas</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Categorías</label>
+            <button
+              type="button"
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left bg-white flex items-center justify-between"
+            >
+              <span className="text-sm text-gray-700">
+                {categoryIds.length === 0 ? 'Todas' : `${categoryIds.length} seleccionada(s)`}
+              </span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showCategoryDropdown && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                <div className="p-2">
+                  {categories.map((category) => (
+                    <label key={category.id} className="flex items-center px-2 py-2 hover:bg-gray-50 cursor-pointer rounded">
+                      <input
+                        type="checkbox"
+                        checked={categoryIds.includes(category.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCategoryIds([...categoryIds, category.id]);
+                          } else {
+                            setCategoryIds(categoryIds.filter(id => id !== category.id));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{category.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Filtro</label>
@@ -200,7 +252,9 @@ const InventoryReportTab = () => {
           <button
             onClick={() => {
               setBranchId('');
+              setCategoryIds([]);
               setShowLowStockOnly(false);
+              setShowCategoryDropdown(false);
             }}
             className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
           >
@@ -212,19 +266,19 @@ const InventoryReportTab = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Total Productos</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">
             {data?.totalProducts || 0}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Productos Bajo Stock</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">
             {data?.lowStockCount || 0}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Valor Total Inventario</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data?.totalValue || 0)}

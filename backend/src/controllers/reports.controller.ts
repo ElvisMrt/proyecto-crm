@@ -1,11 +1,11 @@
 import { Response } from 'express';
-import { PrismaClient, InvoiceStatus } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 
-const prisma = new PrismaClient();
 
 export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
     let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
     let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
@@ -89,9 +89,9 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    let cashStatus = {
+    let cashStatus: { balance: number; status: 'OPEN' | 'CLOSED' } = {
       balance: 0,
-      status: 'CLOSED' as const,
+      status: 'CLOSED',
     };
 
     if (currentCash) {
@@ -107,7 +107,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
       };
     }
 
-    // Low Stock Products
+    // Low Stock Products - Solo productos que controlan stock
     const allStocks = await prisma.stock.findMany({
       where: branchFilter,
       include: {
@@ -115,13 +115,14 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
+            controlsStock: true,
           },
         },
       },
     });
 
     const lowStockProducts = allStocks
-      .filter((s) => Number(s.quantity) <= Number(s.minStock))
+      .filter((s) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock))
       .slice(0, 5)
       .map((s) => ({
         id: s.product.id,
@@ -302,6 +303,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
 export const getDailyProfit = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const date = req.query.date ? new Date(req.query.date as string) : new Date();
     const branchId = req.query.branchId as string | undefined;
 
@@ -338,7 +340,7 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
     });
 
     const costs = invoiceItems.reduce((sum, item) => {
-      const cost = item.product.cost ? Number(item.product.cost) : 0;
+      const cost = item.product?.cost ? Number(item.product.cost) : 0;
       return sum + cost * Number(item.quantity);
     }, 0);
 
@@ -381,6 +383,7 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
 
 export const getSalesReport = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
     let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
     const branchId = req.query.branchId as string | undefined;
@@ -466,6 +469,7 @@ export const getSalesReport = async (req: AuthRequest, res: Response) => {
 
 export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     const branchId = req.query.branchId as string | undefined;
     const branchFilter = branchId ? { branchId } : {};
@@ -519,7 +523,7 @@ export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
         number: inv.number,
         date: inv.issueDate,
         dueDate: inv.dueDate,
-        client: inv.client.name,
+        client: inv.client?.name || 'Cliente eliminado',
         total: Number(inv.total),
         balance: Number(inv.balance),
         status: inv.status,
@@ -541,6 +545,7 @@ export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
 
 export const getCashReport = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
     const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
     const branchId = req.query.branchId as string | undefined;
@@ -632,6 +637,7 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
 
 export const getInventoryReport = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
     const branchFilter = branchId ? { branchId } : {};
 
@@ -642,8 +648,10 @@ export const getInventoryReport = async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
+            code: true,
             cost: true,
             salePrice: true,
+            controlsStock: true,
           },
         },
         branch: {
@@ -652,7 +660,7 @@ export const getInventoryReport = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const lowStock = stocks.filter((s) => Number(s.quantity) <= Number(s.minStock));
+    const lowStock = stocks.filter((s) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock));
 
     const totalValue = stocks.reduce((sum, s) => {
       const cost = s.product.cost ? Number(s.product.cost) : 0;
@@ -683,6 +691,202 @@ export const getInventoryReport = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error fetching inventory report',
+      },
+    });
+  }
+};
+
+export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+
+    const suppliers = await prisma.supplier.findMany({
+      include: {
+        invoices: {
+          select: {
+            total: true,
+            paid: true,
+            balance: true,
+            status: true,
+            dueDate: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const now = new Date();
+    const suppliersWithFinancials = suppliers.map((supplier) => {
+      const totalPurchased = supplier.invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+      const totalPaid = supplier.invoices.reduce((sum, inv) => sum + Number(inv.paid), 0);
+      const totalBalance = supplier.invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+      const overdueInvoices = supplier.invoices.filter(
+        (inv) => Number(inv.balance) > 0 && inv.dueDate && inv.dueDate < now
+      ).length;
+
+      return {
+        id: supplier.id,
+        code: supplier.code,
+        name: supplier.name,
+        totalPurchased,
+        totalPaid,
+        totalBalance,
+        invoicesCount: supplier.invoices.length,
+        overdueInvoices,
+        isActive: supplier.isActive,
+      };
+    });
+
+    const summary = {
+      totalSuppliers: suppliers.length,
+      activeSuppliers: suppliers.filter((s) => s.isActive).length,
+      totalDebt: suppliersWithFinancials.reduce((sum, s) => sum + s.totalBalance, 0),
+      totalOverdue: suppliersWithFinancials
+        .filter((s) => s.overdueInvoices > 0)
+        .reduce((sum, s) => sum + s.totalBalance, 0),
+    };
+
+    res.json({
+      data: suppliersWithFinancials,
+      summary,
+    });
+  } catch (error) {
+    console.error('Get suppliers report error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching suppliers report',
+      },
+    });
+  }
+};
+
+export const getPurchasesReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    const status = req.query.status as string | undefined;
+
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    const where: any = {
+      purchaseDate: { gte: startDate, lte: endDate },
+    };
+
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+
+    const purchases = await prisma.purchase.findMany({
+      where,
+      include: {
+        supplier: { select: { name: true } },
+      },
+      orderBy: { purchaseDate: 'desc' },
+    });
+
+    const summary = {
+      totalPurchases: purchases.length,
+      totalAmount: purchases.reduce((sum, p) => sum + Number(p.total), 0),
+      pending: purchases.filter((p) => p.status === 'PENDING').length,
+      received: purchases.filter((p) => p.status === 'RECEIVED').length,
+    };
+
+    res.json({
+      data: purchases.map((p) => ({
+        id: p.id,
+        code: p.code,
+        supplier: p.supplier?.name || 'N/A',
+        purchaseDate: p.purchaseDate.toISOString(),
+        status: p.status,
+        total: Number(p.total),
+        hasInvoice: false, // Se puede mejorar con una query adicional si es necesario
+      })),
+      summary,
+    });
+  } catch (error) {
+    console.error('Get purchases report error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching purchases report',
+      },
+    });
+  }
+};
+
+export const getPayablesReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    const now = new Date();
+
+    const invoices = await prisma.supplierInvoice.findMany({
+      where: {
+        balance: { gt: 0 },
+        status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+      },
+      include: {
+        supplier: { select: { name: true } },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const aging = {
+      '0-30': 0,
+      '31-60': 0,
+      '61-90': 0,
+      '90+': 0,
+    };
+
+    let totalPayable = 0;
+    let totalOverdue = 0;
+
+    const invoicesWithAging = invoices.map((inv) => {
+      const balance = Number(inv.balance);
+      totalPayable += balance;
+
+      let daysOverdue: number | null = null;
+      if (inv.dueDate && inv.dueDate < now) {
+        daysOverdue = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        totalOverdue += balance;
+
+        if (daysOverdue <= 30) aging['0-30'] += balance;
+        else if (daysOverdue <= 60) aging['31-60'] += balance;
+        else if (daysOverdue <= 90) aging['61-90'] += balance;
+        else aging['90+'] += balance;
+      }
+
+      return {
+        id: inv.id,
+        code: inv.code,
+        supplier: inv.supplier?.name || 'N/A',
+        invoiceDate: inv.invoiceDate.toISOString(),
+        dueDate: inv.dueDate.toISOString(),
+        total: Number(inv.total),
+        paid: Number(inv.paid),
+        balance,
+        status: inv.status,
+        daysOverdue,
+      };
+    });
+
+    res.json({
+      invoices: invoicesWithAging,
+      summary: {
+        totalPayable,
+        totalOverdue,
+        invoicesCount: invoices.length,
+        aging,
+      },
+    });
+  } catch (error) {
+    console.error('Get payables report error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching payables report',
       },
     });
   }

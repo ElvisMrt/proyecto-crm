@@ -1,10 +1,27 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+
+// Helper function to generate branch code from name
+const generateBranchCode = (name: string): string => {
+  // Remove accents and convert to uppercase
+  const normalized = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  
+  // Get first letters of each word
+  const words = normalized.split(/\s+/);
+  const code = words.map(word => word[0]).join('');
+  
+  // Add random number to ensure uniqueness
+  const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  
+  return `${code}${randomSuffix}`;
+};
 
 // Schemas
 const updateCompanySchema = z.object({
@@ -51,6 +68,7 @@ const updateUserSchema = z.object({
 // ============================================
 export const getCompany = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     // Get the first active tenant or create a default one
     let tenant = await prisma.tenant.findFirst({
       where: { status: 'ACTIVE' },
@@ -94,6 +112,7 @@ export const getCompany = async (req: AuthRequest, res: Response) => {
 
 export const updateCompany = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = updateCompanySchema.parse(req.body);
     
     // Get the first active tenant or create one
@@ -168,6 +187,7 @@ export const updateCompany = async (req: AuthRequest, res: Response) => {
 // ============================================
 export const getBranches = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branches = await prisma.branch.findMany({
       orderBy: { name: 'asc' },
     });
@@ -188,6 +208,7 @@ export const getBranches = async (req: AuthRequest, res: Response) => {
 
 export const getBranch = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const branch = await prisma.branch.findUnique({
@@ -217,15 +238,23 @@ export const getBranch = async (req: AuthRequest, res: Response) => {
 
 export const createBranch = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = createBranchSchema.parse(req.body);
 
+    // Generate automatic code if not provided
+    const code = data.code || generateBranchCode(data.name);
+
     const branch = await prisma.branch.create({
-      data,
+      data: {
+        ...data,
+        code,
+      },
     });
 
     res.status(201).json({
       id: branch.id,
       name: branch.name,
+      code: branch.code,
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -249,6 +278,7 @@ export const createBranch = async (req: AuthRequest, res: Response) => {
 
 export const updateBranch = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = createBranchSchema.partial().parse(req.body);
 
@@ -260,13 +290,27 @@ export const updateBranch = async (req: AuthRequest, res: Response) => {
     res.json({
       id: branch.id,
       name: branch.name,
+      code: branch.code,
+      address: branch.address,
+      phone: branch.phone,
+      email: branch.email,
+      isActive: branch.isActive,
     });
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Datos inválidos',
+          details: error.errors,
+        },
+      });
+    }
     if (error.code === 'P2025') {
       return res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Branch not found',
+          message: 'Sucursal no encontrada',
         },
       });
     }
@@ -274,7 +318,7 @@ export const updateBranch = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Error updating branch',
+        message: 'Error al actualizar sucursal',
       },
     });
   }
@@ -282,6 +326,7 @@ export const updateBranch = async (req: AuthRequest, res: Response) => {
 
 export const deleteBranch = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     // Check if branch has associated data
@@ -292,15 +337,11 @@ export const deleteBranch = async (req: AuthRequest, res: Response) => {
     ]);
 
     if (users > 0 || cashRegisters > 0 || invoices > 0) {
-      // Instead of deleting, deactivate the branch
-      const branch = await prisma.branch.update({
-        where: { id },
-        data: { isActive: false },
-      });
-
-      return res.json({
-        message: 'Branch deactivated successfully (has associated data)',
-        data: branch,
+      return res.status(400).json({
+        error: {
+          code: 'BRANCH_HAS_DATA',
+          message: `No se puede eliminar la sucursal. Tiene ${users} usuarios, ${cashRegisters} cajas y ${invoices} facturas asociadas.`,
+        },
       });
     }
 
@@ -310,14 +351,14 @@ export const deleteBranch = async (req: AuthRequest, res: Response) => {
     });
 
     res.json({
-      message: 'Branch deleted successfully',
+      message: 'Sucursal eliminada permanentemente',
     });
   } catch (error: any) {
     if (error.code === 'P2025') {
       return res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Branch not found',
+          message: 'Sucursal no encontrada',
         },
       });
     }
@@ -325,7 +366,7 @@ export const deleteBranch = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Error deleting branch',
+        message: 'Error al eliminar sucursal',
       },
     });
   }
@@ -336,6 +377,7 @@ export const deleteBranch = async (req: AuthRequest, res: Response) => {
 // ============================================
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -374,6 +416,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 
 export const getUser = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const user = await prisma.user.findUnique({
@@ -413,6 +456,7 @@ export const getUser = async (req: AuthRequest, res: Response) => {
 
 export const createUser = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = createUserSchema.parse(req.body);
 
     // Check if email already exists
@@ -481,6 +525,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
 export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = updateUserSchema.parse(req.body);
 
@@ -544,6 +589,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
 export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const { isActive } = req.body;
 
@@ -578,42 +624,25 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
 
 export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
-    // Check if user has associated data
-    const [invoices, payments, cashMovements] = await Promise.all([
-      prisma.invoice.count({ where: { userId: id } }),
-      prisma.payment.count({ where: { userId: id } }),
-      prisma.cashMovement.count({ where: { userId: id } }),
-    ]);
-
-    if (invoices > 0 || payments > 0 || cashMovements > 0) {
-      // Instead of deleting, deactivate the user
-      const user = await prisma.user.update({
-        where: { id },
-        data: { isActive: false },
-      });
-
-      return res.json({
-        message: 'User deactivated successfully (has associated data)',
-        data: user,
-      });
-    }
-
-    // Safe to delete if no associated data
-    await prisma.user.delete({
+    // Always deactivate (soft delete) - never physically delete
+    const user = await prisma.user.update({
       where: { id },
+      data: { isActive: false },
     });
 
     res.json({
-      message: 'User deleted successfully',
+      message: 'Usuario desactivado exitosamente',
+      data: user,
     });
   } catch (error: any) {
     if (error.code === 'P2025') {
       return res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'User not found',
+          message: 'Usuario no encontrado',
         },
       });
     }
@@ -621,7 +650,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Error deleting user',
+        message: 'Error al desactivar usuario',
       },
     });
   }
@@ -632,6 +661,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 // ============================================
 export const getRoles = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     // Return predefined roles with their permissions
     const roles = [
       {
@@ -674,6 +704,7 @@ export const getRoles = async (req: AuthRequest, res: Response) => {
 
 export const getPermissions = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     // Return all permissions grouped by module
     const { PERMISSIONS } = require('../middleware/permissions.middleware');
     

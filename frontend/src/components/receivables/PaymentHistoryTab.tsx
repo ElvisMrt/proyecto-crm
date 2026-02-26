@@ -81,11 +81,14 @@ const PaymentHistoryTab = ({ branchId }: PaymentHistoryTabProps) => {
   useEffect(() => {
     if (clientSearchTerm.length >= 2) {
       fetchClients();
-    } else {
+    } else if (clientSearchTerm.length === 0 && showClientDropdown) {
+      // Cargar todos los clientes al hacer click sin escribir
+      fetchClients();
+    } else if (clientSearchTerm.length < 2 && clientSearchTerm.length > 0) {
       setClients([]);
       setShowClientDropdown(false);
     }
-  }, [clientSearchTerm]);
+  }, [clientSearchTerm, showClientDropdown]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -161,7 +164,7 @@ const PaymentHistoryTab = ({ branchId }: PaymentHistoryTabProps) => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Buscar cliente por nombre..."
+                placeholder="Haz click para ver clientes o escribe para buscar..."
                 value={clientSearchTerm}
                 onChange={(e) => {
                   setClientSearchTerm(e.target.value);
@@ -169,11 +172,8 @@ const PaymentHistoryTab = ({ branchId }: PaymentHistoryTabProps) => {
                     handleClearClient();
                   }
                 }}
-                onFocus={() => {
-                  if (clientSearchTerm.length >= 2) {
-                    setShowClientDropdown(true);
-                  }
-                }}
+                onFocus={() => setShowClientDropdown(true)}
+                onClick={() => setShowClientDropdown(true)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
               {filters.clientId && (

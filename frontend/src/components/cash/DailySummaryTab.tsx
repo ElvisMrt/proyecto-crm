@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { cashApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
-import { HiDocumentDownload, HiTable, HiCurrencyDollar, HiCreditCard, HiPlusCircle, HiMinusCircle, HiChartBar } from 'react-icons/hi';
+import { 
+  HiDocumentDownload, 
+  HiTable, 
+  HiCurrencyDollar, 
+  HiCreditCard, 
+  HiPlusCircle, 
+  HiMinusCircle, 
+  HiChartBar 
+} from 'react-icons/hi';
+import { DashboardCard, DashboardGrid } from '../DashboardCard';
 
 const DailySummaryTab = () => {
   const [summary, setSummary] = useState<any>(null);
@@ -171,87 +180,64 @@ const DailySummaryTab = () => {
       </div>
 
       {/* Resumen General */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Ventas</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {formatCurrency(summary.salesTotal || 0)}
-              </p>
-            </div>
-            <HiCurrencyDollar className="w-10 h-10 text-gray-400" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pagos Recibidos</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {formatCurrency(summary.paymentsTotal || 0)}
-              </p>
-            </div>
-            <HiCreditCard className="w-10 h-10 text-gray-400" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Entradas Manuales</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {formatCurrency(summary.manualEntriesTotal || 0)}
-              </p>
-            </div>
-            <HiPlusCircle className="w-10 h-10 text-gray-400" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Salidas Manuales</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {formatCurrency(summary.manualExitsTotal || 0)}
-              </p>
-            </div>
-            <HiMinusCircle className="w-10 h-10 text-gray-400" />
-          </div>
-        </div>
-      </div>
+      <DashboardGrid columns={4}>
+        <DashboardCard
+          title="Ventas"
+          value={formatCurrency(summary.salesTotal || 0)}
+          icon={<HiCurrencyDollar className="w-6 h-6" />}
+          iconBgColor="bg-blue-100"
+          iconColor="text-blue-600"
+        />
+        <DashboardCard
+          title="Pagos Recibidos"
+          value={formatCurrency(summary.paymentsTotal || 0)}
+          icon={<HiCreditCard className="w-6 h-6" />}
+          iconBgColor="bg-green-100"
+          iconColor="text-green-600"
+        />
+        <DashboardCard
+          title="Entradas Manuales"
+          value={formatCurrency(summary.manualEntriesTotal || 0)}
+          icon={<HiPlusCircle className="w-6 h-6" />}
+          iconBgColor="bg-purple-100"
+          iconColor="text-purple-600"
+        />
+        <DashboardCard
+          title="Salidas Manuales"
+          value={formatCurrency(summary.manualExitsTotal || 0)}
+          icon={<HiMinusCircle className="w-6 h-6" />}
+          iconBgColor="bg-red-100"
+          iconColor="text-red-600"
+        />
+      </DashboardGrid>
 
       {/* Balance Neto */}
-      <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600">Balance Neto del Día</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">
-              {formatCurrency(summary.netTotal || 0)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {summary.branch || 'Todas las sucursales'}
-            </p>
-          </div>
-          <HiChartBar className="w-10 h-10 text-gray-400" />
-        </div>
-      </div>
+      <DashboardCard
+        title="Balance Neto del Día"
+        value={formatCurrency(summary.netTotal || 0)}
+        subtitle={summary.branch || 'Todas las sucursales'}
+        icon={<HiChartBar className="w-6 h-6" />}
+        iconBgColor={summary.netTotal >= 0 ? "bg-green-100" : "bg-red-100"}
+        iconColor={summary.netTotal >= 0 ? "text-green-600" : "text-red-600"}
+      />
 
       {/* Aperturas y Cierres */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Aperturas</h3>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(summary.openingTotal || 0)}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Cierres</h3>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(summary.closingTotal || 0)}
-          </p>
-        </div>
-      </div>
+      <DashboardGrid columns={2}>
+        <DashboardCard
+          title="Aperturas"
+          value={formatCurrency(summary.openingTotal || 0)}
+          icon={<HiPlusCircle className="w-6 h-6" />}
+          iconBgColor="bg-blue-100"
+          iconColor="text-blue-600"
+        />
+        <DashboardCard
+          title="Cierres"
+          value={formatCurrency(summary.closingTotal || 0)}
+          icon={<HiMinusCircle className="w-6 h-6" />}
+          iconBgColor="bg-gray-100"
+          iconColor="text-gray-600"
+        />
+      </DashboardGrid>
 
       {/* Gráfico de Ingresos vs Egresos */}
       <div className="bg-white rounded-lg shadow p-6">

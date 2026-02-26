@@ -1,9 +1,8 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -21,6 +20,7 @@ const createNoteSchema = z.object({
 
 export const getTasks = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -140,6 +140,7 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
 
 export const getTask = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const task = await prisma.task.findUnique({
@@ -179,6 +180,7 @@ export const getTask = async (req: AuthRequest, res: Response) => {
 
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -243,6 +245,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
 export const updateTask = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = createTaskSchema.partial().parse(req.body);
 
@@ -285,6 +288,7 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
 
 export const completeTask = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const task = await prisma.task.update({
@@ -321,6 +325,7 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
 
 export const getOverdueTasks = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
 
     const where: any = {
@@ -378,6 +383,7 @@ export const getOverdueTasks = async (req: AuthRequest, res: Response) => {
 
 export const getClientHistory = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { clientId } = req.params;
 
     const client = await prisma.client.findUnique({
@@ -492,6 +498,7 @@ export const getClientHistory = async (req: AuthRequest, res: Response) => {
 
 export const getNotes = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { clientId } = req.params;
 
     // For now, we'll use tasks with a specific type as notes
@@ -532,6 +539,7 @@ export const getNotes = async (req: AuthRequest, res: Response) => {
 
 export const createNote = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -581,6 +589,7 @@ export const createNote = async (req: AuthRequest, res: Response) => {
 
 export const getCRMSummary = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     
     const wherePending: any = {
@@ -651,6 +660,7 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
 
 export const getReminders = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -709,6 +719,7 @@ export const getReminders = async (req: AuthRequest, res: Response) => {
 
 export const deleteTask = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     await prisma.task.delete({
@@ -740,6 +751,7 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
 
 export const getLateCollections = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const now = new Date();
     
     const invoices = await prisma.invoice.findMany({

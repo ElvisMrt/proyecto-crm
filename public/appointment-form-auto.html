@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Citas - Demo Automático</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .crm-appointment-form {
+            font-family: inherit;
+        }
+        .crm-loading {
+            display: none;
+        }
+        .crm-success {
+            display: none;
+        }
+        .crm-error {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4">
+    <div class="crm-appointment-form max-w-md mx-auto">
+        <!-- Modo Demo Indicator -->
+        <div id="demoIndicator" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-center">
+            <p class="text-sm text-yellow-800">
+                <span class="inline-block w-2 h-2 bg-yellow-400 rounded-full mr-2"></span>
+                Modo Demo: Funcionando sin conexión al servidor
+            </p>
+        </div>
+        
+        <!-- Botón de Demo -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-center">
+            <button id="autoDemoBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm">
+                🚀 Ejecutar Demo Automático
+            </button>
+            <p class="text-xs text-blue-700 mt-1">Llenará y enviará el formulario automáticamente</p>
+        </div>
+        
+        <!-- Form -->
+        <div id="formContainer" class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">Agendar Cita</h2>
+            
+            <form id="appointmentForm" class="space-y-4">
+                <!-- Nombre -->
+                <div>
+                    <label for="clientName" class="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre Completo *
+                    </label>
+                    <input type="text" id="clientName" name="clientName" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label for="clientEmail" class="block text-sm font-medium text-gray-700 mb-1">
+                        Correo Electrónico
+                    </label>
+                    <input type="email" id="clientEmail" name="clientEmail"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Teléfono -->
+                <div>
+                    <label for="clientPhone" class="block text-sm font-medium text-gray-700 mb-1">
+                        Teléfono *
+                    </label>
+                    <input type="tel" id="clientPhone" name="clientPhone" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Fecha y Hora -->
+                <div>
+                    <label for="appointmentDate" class="block text-sm font-medium text-gray-700 mb-1">
+                        Fecha y Hora *
+                    </label>
+                    <input type="datetime-local" id="appointmentDate" name="appointmentDate" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Duración -->
+                <div>
+                    <label for="duration" class="block text-sm font-medium text-gray-700 mb-1">
+                        Duración
+                    </label>
+                    <select id="duration" name="duration"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="30">30 minutos</option>
+                        <option value="60" selected>60 minutos</option>
+                        <option value="90">90 minutos</option>
+                        <option value="120">120 minutos</option>
+                    </select>
+                </div>
+
+                <!-- Sucursal -->
+                <div>
+                    <label for="branchId" class="block text-sm font-medium text-gray-700 mb-1">
+                        Sucursal
+                    </label>
+                    <select id="branchId" name="branchId"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Seleccionar sucursal</option>
+                    </select>
+                </div>
+
+                <!-- Notas -->
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">
+                        Notas adicionales
+                    </label>
+                    <textarea id="notes" name="notes" rows="3"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+
+                <!-- Botón Submit -->
+                <button type="submit" 
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                    Agendar Cita
+                </button>
+            </form>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingContainer" class="crm-loading bg-white rounded-lg shadow-md p-6 text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-gray-600">Agendando cita...</p>
+        </div>
+
+        <!-- Success -->
+        <div id="successContainer" class="crm-success bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+            <div class="text-green-600 mb-4">
+                <svg class="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-green-800 mb-2">¡Cita Agendada Exitosamente!</h3>
+            <p class="text-green-700 mb-4">Nos pondremos en contacto contigo pronto para confirmar los detalles.</p>
+            <button onclick="resetForm()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors">
+                Agendar Otra Cita
+            </button>
+        </div>
+
+        <!-- Error -->
+        <div id="errorContainer" class="crm-error bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <div class="text-red-600 mb-4">
+                <svg class="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-red-800 mb-2">Error al Agendar Cita</h3>
+            <p class="text-red-700 mb-4" id="errorMessage">Ocurrió un error al procesar tu solicitud. Por favor intenta nuevamente.</p>
+            <button onclick="resetForm()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">
+                Intentar Nuevamente
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Configuración
+        let API_BASE_URL = 'http://localhost:3001/api/public';
+        let TENANT_ID = 'default';
+
+        // Obtener configuración de URL
+        function getConfigFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiUrl = urlParams.get('api_url');
+            const tenant = urlParams.get('tenant');
+            
+            if (apiUrl) API_BASE_URL = apiUrl;
+            if (tenant) TENANT_ID = tenant;
+        }
+
+        // Cargar sucursales
+        async function loadBranches() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/appointments/embed-config`, {
+                    headers: {
+                        'X-Tenant-ID': TENANT_ID || 'default'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const branchSelect = document.getElementById('branchId');
+                    
+                    data.branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.textContent = branch.name;
+                        branchSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading branches:', error);
+                // Modo demo: agregar sucursales de ejemplo
+                const branchSelect = document.getElementById('branchId');
+                const demoBranches = [
+                    { id: 'branch-1', name: 'Sucursal Principal' },
+                    { id: 'branch-2', name: 'Sucursal Secundaria' },
+                    { id: 'branch-3', name: 'Sucursal Norte' }
+                ];
+                
+                demoBranches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = branch.name;
+                    branchSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Enviar formulario
+        async function submitForm(formData) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/appointments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Tenant-ID': TENANT_ID || 'default'
+                    },
+                    body: JSON.stringify({
+                        ...formData,
+                        source: 'WEB_FORM'
+                    })
+                });
+
+                if (response.ok) {
+                    showSuccess();
+                } else {
+                    const error = await response.json();
+                    showError(error.error?.message || 'Error desconocido');
+                }
+            } catch (error) {
+                console.error('Error de conexión:', error);
+                // Modo demo: simular envío exitoso
+                console.log('Modo demo: Simulando envío de cita', formData);
+                
+                // Guardar en localStorage para demo
+                const appointments = JSON.parse(localStorage.getItem('demo_appointments') || '[]');
+                appointments.push({
+                    ...formData,
+                    id: 'demo-' + Date.now(),
+                    createdAt: new Date().toISOString(),
+                    status: 'PENDING'
+                });
+                localStorage.setItem('demo_appointments', JSON.stringify(appointments));
+                
+                showSuccess();
+            }
+        }
+
+        // Estados del formulario
+        function showLoading() {
+            document.getElementById('formContainer').style.display = 'none';
+            document.getElementById('loadingContainer').style.display = 'block';
+            document.getElementById('successContainer').style.display = 'none';
+            document.getElementById('errorContainer').style.display = 'none';
+        }
+
+        function showSuccess() {
+            document.getElementById('formContainer').style.display = 'none';
+            document.getElementById('loadingContainer').style.display = 'none';
+            document.getElementById('successContainer').style.display = 'block';
+            document.getElementById('errorContainer').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('formContainer').style.display = 'none';
+            document.getElementById('loadingContainer').style.display = 'none';
+            document.getElementById('successContainer').style.display = 'none';
+            document.getElementById('errorContainer').style.display = 'block';
+        }
+
+        function resetForm() {
+            document.getElementById('formContainer').style.display = 'block';
+            document.getElementById('loadingContainer').style.display = 'none';
+            document.getElementById('successContainer').style.display = 'none';
+            document.getElementById('errorContainer').style.display = 'none';
+            document.getElementById('appointmentForm').reset();
+        }
+
+        // Demo automático
+        function runAutoDemo() {
+            console.log('🚀 Iniciando demo automático...');
+            
+            // Datos de demo
+            const demoData = {
+                clientName: 'Juan Pérez Demo',
+                clientEmail: 'juan.perez@demo.com',
+                clientPhone: '809-123-4567',
+                duration: '60',
+                notes: 'Cita de prueba generada automáticamente en modo demo'
+            };
+
+            // Fecha y hora (mañana a las 10 AM)
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(10, 0, 0, 0);
+            demoData.appointmentDate = tomorrow.toISOString().slice(0, 16);
+
+            // Llenar campos con animación
+            Object.keys(demoData).forEach((fieldId, index) => {
+                setTimeout(() => {
+                    const field = document.getElementById(fieldId);
+                    if (field) {
+                        field.value = demoData[fieldId];
+                        console.log(`✅ ${fieldId}: ${demoData[fieldId]}`);
+                    }
+                }, index * 300);
+            });
+
+            // Seleccionar sucursal
+            setTimeout(() => {
+                const branchField = document.getElementById('branchId');
+                if (branchField && branchField.options.length > 1) {
+                    branchField.selectedIndex = 1;
+                    console.log(`✅ Sucursal: ${branchField.options[branchField.selectedIndex].text}`);
+                }
+            }, Object.keys(demoData).length * 300);
+
+            // Enviar formulario
+            setTimeout(() => {
+                console.log('📤 Enviando formulario...');
+                document.getElementById('appointmentForm').dispatchEvent(new Event('submit'));
+            }, (Object.keys(demoData).length + 1) * 300 + 1000);
+        }
+
+        // Event listeners
+        document.getElementById('appointmentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                clientName: document.getElementById('clientName').value,
+                clientEmail: document.getElementById('clientEmail').value,
+                clientPhone: document.getElementById('clientPhone').value,
+                appointmentDate: document.getElementById('appointmentDate').value,
+                duration: document.getElementById('duration').value,
+                branchId: document.getElementById('branchId').value,
+                notes: document.getElementById('notes').value
+            };
+
+            showLoading();
+            await submitForm(formData);
+        });
+
+        document.getElementById('autoDemoBtn').addEventListener('click', runAutoDemo);
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            getConfigFromUrl();
+            
+            // Verificar si estamos en modo demo
+            checkDemoMode();
+            
+            loadBranches();
+            
+            // Establecer fecha mínima como ahora
+            const dateInput = document.getElementById('appointmentDate');
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateInput.min = now.toISOString().slice(0, 16);
+        });
+
+        // Verificar si estamos en modo demo
+        async function checkDemoMode() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/health`, {
+                    method: 'GET',
+                    timeout: 3000
+                });
+                
+                if (response.ok) {
+                    // Hay conexión, ocultar indicador demo
+                    document.getElementById('demoIndicator').style.display = 'none';
+                    console.log('✅ Conexión con servidor establecida');
+                }
+            } catch (error) {
+                // No hay conexión, mostrar modo demo
+                console.log('🔧 Modo demo activado - sin conexión al servidor');
+                document.getElementById('demoIndicator').style.display = 'block';
+            }
+        }
+
+        // Función para uso externo
+        window.CRMAppointmentForm = {
+            setConfig: function(config) {
+                if (config.apiUrl) API_BASE_URL = config.apiUrl;
+                if (config.tenantId) TENANT_ID = config.tenantId;
+                loadBranches();
+            },
+            resetForm: resetForm,
+            runDemo: runAutoDemo
+        };
+    </script>
+</body>
+</html>

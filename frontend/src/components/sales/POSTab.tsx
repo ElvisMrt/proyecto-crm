@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HiSearch } from 'react-icons/hi';
 import { printInvoice, printThermalTicket } from '../../utils/invoicePrint';
+import { useNFCSearch } from '../../hooks/useNFC';
 // WhatsApp module disabled
 // import { sendInvoiceWhatsApp } from '../../utils/whatsappSender';
 
@@ -15,6 +16,7 @@ interface Product {
   stock?: number;
   minStock?: number;
   imageUrl?: string;
+  controlsStock?: boolean;
 }
 
 interface CartItem {
@@ -45,6 +47,21 @@ const POSTab = () => {
   const [amountReceived, setAmountReceived] = useState<number>(0);
   const [generalDiscount, setGeneralDiscount] = useState<number>(0);
   const [saleResult, setSaleResult] = useState<any>(null); // Store sale result for success screen
+  const [nfcEnabled, setNfcEnabled] = useState(true);
+
+  // NFC Support for product search
+  const { isSupported: nfcSupported, isReading: nfcReading } = useNFCSearch(
+    (code) => {
+      setSearch(code);
+      // Auto-add product if exact match
+      const product = products.find(p => p.code.toLowerCase() === code.toLowerCase());
+      if (product) {
+        addToCart(product);
+        showToast(`Producto agregado: ${product.name}`, 'success');
+      }
+    },
+    nfcEnabled
+  );
 
   // Debounce search input
   useEffect(() => {
@@ -109,6 +126,16 @@ const POSTab = () => {
       // Fetch stock information for each product
       const productsWithStock = await Promise.all(
         (response.data || []).map(async (product: any) => {
+          // Solo procesar productos que controlan stock
+          if (!product.controlsStock) {
+            return {
+              ...product,
+              stock: 0,
+              minStock: 0,
+              controlsStock: false,
+            };
+          }
+          
           try {
             const stockResponse = await inventoryApi.getStock({ 
               productId: product.id,
@@ -116,11 +143,11 @@ const POSTab = () => {
             });
             const stocks = stockResponse.data || [];
             const totalStock = stocks.reduce((sum: number, stock: any) => 
-              sum + Number(stock.quantity || 0), 0
+              sum + Math.max(0, Number(stock.quantity || 0)), 0 // No mostrar stock negativo
             );
             return {
               ...product,
-              stock: totalStock,
+              stock: Math.max(0, totalStock), // Asegurar que no sea negativo
               minStock: product.minStock || 0,
             };
           } catch (error) {
@@ -397,37 +424,37 @@ const POSTab = () => {
     const amountReceived = saleResult.amountReceived || invoice.total;
 
     return (
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Venta Realizada Exitosamente!</h2>
-          <p className="text-gray-600">Factura: {invoice.number}</p>
-          {invoice.ncf && <p className="text-gray-600">NCF: {invoice.ncf}</p>}
+          <h2 className="text-2xl font-bold text-[#000000] mb-2">¡Venta Realizada Exitosamente!</h2>
+          <p className="text-[#1f2937]">Factura: {invoice.number}</p>
+          {invoice.ncf && <p className="text-[#1f2937]">NCF: {invoice.ncf}</p>}
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-6 mb-6">
+        <div className="bg-gray-50 rounded-xl p-6 mb-6">
           <div className="space-y-3">
             <div className="flex justify-between text-lg">
-              <span className="font-medium text-gray-700">Total:</span>
-              <span className="font-bold text-gray-900">
+              <span className="font-medium text-[#1f2937]">Total:</span>
+              <span className="font-bold text-[#000000]">
                 RD$ {Number(invoice.total).toLocaleString()}
               </span>
             </div>
             {invoice.paymentMethod === 'CASH' && (
               <>
                 <div className="flex justify-between text-lg">
-                  <span className="font-medium text-gray-700">Monto Recibido:</span>
-                  <span className="font-bold text-gray-900">
+                  <span className="font-medium text-[#1f2937]">Monto Recibido:</span>
+                  <span className="font-bold text-[#000000]">
                     RD$ {Number(amountReceived).toLocaleString()}
                   </span>
                 </div>
                 {change > 0 && (
                   <div className="flex justify-between text-xl border-t pt-3 mt-3">
-                    <span className="font-bold text-gray-900">Vuelto:</span>
+                    <span className="font-bold text-[#000000]">Vuelto:</span>
                     <span className="font-bold text-green-600">
                       RD$ {change.toLocaleString()}
                     </span>
@@ -441,7 +468,7 @@ const POSTab = () => {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={() => handlePrint('invoice')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-[#1D79C4] text-white rounded-lg hover:bg-[#1565b0] font-medium flex items-center justify-center gap-2 text-sm"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -450,7 +477,7 @@ const POSTab = () => {
           </button>
           <button
             onClick={() => handlePrint('thermal')}
-            className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2 text-sm"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -471,7 +498,7 @@ const POSTab = () => {
           )} */}
           <button
             onClick={handleNewSale}
-            className="px-6 py-3 bg-gray-600 text-white rounded-md hover:bg-gray-700 font-medium flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium flex items-center justify-center gap-2 text-sm"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -484,22 +511,36 @@ const POSTab = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Atajos de teclado - Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-        <strong>Atajos de teclado:</strong> F1 (Nueva venta) | F2 (Buscar) | Enter (Cobrar) | Esc (Cancelar)
+    <div className="space-y-4">
+      {/* Atajos de teclado y NFC - Info */}
+      <div className="flex gap-2">
+        <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+          <strong>Atajos de teclado:</strong> F1 (Nueva venta) | F2 (Buscar) | Enter (Cobrar) | Esc (Cancelar)
+        </div>
+        {nfcSupported && (
+          <div className={`px-4 py-3 rounded-lg border text-xs font-semibold flex items-center gap-2 ${
+            nfcReading 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : 'bg-gray-50 border-gray-200 text-gray-600'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${
+              nfcReading ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+            }`}></span>
+            NFC {nfcReading ? 'Activo' : 'Inactivo'}
+          </div>
+        )}
       </div>
 
       {/* Estado de Caja */}
       {paymentMethod === 'CASH' && (
-        <div className={`rounded-lg shadow p-4 ${cashStatus ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+        <div className={`rounded-xl shadow-sm p-4 ${cashStatus ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-gray-900">
+              <p className="font-semibold text-[#000000]">
                 Estado de Caja: {cashStatus ? 'Abierta' : 'Cerrada'}
               </p>
               {cashStatus && (
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-xs text-[#1f2937] mt-1">
                   Sucursal: {cashStatus.branch?.name || '-'} | 
                   Inicial: {new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(Number(cashStatus.initialAmount || 0))}
                 </p>
@@ -508,7 +549,7 @@ const POSTab = () => {
             {!cashStatus && (
               <button
                 onClick={() => window.location.href = '/cash'}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
               >
                 Abrir Caja
               </button>
@@ -517,10 +558,10 @@ const POSTab = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Productos */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">Productos</h2>
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-bold text-[#000000] mb-4">Productos</h2>
           <div className="relative">
             <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -528,34 +569,36 @@ const POSTab = () => {
               placeholder="Buscar producto por código o nombre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg mb-4 text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
               autoFocus
             />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
           {filteredProducts.map((product) => {
-            // Determinar color según disponibilidad
+            // Determinar color según disponibilidad - Solo para productos que controlan stock
             const stock = product.stock || 0;
             const minStock = product.minStock || 0;
             let borderColor = 'border-gray-200';
             let bgColor = 'bg-white';
             let availabilityColor = '';
             
-            if (stock === 0) {
-              // Sin stock - Rojo
-              borderColor = 'border-red-300';
-              bgColor = 'bg-red-50';
-              availabilityColor = 'text-red-600';
-            } else if (stock <= minStock) {
-              // Stock bajo - Amarillo/Naranja
-              borderColor = 'border-yellow-300';
-              bgColor = 'bg-yellow-50';
-              availabilityColor = 'text-yellow-600';
-            } else {
-              // Stock disponible - Verde
-              borderColor = 'border-green-300';
-              bgColor = 'bg-green-50';
-              availabilityColor = 'text-green-600';
+            if (product.controlsStock) {
+              if (stock === 0) {
+                // Sin stock - Rojo
+                borderColor = 'border-red-300';
+                bgColor = 'bg-red-50';
+                availabilityColor = 'text-red-600';
+              } else if (stock <= minStock) {
+                // Stock bajo - Amarillo/Naranja
+                borderColor = 'border-yellow-300';
+                bgColor = 'bg-yellow-50';
+                availabilityColor = 'text-yellow-600';
+              } else {
+                // Stock disponible - Verde
+                borderColor = 'border-green-300';
+                bgColor = 'bg-green-50';
+                availabilityColor = 'text-green-600';
+              }
             }
             
             return (
@@ -564,8 +607,10 @@ const POSTab = () => {
                 onClick={() => addToCart(product)}
                 className={`p-4 border-2 ${borderColor} ${bgColor} rounded-lg hover:shadow-md transition-all text-left flex flex-col relative`}
               >
-                {/* Indicador de disponibilidad */}
-                <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${stock === 0 ? 'bg-red-500' : stock <= minStock ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                {/* Indicador de disponibilidad - Solo para productos que controlan stock */}
+                {product.controlsStock && (
+                  <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${stock === 0 ? 'bg-red-500' : stock <= minStock ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                )}
                 
                 {product.imageUrl ? (
                   <img 
@@ -583,15 +628,17 @@ const POSTab = () => {
                     </svg>
                   </div>
                 )}
-                <div className="font-medium text-sm">{product.code}</div>
-                <div className="text-xs text-gray-600 mt-1 line-clamp-2">{product.name}</div>
-                <div className="text-sm font-bold text-blue-600 mt-2">
+                <div className="font-semibold text-sm text-[#000000]">{product.code}</div>
+                <div className="text-xs text-[#1f2937] mt-1 line-clamp-2">{product.name}</div>
+                <div className="text-sm font-bold text-[#1D79C4] mt-2">
                   RD$ {Number(product.salePrice).toLocaleString()}
                 </div>
-                {/* Indicador de stock */}
-                <div className={`text-xs font-semibold mt-1 ${availabilityColor}`}>
-                  {stock === 0 ? 'Sin stock' : stock <= minStock ? `Stock bajo (${stock})` : `Disponible (${stock})`}
-                </div>
+                {/* Indicador de stock - Solo para productos que controlan stock */}
+                {product.controlsStock && (
+                  <div className={`text-xs font-semibold mt-1 ${availabilityColor}`}>
+                    {stock === 0 ? 'Sin stock' : stock <= minStock ? `Stock bajo (${stock})` : `Disponible (${stock})`}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -599,17 +646,17 @@ const POSTab = () => {
         </div>
 
         {/* Carrito */}
-        <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">Carrito</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-bold text-[#000000] mb-4">Carrito</h2>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">
             Cliente <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
           </label>
           <select
             value={selectedClient}
             onChange={(e) => setSelectedClient(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
           >
             <option value="">Seleccionar cliente (opcional)</option>
             {clients.map((client) => (
@@ -626,16 +673,16 @@ const POSTab = () => {
               type="checkbox"
               checked={includeTax}
               onChange={(e) => setIncludeTax(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-[#1D79C4] border-gray-300 rounded focus:ring-[#1D79C4]"
             />
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-xs font-semibold text-[#1f2937]">
               Incluir ITBIS (18%)
             </span>
           </label>
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">
             Descuento General
           </label>
           <input
@@ -644,13 +691,13 @@ const POSTab = () => {
             step="0.01"
             value={generalDiscount || ''}
             onChange={(e) => setGeneralDiscount(parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
             placeholder="0.00"
           />
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pago</label>
+          <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">Método de Pago</label>
           <select
             value={paymentMethod}
             onChange={(e) => {
@@ -661,7 +708,7 @@ const POSTab = () => {
                 setAmountReceived(finalTotal);
               }
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
           >
             <option value="CASH">Efectivo</option>
             <option value="CARD">Tarjeta</option>
@@ -671,7 +718,7 @@ const POSTab = () => {
 
         {paymentMethod === 'CASH' && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">
               Monto Recibido <span className="text-red-500">*</span>
             </label>
             <input
@@ -690,7 +737,7 @@ const POSTab = () => {
                 }
                 e.target.select(); // Seleccionar todo el texto para facilitar edición
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
               placeholder={finalTotal.toLocaleString()}
               required
             />
@@ -738,10 +785,10 @@ const POSTab = () => {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{item.product.name}</div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-sm font-semibold text-[#000000]">{item.product.name}</div>
+                        <div className="text-xs text-[#1f2937]">
                           {canEditPrice ? (
-                            <span className="text-blue-600">Precio editable</span>
+                            <span className="text-[#1D79C4]">Precio editable</span>
                           ) : (
                             <>RD$ {item.price.toLocaleString()} c/u</>
                           )}
@@ -794,7 +841,7 @@ const POSTab = () => {
                       />
                     </div>
                     <div className="flex items-end">
-                      <div className="text-sm font-bold text-blue-600 w-full text-right">
+                      <div className="text-sm font-bold text-[#1D79C4] w-full text-right">
                         RD$ {item.subtotal.toLocaleString()}
                       </div>
                     </div>
@@ -807,8 +854,8 @@ const POSTab = () => {
 
         <div className="border-t border-gray-200 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
-            <span>Subtotal:</span>
-            <span className="font-medium">RD$ {(cart.reduce((sum, item) => sum + item.subtotal, 0)).toLocaleString()}</span>
+            <span className="text-[#1f2937]">Subtotal:</span>
+            <span className="font-semibold text-[#000000]">RD$ {(cart.reduce((sum, item) => sum + item.subtotal, 0)).toLocaleString()}</span>
           </div>
           {totalDiscount > 0 && (
             <div className="flex justify-between text-sm text-red-600">
@@ -824,13 +871,13 @@ const POSTab = () => {
           )}
           {includeTax && (
             <div className="flex justify-between text-sm">
-              <span>ITBIS (18%):</span>
-              <span className="font-medium">RD$ {tax.toLocaleString()}</span>
+              <span className="text-[#1f2937]">ITBIS (18%):</span>
+              <span className="font-semibold text-[#000000]">RD$ {tax.toLocaleString()}</span>
             </div>
           )}
           <div className="flex justify-between text-lg font-bold border-t pt-2">
-            <span>Total:</span>
-            <span>RD$ {finalTotal.toLocaleString()}</span>
+            <span className="text-[#000000]">Total:</span>
+            <span className="text-[#000000]">RD$ {finalTotal.toLocaleString()}</span>
           </div>
         </div>
 
@@ -842,7 +889,7 @@ const POSTab = () => {
             (paymentMethod === 'CASH' && !cashStatus) ||
             (paymentMethod === 'CASH' && (!amountReceived || amountReceived < finalTotal))
           }
-          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           {loading ? 'Procesando...' : 'Procesar Venta'}
         </button>

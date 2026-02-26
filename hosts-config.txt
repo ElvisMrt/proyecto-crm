@@ -1,0 +1,5 @@
+127.0.0.1 admin.neypier.com
+127.0.0.1 app.neypier.com
+127.0.0.1 mi-empresa-demo.neypier.com
+127.0.0.1 empresa-test.neypier.com
+127.0.0.1 demo.neypier.com

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ejemplo de Formulario de Citas Incrustado</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        .section h2 {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        .demo-container {
+            border: 2px dashed #007bff;
+            padding: 20px;
+            margin: 20px 0;
+            background: #f8f9ff;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #28a745;
+            color: white;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        .notification.error {
+            background: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📅 Formulario de Citas CRM - Ejemplo de Integración</h1>
+        
+        <!-- Sección 1: Método Simple -->
+        <div class="section">
+            <h2>🚀 Método 1: Data Attributes (Más Simple)</h2>
+            <p>Solo agrega el script y usa data attributes en cualquier elemento:</p>
+            
+            <div class="code-block">
+                <code>&lt;script src="embed-script.js"&gt;&lt;/script&gt;
+&lt;div data-crm-appointment-form 
+     data-api-url="https://tu-api.com/api/public" 
+     data-tenant-id="tu-tenant"&gt;
+&lt;/div&gt;</code>
+            </div>
+            
+            <div class="demo-container">
+                <h3>Demo en vivo:</h3>
+                <div id="demo1" data-crm-appointment-form 
+                     data-api-url="http://localhost:3001/api/public" 
+                     data-tenant-id="default">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sección 2: Método Programático -->
+        <div class="section">
+            <h2>⚙️ Método 2: Programático (Más Control)</h2>
+            <p>Para mayor control sobre el formulario:</p>
+            
+            <div class="code-block">
+                <code>&lt;script src="embed-script.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const form = createCRMAppointmentForm({
+    apiUrl: 'https://tu-api.com/api/public',
+    tenantId: 'tu-tenant',
+    onLoad: () => console.log('Formulario cargado'),
+    onError: () => console.error('Error al cargar')
+  });
+  
+  form.render('#mi-contenedor');
+&lt;/script&gt;</code>
+            </div>
+            
+            <div class="demo-container">
+                <h3>Demo en vivo:</h3>
+                <div id="demo2"></div>
+            </div>
+        </div>
+        
+        <!-- Sección 3: Método Helper -->
+        <div class="section">
+            <h2>🎯 Método 3: Helper Function (Rápido)</h2>
+            <p>La forma más rápida de incrustar:</p>
+            
+            <div class="code-block">
+                <code>&lt;script src="embed-script.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  embedCRMAppointmentForm('#mi-contenedor', {
+    apiUrl: 'https://tu-api.com/api/public',
+    tenantId: 'tu-tenant'
+  });
+&lt;/script&gt;</code>
+            </div>
+            
+            <div class="demo-container">
+                <h3>Demo en vivo:</h3>
+                <div id="demo3"></div>
+            </div>
+        </div>
+        
+        <!-- Sección 4: Eventos -->
+        <div class="section">
+            <h2>📡 Escuchar Eventos</h2>
+            <p>Puedes escuchar cuando se crea una cita:</p>
+            
+            <div class="code-block">
+                <code>&lt;script&gt;
+  document.addEventListener('crmAppointmentCreated', function(event) {
+    console.log('Nueva cita creada:', event.detail);
+    // Aquí puedes mostrar una notificación personalizada
+    showNotification('¡Cita agendada exitosamente!');
+  });
+&lt;/script&gt;</code>
+            </div>
+        </div>
+        
+        <!-- Sección 5: Personalización -->
+        <div class="section">
+            <h2>🎨 Opciones de Configuración</h2>
+            <p>Todas las opciones disponibles:</p>
+            
+            <div class="code-block">
+                <code>{
+  apiUrl: 'http://localhost:3001/api/public',  // URL del API
+  tenantId: 'default',                         // ID del tenant
+  theme: 'light',                              // Tema (light/dark)
+  language: 'es',                              // Idioma
+  width: '100%',                               // Ancho del formulario
+  height: 'auto',                              // Alto del formulario
+  onLoad: () => {},                            // Callback al cargar
+  onError: () => {},                           // Callback de error
+  onRender: () => {}                           // Callback al renderizar
+}</code>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notificación -->
+    <div id="notification" class="notification"></div>
+    
+    <!-- Scripts -->
+    <script src="embed-script.js"></script>
+    <script>
+        // Método 2: Programático
+        const form2 = createCRMAppointmentForm({
+            apiUrl: 'http://localhost:3001/api/public',
+            tenantId: 'default',
+            onLoad: () => console.log('Demo 2 cargado'),
+            onError: () => console.error('Error en demo 2')
+        });
+        form2.render('#demo2');
+        
+        // Método 3: Helper
+        embedCRMAppointmentForm('#demo3', {
+            apiUrl: 'http://localhost:3001/api/public',
+            tenantId: 'default'
+        });
+        
+        // Escuchar eventos
+        document.addEventListener('crmAppointmentCreated', function(event) {
+            console.log('Cita creada:', event.detail);
+            showNotification('¡Nueva cita agendada exitosamente!');
+        });
+        
+        // Función para mostrar notificaciones
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = isError ? 'notification error' : 'notification';
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Manejo de errores
+        window.addEventListener('error', function(event) {
+            if (event.message.includes('CRM')) {
+                showNotification('Error al cargar el formulario de citas', true);
+            }
+        });
+    </script>
+</body>
+</html>

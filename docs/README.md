@@ -56,9 +56,23 @@ Con soporte multi-sucursal, multi-tenant y un Panel Maestro (Super Admin) para a
 
 ## 📚 Documentación
 
-La documentación completa del sistema se encuentra en la carpeta `docs/`:
+### 📖 Documentación Principal
 
-### 📖 Guías Principales
+1. **[GUIA_DE_USO.md](GUIA_DE_USO.md)** ⭐ **NUEVO**
+   - Guía completa de uso de ambas plataformas
+   - Flujos de trabajo paso a paso
+   - Roles y permisos detallados
+   - Credenciales de acceso
+   - Solución de problemas
+
+2. **[ARQUITECTURA.md](ARQUITECTURA.md)** ⭐ **NUEVO**
+   - Diagramas de arquitectura multi-tenant
+   - Flujo de peticiones
+   - Estructura de bases de datos
+   - Seguridad y aislamiento
+   - Escalabilidad
+
+### 📖 Documentación Técnica (docs/)
 
 1. **[Arquitectura General](docs/01-ARQUITECTURA-GENERAL.md)**
    - Visión general del sistema
@@ -84,6 +98,35 @@ La documentación completa del sistema se encuentra en la carpeta `docs/`:
 
 6. **[Seguridad](docs/06-SEGURIDAD/)**
    - [Roles y Permisos](docs/06-SEGURIDAD/01-ROLES-Y-PERMISOS.md)
+
+---
+
+## 🚀 Inicio Rápido
+
+### Acceso a las Plataformas
+
+#### 🔵 SaaS Admin (Gestión de Tenants)
+```
+URL: http://localhost:5173/
+Propósito: Administrar múltiples empresas/tenants
+```
+
+#### 🟢 CRM Tenant (Sistema Operativo)
+```
+URL: http://localhost:5173/?mode=crm
+Propósito: Operaciones diarias de la empresa
+Credenciales de prueba:
+  Email: admin@miempresademo.com
+  Password: admin123
+```
+
+### Servicios Backend
+```
+API: http://localhost:3000/api/v1
+PostgreSQL: localhost:5432
+```
+
+📖 **Para más detalles, consulta [GUIA_DE_USO.md](GUIA_DE_USO.md)**
 
 ---
 

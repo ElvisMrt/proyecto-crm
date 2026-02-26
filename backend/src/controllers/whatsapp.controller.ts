@@ -1,10 +1,9 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 import { whatsappService } from '../services/whatsapp.service';
 
-const prisma = new PrismaClient();
 
 // Schema para crear template
 const createTemplateSchema = z.object({
@@ -26,6 +25,7 @@ const updateTemplateSchema = z.object({
 // Obtener todos los templates
 export const getTemplates = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const where: any = {};
     
     if (req.query.type) {
@@ -58,6 +58,7 @@ export const getTemplates = async (req: AuthRequest, res: Response) => {
 // Obtener un template por ID
 export const getTemplate = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const template = await prisma.whatsAppTemplate.findUnique({
@@ -88,6 +89,7 @@ export const getTemplate = async (req: AuthRequest, res: Response) => {
 // Crear nuevo template
 export const createTemplate = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -137,6 +139,7 @@ export const createTemplate = async (req: AuthRequest, res: Response) => {
 // Actualizar template
 export const updateTemplate = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -191,6 +194,7 @@ export const updateTemplate = async (req: AuthRequest, res: Response) => {
 // Eliminar template
 export const deleteTemplate = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -251,8 +255,9 @@ export const renderTemplate = (template: string, variables: Record<string, any>)
 };
 
 // Función auxiliar: Obtener template por tipo
-export const getTemplateByType = async (type: string): Promise<any | null> => {
+export const getTemplateByType = async (type: string, prismaClient?: any): Promise<any | null> => {
   try {
+    const prisma = prismaClient || getTenantPrisma(process.env.DATABASE_URL!);
     const template = await prisma.whatsAppTemplate.findFirst({
       where: {
         type,
@@ -280,6 +285,7 @@ export const sendWhatsAppMessage = async (
 // Obtener estado de la instancia de Evolution
 export const getInstanceStatus = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -391,6 +397,7 @@ export const getInstanceStatus = async (req: AuthRequest, res: Response) => {
 // Crear instancia de Evolution
 export const createInstance = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -424,7 +431,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
     let instanceExists = false;
     let instanceStatus: string | null = null;
     if (checkResponse.ok) {
-      const instancesData = await checkResponse.json();
+      const instancesData: any = await checkResponse.json();
       // Evolution API puede devolver un objeto o un array
       let instances: any[] = [];
       if (Array.isArray(instancesData)) {
@@ -501,7 +508,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
       });
 
       if (qrResponse.ok) {
-        const qrData = await qrResponse.json();
+        const qrData: any = await qrResponse.json();
         // El QR puede venir en diferentes formatos
         let rawQR: string | null = null;
         if (qrData.qrcode) {
@@ -575,7 +582,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
             });
 
             if (qrResponse2.ok) {
-              const qrData2 = await qrResponse2.json();
+              const qrData2: any = await qrResponse2.json();
               let rawQR2: string | null = null;
               if (qrData2.qrcode) {
                 if (qrData2.qrcode.base64) {
@@ -631,6 +638,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
 // Obtener QR code de la instancia
 export const getQRCode = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -667,7 +675,7 @@ export const getQRCode = async (req: AuthRequest, res: Response) => {
 
     let qrCode = null;
     if (response.ok) {
-      const data = await response.json();
+      const data: any = await response.json();
       // El QR puede venir en diferentes formatos
       let rawQR: string | null = null;
       if (data.qrcode) {
@@ -691,7 +699,7 @@ export const getQRCode = async (req: AuthRequest, res: Response) => {
         },
       });
       if (responseGet.ok) {
-        const dataGet = await responseGet.json();
+        const dataGet: any = await responseGet.json();
         let rawQRGet: string | null = null;
         if (dataGet.qrcode) {
           rawQRGet = dataGet.qrcode.base64 || dataGet.qrcode.code || null;
@@ -731,6 +739,7 @@ export const getQRCode = async (req: AuthRequest, res: Response) => {
 // Endpoint para enviar mensaje usando template
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -831,7 +840,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
           where: { id: data.templateId },
         });
       } else if (data.templateType) {
-        template = await getTemplateByType(data.templateType);
+        template = await getTemplateByType(data.templateType, prisma);
       }
 
       if (!template || !template.isActive) {

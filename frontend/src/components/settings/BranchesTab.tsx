@@ -106,6 +106,13 @@ const BranchesTab = () => {
     );
   };
 
+  const generateBranchCode = (name: string) => {
+    // Generar código automático: primeras 3 letras en mayúsculas + timestamp corto
+    const prefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+    const timestamp = Date.now().toString().slice(-4);
+    return `${prefix}${timestamp}`;
+  };
+
   const handleNew = () => {
     setEditingBranch(null);
     setForm({
@@ -123,11 +130,17 @@ const BranchesTab = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Generar código automáticamente si no existe
+      const branchData = {
+        ...form,
+        code: form.code || generateBranchCode(form.name),
+      };
+
       if (editingBranch) {
-        await settingsApi.updateBranch(editingBranch.id, form);
+        await settingsApi.updateBranch(editingBranch.id, branchData);
         showToast('Sucursal actualizada exitosamente', 'success');
       } else {
-        await settingsApi.createBranch(form);
+        await settingsApi.createBranch(branchData);
         showToast('Sucursal creada exitosamente', 'success');
       }
       setShowForm(false);
@@ -273,12 +286,12 @@ const BranchesTab = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
                   <input
                     type="text"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    placeholder="Ej: CENTRO, NORTE"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    value={form.code || (form.name ? generateBranchCode(form.name) : '')}
+                    readOnly
+                    placeholder="Se generará automáticamente"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Código corto único para identificar la sucursal</p>
+                  <p className="mt-1 text-xs text-gray-500">Se genera automáticamente al guardar</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>

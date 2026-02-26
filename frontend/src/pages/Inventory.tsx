@@ -44,28 +44,29 @@ const Inventory = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Inventario</h1>
-        {alerts.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-            <span className="text-sm font-medium text-red-800">
-              <HiExclamationCircle className="inline w-4 h-4 mr-1" />
-              {alerts.length} producto{alerts.length !== 1 ? 's' : ''} con stock bajo
-            </span>
-          </div>
-        )}
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestión de productos y existencias</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Módulo activo</p>
+          <p className="text-sm font-medium text-gray-900">Inventario</p>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <nav className="flex space-x-8 px-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors relative
+                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -73,11 +74,11 @@ const Inventory = () => {
                 }
               `}
             >
-              <span className="inline-flex items-center">
-                <tab.icon className="w-5 h-5 mr-2" />
+              <span className="inline-flex items-center gap-2">
+                <tab.icon className="w-5 h-5" />
                 <span>{tab.label}</span>
                 {tab.badge && tab.badge > 0 && (
-                  <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  <span className="bg-red-100 text-red-600 py-1 px-2 rounded-full text-xs font-medium">
                     {tab.badge}
                   </span>
                 )}
@@ -85,16 +86,16 @@ const Inventory = () => {
             </button>
           ))}
         </nav>
-      </div>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'products' && <ProductsTab />}
-        {activeTab === 'categories' && <CategoriesTab />}
-        {activeTab === 'stock' && <StockTab />}
-        {activeTab === 'movements' && <MovementsTab />}
-        {activeTab === 'adjustments' && <AdjustmentsTab onAdjustmentCreated={fetchAlerts} />}
-        {activeTab === 'alerts' && <AlertsTab />}
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'products' && <ProductsTab />}
+          {activeTab === 'categories' && <CategoriesTab />}
+          {activeTab === 'stock' && <StockTab />}
+          {activeTab === 'movements' && <MovementsTab />}
+          {activeTab === 'adjustments' && <AdjustmentsTab onAdjustmentCreated={fetchAlerts} />}
+          {activeTab === 'alerts' && <AlertsTab />}
+        </div>
       </div>
     </div>
   );

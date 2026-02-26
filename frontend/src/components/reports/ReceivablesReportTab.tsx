@@ -194,13 +194,13 @@ const ReceivablesReportTab = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Total por Cobrar</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">
             {formatCurrency(data?.totalReceivable || 0)}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Total Vencido</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">
             {formatCurrency(data?.totalOverdue || 0)}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { reportsApi, clientsApi, branchesApi } from '../../services/api';
+import { reportsApi, clientsApi, branchesApi, inventoryApi } from '../../services/api';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { HiDownload, HiDocumentDownload, HiXCircle } from 'react-icons/hi';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,26 +10,35 @@ const SalesReportTab = () => {
   const [data, setData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
   const [filters, setFilters] = useState({
     branchId: '',
-    clientId: '',
+    clientIds: [] as string[],
+    categoryIds: [] as string[],
+    productIds: [] as string[],
     startDate: new Date(new Date().setDate(1)).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     status: '',
   });
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   useEffect(() => {
     fetchBranches();
     fetchClients();
+    fetchCategories();
+    fetchProducts();
     fetchData();
   }, []);
 
   useEffect(() => {
     fetchData();
     setCurrentPage(1); // Reset to first page when filters change
-  }, [filters.branchId, filters.clientId, filters.startDate, filters.endDate, filters.status]);
+  }, [filters.branchId, filters.clientIds, filters.categoryIds, filters.productIds, filters.startDate, filters.endDate, filters.status]);
 
   const fetchBranches = async () => {
     try {
@@ -49,12 +58,32 @@ const SalesReportTab = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const response = await inventoryApi.getCategories();
+      setCategories(response.data || response || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const response = await inventoryApi.getProducts({ limit: 1000 });
+      setProducts(response.data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const params: any = {};
       if (filters.branchId) params.branchId = filters.branchId;
-      if (filters.clientId) params.clientId = filters.clientId;
+      if (filters.clientIds.length > 0) params.clientIds = filters.clientIds.join(',');
+      if (filters.categoryIds.length > 0) params.categoryIds = filters.categoryIds.join(',');
+      if (filters.productIds.length > 0) params.productIds = filters.productIds.join(',');
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
       if (filters.status) params.status = filters.status;
@@ -213,7 +242,7 @@ const SalesReportTab = () => {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
             <select
@@ -247,20 +276,119 @@ const SalesReportTab = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-            <select
-              value={filters.clientId}
-              onChange={(e) => setFilters({ ...filters, clientId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Clientes</label>
+            <button
+              type="button"
+              onClick={() => setShowClientDropdown(!showClientDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left bg-white flex items-center justify-between"
             >
-              <option value="">Todos</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
+              <span className="text-sm text-gray-700">
+                {filters.clientIds.length === 0 ? 'Todos' : `${filters.clientIds.length} seleccionado(s)`}
+              </span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showClientDropdown && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                <div className="p-2">
+                  {clients.map((client) => (
+                    <label key={client.id} className="flex items-center px-2 py-2 hover:bg-gray-50 cursor-pointer rounded">
+                      <input
+                        type="checkbox"
+                        checked={filters.clientIds.includes(client.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({ ...filters, clientIds: [...filters.clientIds, client.id] });
+                          } else {
+                            setFilters({ ...filters, clientIds: filters.clientIds.filter(id => id !== client.id) });
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{client.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Categorías</label>
+            <button
+              type="button"
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left bg-white flex items-center justify-between"
+            >
+              <span className="text-sm text-gray-700">
+                {filters.categoryIds.length === 0 ? 'Todas' : `${filters.categoryIds.length} seleccionada(s)`}
+              </span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showCategoryDropdown && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                <div className="p-2">
+                  {categories.map((category) => (
+                    <label key={category.id} className="flex items-center px-2 py-2 hover:bg-gray-50 cursor-pointer rounded">
+                      <input
+                        type="checkbox"
+                        checked={filters.categoryIds.includes(category.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({ ...filters, categoryIds: [...filters.categoryIds, category.id] });
+                          } else {
+                            setFilters({ ...filters, categoryIds: filters.categoryIds.filter(id => id !== category.id) });
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{category.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Productos</label>
+            <button
+              type="button"
+              onClick={() => setShowProductDropdown(!showProductDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left bg-white flex items-center justify-between"
+            >
+              <span className="text-sm text-gray-700">
+                {filters.productIds.length === 0 ? 'Todos' : `${filters.productIds.length} seleccionado(s)`}
+              </span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showProductDropdown && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                <div className="p-2">
+                  {products.map((product) => (
+                    <label key={product.id} className="flex items-center px-2 py-2 hover:bg-gray-50 cursor-pointer rounded">
+                      <input
+                        type="checkbox"
+                        checked={filters.productIds.includes(product.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({ ...filters, productIds: [...filters.productIds, product.id] });
+                          } else {
+                            setFilters({ ...filters, productIds: filters.productIds.filter(id => id !== product.id) });
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{product.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
@@ -281,11 +409,16 @@ const SalesReportTab = () => {
             onClick={() => {
               setFilters({
                 branchId: '',
-                clientId: '',
+                clientIds: [],
+                categoryIds: [],
+                productIds: [],
                 startDate: new Date(new Date().setDate(1)).toISOString().split('T')[0],
                 endDate: new Date().toISOString().split('T')[0],
                 status: '',
               });
+              setShowClientDropdown(false);
+              setShowCategoryDropdown(false);
+              setShowProductDropdown(false);
             }}
             className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
           >

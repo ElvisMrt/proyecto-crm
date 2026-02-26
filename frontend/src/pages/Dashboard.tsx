@@ -4,20 +4,11 @@ import { dashboardApi, branchesApi, salesApi, crmApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   HiCurrencyDollar,
-  HiCalendar,
-  HiCash,
-  HiOfficeBuilding,
-  HiLockClosed,
-  HiLockOpen,
   HiCheckCircle,
-  HiArrowUp,
-  HiArrowDown,
-  HiPlus,
-  HiDownload,
-  HiTrendingUp,
   HiShoppingCart,
-  HiDocumentText,
   HiClipboardCheck,
+  HiLockOpen,
+  HiLockClosed,
 } from 'react-icons/hi';
 
 interface DashboardSummary {
@@ -30,6 +21,10 @@ interface DashboardSummary {
     progress: number;
   };
   receivables: {
+    total: number;
+    overdue: number;
+  };
+  payables: {
     total: number;
     overdue: number;
   };
@@ -51,7 +46,6 @@ interface DashboardSummary {
     lowStock: number;
     unclosedCash: number;
     ncfAboutToExpire: number;
-    overdueTasks: number;
   };
 }
 
@@ -210,130 +204,105 @@ const Dashboard = () => {
   const completedTasksCount = crmSummary?.completedTasks || 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="space-y-4">
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Planifica, prioriza y completa tus tareas con facilidad.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Resumen general del negocio</p>
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => navigate('/sales/new-invoice')}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
-          >
-            <HiPlus className="w-5 h-5" />
-            <span>Nueva Venta</span>
-          </button>
-          <button
-            onClick={() => navigate('/crm')}
-            className="flex items-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 px-4 rounded-lg transition-colors"
-          >
-            <HiPlus className="w-5 h-5" />
-            <span>Nueva Tarea</span>
-          </button>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Última actualización</p>
+          <p className="text-sm font-medium text-gray-900">{new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Ventas del Mes */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <HiShoppingCart className="w-6 h-6 text-blue-600" />
+      {/* KPI Cards - Diseño moderno */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1 - Ventas del Mes */}
+        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/sales')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-[#1D79C4] bg-opacity-10 rounded-lg p-2">
+              <HiShoppingCart className="w-6 h-6 text-[#1D79C4]" />
             </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Ventas del Mes</p>
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(summary?.salesMonth?.amount || 0)}</p>
-            {summary?.salesToday?.trend !== undefined && (
-              <div className={`flex items-center mt-2 text-sm ${summary.salesToday.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {summary.salesToday.trend >= 0 ? (
-                  <HiArrowUp className="w-4 h-4 mr-1" />
-                ) : (
-                  <HiArrowDown className="w-4 h-4 mr-1" />
-                )}
-                <span>{Math.abs(summary.salesToday.trend).toFixed(1)}% vs mes pasado</span>
-              </div>
+            {summary?.salesToday?.trend && (
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${summary.salesToday.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {summary.salesToday.trend > 0 ? '+' : ''}{summary.salesToday.trend.toFixed(1)}%
+              </span>
             )}
           </div>
+          <p className="text-sm font-medium text-[#1f2937]">Ventas del Mes</p>
+          <p className="text-3xl font-bold mt-2 text-[#000000]">{formatCurrency(summary?.salesMonth?.amount || 0)}</p>
         </div>
 
-        {/* Facturas Pagadas */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+        {/* Card 2 - Facturas */}
+        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/sales')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-green-600 bg-opacity-10 rounded-lg p-2">
               <HiCheckCircle className="w-6 h-6 text-green-600" />
             </div>
           </div>
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Total Facturas</p>
-            <p className="text-3xl font-bold text-gray-900">{totalInvoicesCount}</p>
-            <div className="flex items-center mt-2 text-sm text-green-600">
-              <span>{paidInvoicesCount} pagadas</span>
-            </div>
-          </div>
+          <p className="text-sm font-medium text-[#1f2937]">Facturas</p>
+          <p className="text-3xl font-bold mt-2 text-[#000000]">{totalInvoicesCount}</p>
+          <p className="text-xs text-[#1f2937] mt-1">{paidInvoicesCount} pagadas</p>
         </div>
 
-        {/* Cuentas por Cobrar */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-              <HiCurrencyDollar className="w-6 h-6 text-orange-600" />
+        {/* Card 3 - Cuentas por Pagar */}
+        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/suppliers-dashboard')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-red-600 bg-opacity-10 rounded-lg p-2">
+              <HiCurrencyDollar className="w-6 h-6 text-red-600" />
             </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Por Cobrar</p>
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(summary?.receivables?.total || 0)}</p>
-            {pendingInvoicesCount > 0 && (
-              <div className="flex items-center mt-2 text-sm text-red-600">
-                <span>{pendingInvoicesCount} vencidas</span>
-              </div>
+            {(summary?.payables?.overdue || 0) > 0 && (
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">
+                {summary?.payables?.overdue || 0} vencidas
+              </span>
             )}
           </div>
+          <p className="text-sm font-medium text-[#1f2937]">Por Pagar</p>
+          <p className="text-3xl font-bold mt-2 text-[#000000]">{formatCurrency(summary?.payables?.total || 0)}</p>
         </div>
 
-        {/* Tareas Pendientes */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+        {/* Card 4 - Tareas */}
+        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/crm')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-purple-600 bg-opacity-10 rounded-lg p-2">
               <HiClipboardCheck className="w-6 h-6 text-purple-600" />
             </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Tareas Pendientes</p>
-            <p className="text-3xl font-bold text-gray-900">{crmSummary?.pendingTasks || 0}</p>
-            {crmSummary?.overdueTasks > 0 && (
-              <div className="flex items-center mt-2 text-sm text-red-600">
-                <span>{crmSummary.overdueTasks} vencidas</span>
-              </div>
+            {(summary?.tasks?.overdue || 0) > 0 && (
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">
+                {summary?.tasks?.overdue || 0} vencidas
+              </span>
             )}
           </div>
+          <p className="text-sm font-medium text-[#1f2937]">Tareas Pendientes</p>
+          <p className="text-3xl font-bold mt-2 text-[#000000]">{summary?.tasks?.pending || 0}</p>
         </div>
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - Sales Analytics */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
           {/* Sales Chart */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Análisis de Ventas</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Análisis de Ventas</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Últimos {trendDays} días</p>
+              </div>
               <select
                 value={trendDays}
                 onChange={(e) => setTrendDays(Number(e.target.value))}
-                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value={7}>Últimos 7 Días</option>
-                <option value={14}>Últimos 14 Días</option>
-                <option value={30}>Últimos 30 Días</option>
+                <option value={7}>7d</option>
+                <option value={14}>14d</option>
+                <option value={30}>30d</option>
               </select>
             </div>
             {salesTrend && salesTrend.data.length > 0 ? (
-              <div className="h-64 flex items-end justify-between gap-2">
+              <div className="h-48 flex items-end justify-between gap-2 mt-4">
                 {salesTrend.data.map((item, index) => {
                   const height = (item.amount / maxAmount) * 100;
                   const date = new Date(item.date);
@@ -341,10 +310,10 @@ const Dashboard = () => {
                   const isHigh = height > 50;
                   return (
                     <div key={index} className="flex-1 flex flex-col items-center h-full">
-                      <div className="relative w-full flex items-end justify-center flex-1" style={{ minHeight: '200px' }}>
+                      <div className="relative w-full flex items-end justify-center flex-1" style={{ minHeight: '100px' }}>
                         <div
-                          className={`w-full rounded-t hover:opacity-80 transition-opacity cursor-pointer relative group ${
-                            isHigh ? 'bg-blue-600' : 'bg-gray-200'
+                          className={`w-full rounded-t hover:opacity-80 transition-all cursor-pointer relative group ${
+                            isHigh ? 'bg-gradient-to-t from-blue-600 to-blue-400' : 'bg-gradient-to-t from-gray-200 to-gray-100'
                           }`}
                           style={{ height: `${Math.max(height, 5)}%`, minHeight: '4px' }}
                           title={`${formatCurrency(item.amount)} - ${date.toLocaleDateString('es-DO')}`}
@@ -362,261 +331,221 @@ const Dashboard = () => {
                 })}
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                No hay datos para mostrar
+              <div className="h-32 flex items-center justify-center text-sm text-gray-400">
+                No hay datos
               </div>
             )}
           </div>
 
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Actividad Reciente</h2>
-              <button 
-                onClick={() => navigate('/sales')}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Ver todo
-              </button>
-            </div>
-            <div className="space-y-3">
-              {activities.length > 0 ? (
-                activities.slice(0, 5).map((activity, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <HiCurrencyDollar className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{activity.reference}</p>
-                        <p className="text-xs text-gray-500">{formatDate(activity.date)}</p>
-                      </div>
+          {/* Gráficos Circulares */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Facturas por Estado */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">Facturas por Estado</h3>
+              <div className="flex items-center justify-center">
+                <div className="relative w-32 h-32">
+                  {/* Donut Chart - Simulado con SVG */}
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    {/* Pagadas - Verde */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="12"
+                      strokeDasharray={`${(paidInvoicesCount / Math.max(totalInvoicesCount, 1)) * 251.2} 251.2`}
+                      strokeDashoffset="0"
+                    />
+                    {/* Pendientes - Naranja */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth="12"
+                      strokeDasharray={`${(pendingInvoicesCount / Math.max(totalInvoicesCount, 1)) * 251.2} 251.2`}
+                      strokeDashoffset={`-${(paidInvoicesCount / Math.max(totalInvoicesCount, 1)) * 251.2}`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-900">{totalInvoicesCount}</p>
+                      <p className="text-xs text-gray-500">Total</p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {activity.amount > 0 ? formatCurrency(activity.amount) : '-'}
-                    </p>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No hay actividad reciente
                 </div>
-              )}
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span className="text-gray-600">Pagadas</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">{paidInvoicesCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                    <span className="text-gray-600">Pendientes</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">{totalInvoicesCount - paidInvoicesCount}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ventas por Categoría */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">Distribución</h3>
+              <div className="flex items-center justify-center">
+                <div className="relative w-32 h-32">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="12"
+                      strokeDasharray="157 251.2"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#8b5cf6"
+                      strokeWidth="12"
+                      strokeDasharray="94.2 251.2"
+                      strokeDashoffset="-157"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-900">100%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-gray-600">Productos</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">62%</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                    <span className="text-gray-600">Servicios</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">38%</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Right Column */}
-        <div className="space-y-6">
-          {/* Reminders */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recordatorios</h2>
-            {crmSummary?.reminders > 0 ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm font-medium text-gray-900 mb-1">Tienes {crmSummary.reminders} recordatorio{crmSummary.reminders > 1 ? 's' : ''}</p>
-                <button 
-                  onClick={() => navigate('/crm')}
-                  className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
-                >
-                  Ver Recordatorios
-                </button>
+        <div className="space-y-4">
+          {/* Gráfico de Área - Tendencia */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Tendencia Semanal</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Últimos 7 días</p>
               </div>
-            ) : (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                No hay recordatorios pendientes
-              </div>
-            )}
+              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+12%</span>
+            </div>
+            <div className="h-24 relative">
+              <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 0.3}} />
+                    <stop offset="100%" style={{stopColor: '#3b82f6', stopOpacity: 0}} />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M 0 45 Q 30 35, 50 30 T 100 25 T 150 20 T 200 15 L 200 60 L 0 60 Z"
+                  fill="url(#areaGradient)"
+                />
+                <path
+                  d="M 0 45 Q 30 35, 50 30 T 100 25 T 150 20 T 200 15"
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeWidth="2"
+                />
+              </svg>
+            </div>
           </div>
 
-          {/* Recent Invoices List */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Facturas Recientes</h2>
-              <button 
-                onClick={() => navigate('/sales')}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
+          {/* Estado de Caja */}
+          <div className={`rounded-xl shadow-sm border p-5 ${
+            summary?.cash?.status === 'OPEN' ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200' : 'bg-white border-gray-100'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-gray-900">Estado de Caja</h3>
+              {summary?.cash?.status === 'OPEN' ? (
+                <HiLockOpen className="w-4 h-4 text-green-600" />
+              ) : (
+                <HiLockClosed className="w-4 h-4 text-gray-400" />
+              )}
+            </div>
+            <p className="text-xl font-bold text-gray-900 mb-1">
+              {formatCurrency(summary?.cash?.currentBalance || 0)}
+            </p>
+            <p className="text-xs text-gray-500 mb-3">
+              {summary?.cash?.status === 'OPEN' ? 'Caja abierta' : 'Caja cerrada'}
+            </p>
+            <button
+              onClick={() => navigate('/cash')}
+              className={`w-full text-xs font-medium py-2 px-3 rounded transition-colors ${
+                summary?.cash?.status === 'OPEN'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
+            >
+              {summary?.cash?.status === 'OPEN' ? 'Ir a Caja' : 'Abrir Caja'}
+            </button>
+          </div>
+
+          {/* Facturas Recientes */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Facturas</h3>
+              <button onClick={() => navigate('/sales')} className="text-xs text-blue-600 hover:text-blue-700">
                 Ver todas
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {recentInvoices.length > 0 ? (
-                recentInvoices.slice(0, 5).map((invoice) => (
+                recentInvoices.slice(0, 4).map((invoice) => (
                   <div 
                     key={invoice.id} 
                     onClick={() => navigate(`/sales/invoices/${invoice.id}`)}
-                    className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                    className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
                   >
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className={`w-2 h-2 rounded-full ${
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <div className={`w-1.5 h-1.5 rounded-full ${
                         invoice.status === 'PAID' ? 'bg-green-500' :
                         invoice.status === 'ISSUED' ? 'bg-orange-500' : 
-                        invoice.status === 'OVERDUE' ? 'bg-red-500' : 'bg-gray-400'
+                        'bg-red-500'
                       }`}></div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{invoice.number}</p>
-                        <p className="text-xs text-gray-500">
-                          {invoice.client?.name || 'Cliente'} • {formatCurrency(invoice.total || 0)}
-                        </p>
+                        <p className="text-xs font-medium text-gray-900 truncate">{invoice.number}</p>
+                        <p className="text-xs text-gray-400 truncate">{invoice.client?.name || 'Cliente'}</p>
                       </div>
                     </div>
+                    <p className="text-xs font-semibold text-gray-900">{formatCurrency(invoice.total || 0)}</p>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-4 text-gray-500 text-sm">
-                  No hay facturas recientes
+                <div className="text-center py-3 text-xs text-gray-400">
+                  No hay facturas
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Tasks */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Tareas Recientes</h2>
-            <button 
-              onClick={() => navigate('/crm')}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Ver todas
-            </button>
-          </div>
-          <div className="space-y-4">
-            {recentTasks.length > 0 ? (
-              recentTasks.slice(0, 4).map((task) => (
-                <div 
-                  key={task.id} 
-                  onClick={() => navigate('/crm')}
-                  className="flex items-start space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                    {task.client?.name?.charAt(0).toUpperCase() || 'T'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{task.title || task.description}</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {task.client?.name || 'Sin cliente'} • {task.dueDate ? new Date(task.dueDate).toLocaleDateString('es-DO') : 'Sin fecha'}
-                    </p>
-                    <span className={`inline-block mt-2 text-xs font-medium px-2 py-1 rounded ${getStatusColor(task.status)}`}>
-                      {getStatusLabel(task.status)}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                No hay tareas recientes
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tasks Progress */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Progreso de Tareas</h2>
-          <div className="flex flex-col items-center">
-            <div className="relative w-32 h-32">
-              <svg className="transform -rotate-90 w-32 h-32">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  fill="none"
-                  className="text-gray-200"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - completedTasks / 100)}`}
-                  className="text-blue-600"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-gray-900">{completedTasks}%</p>
-                  <p className="text-xs text-gray-500">Tareas Completadas</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total:</span>
-                <span className="font-semibold text-gray-900">{totalTasks}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-gray-600">Completadas:</span>
-                </div>
-                <span className="font-semibold text-gray-900">{completedTasksCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  <span className="text-gray-600">Pendientes:</span>
-                </div>
-                <span className="font-semibold text-gray-900">{crmSummary?.pendingTasks || 0}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span className="text-gray-600">Vencidas:</span>
-                </div>
-                <span className="font-semibold text-gray-900">{crmSummary?.overdueTasks || 0}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Cash Status */}
-        <div className="bg-blue-600 rounded-lg shadow-sm p-6 text-white">
-          <h2 className="text-lg font-semibold mb-6">Estado de Caja</h2>
-          <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{formatCurrency(summary?.cash?.currentBalance || 0)}</div>
-            <p className="text-sm opacity-90 mb-4">
-              {summary?.cash?.branchName || 'Sucursal Principal'}
-            </p>
-            <div className="flex items-center justify-center space-x-4">
-              <button 
-                onClick={() => navigate('/cash')}
-                className="w-12 h-12 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full flex items-center justify-center transition-colors"
-                title="Ver Caja"
-              >
-                <HiCash className="w-6 h-6" />
-              </button>
-              <button 
-                onClick={() => navigate('/cash')}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg text-sm font-medium transition-colors"
-              >
-                {summary?.cash?.status === 'OPEN' ? 'Cerrar Caja' : 'Abrir Caja'}
-              </button>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white border-opacity-20">
-              <p className="text-xs opacity-75">
-                {summary?.cash?.status === 'OPEN' ? (
-                  <span className="flex items-center justify-center">
-                    <HiLockOpen className="w-4 h-4 mr-1" />
-                    Caja Abierta
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center">
-                    <HiLockClosed className="w-4 h-4 mr-1" />
-                    Caja Cerrada
-                  </span>
-                )}
-              </p>
             </div>
           </div>
         </div>

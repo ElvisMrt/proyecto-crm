@@ -1,9 +1,31 @@
 import { Response } from 'express';
-import { PrismaClient, CashStatus, MovementType, PaymentMethod } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
+// Enums como tipos literales
+const CashStatus = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED'
+} as const;
+
+const MovementType = {
+  OPENING: 'OPENING',
+  SALE: 'SALE',
+  PAYMENT: 'PAYMENT',
+  MANUAL_ENTRY: 'MANUAL_ENTRY',
+  MANUAL_EXIT: 'MANUAL_EXIT',
+  CLOSING: 'CLOSING'
+} as const;
+
+const PaymentMethod = {
+  CASH: 'CASH',
+  TRANSFER: 'TRANSFER',
+  CARD: 'CARD',
+  CREDIT: 'CREDIT',
+  MIXED: 'MIXED'
+} as const;
+
 
 const openCashSchema = z.object({
   branchId: z.string().uuid(),
@@ -32,8 +54,17 @@ const createMovementSchema = z.object({
 
 export const getCurrentCash = async (req: AuthRequest, res: Response) => {
   try {
-    const cashRegister = await prisma.cashRegister.findFirst({
-      where: { status: 'OPEN' },
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    // Build where clause
+    const where: any = { status: 'OPEN' };
+    
+    // Solo filtrar por sucursal si el usuario NO es admin y tiene sucursal asignada
+    if (req.user?.branchId && req.user.role !== 'ADMINISTRATOR') {
+      where.branchId = req.user.branchId;
+    }
+
+    const cashRegisters = await prisma.cashRegister.findMany({
+      where,
       include: {
         branch: {
           select: {
@@ -51,40 +82,47 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
       orderBy: { openedAt: 'desc' },
     });
 
-    if (!cashRegister) {
-      return res.json(null);
+    if (!cashRegisters || cashRegisters.length === 0) {
+      return res.json([]);
     }
 
-    // Calculate current balance
-    const movements = await prisma.cashMovement.findMany({
-      where: { cashRegisterId: cashRegister.id },
-    });
+    // Calculate current balance for each cash register
+    const cashRegistersWithBalance = await Promise.all(
+      cashRegisters.map(async (cashRegister) => {
+        const movements = await prisma.cashMovement.findMany({
+          where: { cashRegisterId: cashRegister.id },
+        });
 
-    const totalIncome = movements
-      .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+        const totalIncome = movements
+          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
+          .reduce((sum, m) => sum + Number(m.amount), 0);
 
-    const totalExpenses = movements
-      .filter((m) => m.type === 'MANUAL_EXIT')
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+        const totalExpenses = movements
+          .filter((m) => m.type === 'MANUAL_EXIT')
+          .reduce((sum, m) => sum + Number(m.amount), 0);
 
-    const currentBalance = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
+        const currentBalance = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
 
-    res.json({
-      id: cashRegister.id,
-      branch: cashRegister.branch,
-      status: cashRegister.status,
-      initialAmount: Number(cashRegister.initialAmount),
-      currentBalance,
-      openedAt: cashRegister.openedAt,
-      openedBy: cashRegister.openedByUser,
-    });
+        return {
+          id: cashRegister.id,
+          branch: cashRegister.branch,
+          status: cashRegister.status,
+          initialAmount: Number(cashRegister.initialAmount),
+          currentBalance,
+          openedAt: cashRegister.openedAt,
+          openedBy: cashRegister.openedByUser,
+          observations: cashRegister.observations,
+        };
+      })
+    );
+
+    res.json(cashRegistersWithBalance);
   } catch (error) {
     console.error('Get current cash error:', error);
     res.status(500).json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Error fetching current cash register',
+        message: 'Error fetching current cash registers',
       },
     });
   }
@@ -92,6 +130,7 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
 
 export const openCash = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -118,6 +157,7 @@ export const openCash = async (req: AuthRequest, res: Response) => {
     }
 
     // Check if there's already an open cash register for this branch
+    // Only 1 open cash register per branch is allowed
     const existingCash = await prisma.cashRegister.findFirst({
       where: {
         branchId: data.branchId,
@@ -129,7 +169,7 @@ export const openCash = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({
         error: {
           code: 'CASH_ALREADY_OPEN',
-          message: 'Ya existe una caja abierta para esta sucursal',
+          message: 'Ya existe una caja abierta en esta sucursal. Debe cerrarla antes de abrir otra.',
         },
       });
     }
@@ -197,6 +237,7 @@ export const openCash = async (req: AuthRequest, res: Response) => {
 
 export const closeCash = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -325,8 +366,9 @@ export const closeCash = async (req: AuthRequest, res: Response) => {
 
 export const getMovements = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const cashRegisterId = req.query.cashRegisterId as string | undefined;
-    const type = req.query.type as MovementType | undefined;
+    const type = req.query.type as string | undefined;
 
     const where: any = {};
     if (cashRegisterId) {
@@ -386,6 +428,7 @@ export const getMovements = async (req: AuthRequest, res: Response) => {
 
 export const createMovement = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     if (!req.user) {
       return res.status(401).json({
         error: {
@@ -397,11 +440,17 @@ export const createMovement = async (req: AuthRequest, res: Response) => {
 
     const data = createMovementSchema.parse(req.body);
 
-    // Get open cash register
+    // Build where clause - filter by user's branch if they have one (except admins)
+    const where: any = {
+      status: CashStatus.OPEN,
+    };
+    if (req.user.branchId && req.user.role !== 'ADMINISTRATOR') {
+      where.branchId = req.user.branchId;
+    }
+
+    // Get open cash register for the user's branch (or any if admin)
     const cashRegister = await prisma.cashRegister.findFirst({
-      where: {
-        status: CashStatus.OPEN,
-      },
+      where,
     });
 
     if (!cashRegister) {
@@ -468,6 +517,7 @@ export const createMovement = async (req: AuthRequest, res: Response) => {
 
 export const getDailySummary = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const date = req.query.date ? new Date(req.query.date as string) : new Date();
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -555,6 +605,7 @@ export const getDailySummary = async (req: AuthRequest, res: Response) => {
 
 export const getHistory = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -655,6 +706,118 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error fetching cash history',
+      },
+    });
+  }
+};
+
+// Schema para actualizar caja
+const updateCashSchema = z.object({
+  observations: z.string().optional(),
+});
+
+export const updateCash = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    if (!req.user) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Not authenticated',
+        },
+      });
+    }
+
+    const { id } = req.params;
+    const data = updateCashSchema.parse(req.body);
+
+    // Buscar la caja
+    const cashRegister = await prisma.cashRegister.findUnique({
+      where: { id },
+      include: {
+        branch: true,
+      },
+    });
+
+    if (!cashRegister) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Caja no encontrada',
+        },
+      });
+    }
+
+    // Validar que el usuario tenga acceso a esta sucursal
+    if (req.user.branchId && req.user.branchId !== cashRegister.branchId) {
+      if (req.user.role !== 'ADMINISTRATOR') {
+        return res.status(403).json({
+          error: {
+            code: 'BRANCH_ACCESS_DENIED',
+            message: 'No tiene permisos para editar esta caja',
+          },
+        });
+      }
+    }
+
+    // Solo permitir editar observaciones de cajas abiertas
+    if (cashRegister.status !== 'OPEN') {
+      return res.status(400).json({
+        error: {
+          code: 'CASH_CLOSED',
+          message: 'No se puede editar una caja cerrada',
+        },
+      });
+    }
+
+    const updatedCash = await prisma.cashRegister.update({
+      where: { id },
+      data: {
+        observations: data.observations,
+      },
+      include: {
+        branch: true,
+        openedByUser: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      id: updatedCash.id,
+      branch: updatedCash.branch,
+      status: updatedCash.status,
+      initialAmount: Number(updatedCash.initialAmount),
+      observations: updatedCash.observations,
+      openedAt: updatedCash.openedAt,
+      openedBy: updatedCash.openedByUser,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid input',
+          details: error.errors,
+        },
+      });
+    }
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Caja no encontrada',
+        },
+      });
+    }
+    console.error('Update cash error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error updating cash register',
       },
     });
   }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { salesApi, branchesApi, clientsApi } from '../../services/api';
+import { salesApi, branchesApi, clientsApi, receivablesApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import VoidInvoiceModal from './VoidInvoiceModal';
@@ -61,6 +61,14 @@ const InvoicesTab = () => {
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
   const [voidModalOpen, setVoidModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: 0,
+    method: 'CASH' as 'CASH' | 'TRANSFER' | 'CARD',
+    reference: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    observations: ''
+  });
   const navigate = useNavigate();
 
   const fetchBranches = async () => {
@@ -585,15 +593,35 @@ const InvoicesTab = () => {
                                     </button> */}
                                     {invoice.status === 'ISSUED' && invoice.balance > 0 && (
                                       <>
-                                        <button
-                                          onClick={() => {
-                                            navigate(`/receivables?invoiceId=${invoice.id}`);
-                                            setActionMenuOpen(null);
-                                          }}
-                                          className="block w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
-                                        >
-                                          Registrar Pago
-                                        </button>
+                                        {invoice.client ? (
+                                          <button
+                                            onClick={() => {
+                                              navigate(`/receivables?invoiceId=${invoice.id}`);
+                                              setActionMenuOpen(null);
+                                            }}
+                                            className="block w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+                                          >
+                                            Registrar Pago
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              setSelectedInvoice(invoice);
+                                              setPaymentForm({
+                                                amount: invoice.balance,
+                                                method: 'CASH',
+                                                reference: '',
+                                                paymentDate: new Date().toISOString().split('T')[0],
+                                                observations: ''
+                                              });
+                                              setPaymentModalOpen(true);
+                                              setActionMenuOpen(null);
+                                            }}
+                                            className="block w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+                                          >
+                                            Registrar Pago
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => {
                                             handleGenerateReceipt(invoice);
@@ -700,10 +728,119 @@ const InvoicesTab = () => {
         onConfirm={handleCancelConfirm}
         invoiceNumber={selectedInvoice?.number}
       />
+
+      {/* Modal de Pago Rápido */}
+      {paymentModalOpen && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Registrar Pago</h2>
+            <div className="mb-4 p-3 bg-gray-50 rounded">
+              <p className="text-sm text-gray-600">Factura: <span className="font-semibold">{selectedInvoice.number}</span></p>
+              <p className="text-sm text-gray-600">Balance: <span className="font-semibold text-red-600">{formatCurrency(selectedInvoice.balance)}</span></p>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await receivablesApi.createPayment({
+                  invoiceIds: [selectedInvoice.id],
+                  invoicePayments: [{ invoiceId: selectedInvoice.id, amount: paymentForm.amount }],
+                  amount: paymentForm.amount,
+                  method: paymentForm.method,
+                  reference: paymentForm.reference,
+                  paymentDate: paymentForm.paymentDate,
+                  observations: paymentForm.observations
+                });
+                showToast('Pago registrado exitosamente', 'success');
+                setPaymentModalOpen(false);
+                setSelectedInvoice(null);
+                fetchInvoices();
+              } catch (error: any) {
+                showToast(error.response?.data?.error?.message || 'Error al registrar pago', 'error');
+              }
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monto *</label>
+                <input
+                  type="number"
+                  required
+                  step="0.01"
+                  min="0.01"
+                  max={selectedInvoice.balance}
+                  value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pago *</label>
+                <select
+                  required
+                  value={paymentForm.method}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="CASH">Efectivo</option>
+                  <option value="TRANSFER">Transferencia</option>
+                  <option value="CARD">Tarjeta</option>
+                </select>
+              </div>
+              {paymentForm.method !== 'CASH' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Referencia</label>
+                  <input
+                    type="text"
+                    value={paymentForm.reference}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Número de referencia"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Pago *</label>
+                <input
+                  type="date"
+                  required
+                  value={paymentForm.paymentDate}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+                <textarea
+                  value={paymentForm.observations}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, observations: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Notas adicionales..."
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentModalOpen(false);
+                    setSelectedInvoice(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Registrar Pago
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default InvoicesTab;
-
 

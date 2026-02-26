@@ -3,17 +3,18 @@ import { crmApi } from '../services/api';
 import TasksTab, { TasksTabRef } from '../components/crm/TasksTab';
 import OverdueTasksTab from '../components/crm/OverdueTasksTab';
 import ClientHistoryTab from '../components/crm/ClientHistoryTab';
+import Appointments from './Appointments';
+import { MinimalStatCard } from '../components/MinimalStatCard';
 import {
   HiCheckCircle,
   HiExclamationCircle,
   HiSearch,
   HiClipboardCheck,
   HiBell,
-  HiChartBar,
-  HiDocumentDownload,
+  HiCalendar,
 } from 'react-icons/hi';
 
-type TabType = 'tasks' | 'overdue' | 'history';
+type TabType = 'tasks' | 'overdue' | 'history' | 'appointments';
 
 const CRM = () => {
   const [activeTab, setActiveTab] = useState<TabType>('tasks');
@@ -22,7 +23,6 @@ const CRM = () => {
     overdueTasks: 0,
     reminders: 0,
   });
-  const [loading, setLoading] = useState(true);
   const tasksTabRef = useRef<TasksTabRef>(null);
 
   useEffect(() => {
@@ -35,8 +35,6 @@ const CRM = () => {
       setSummary(data);
     } catch (error) {
       console.error('Error fetching summary:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -44,108 +42,88 @@ const CRM = () => {
     { id: 'tasks' as TabType, label: 'Tareas Pendientes', icon: HiClipboardCheck },
     { id: 'overdue' as TabType, label: 'Tareas Vencidas', icon: HiExclamationCircle, badge: summary.overdueTasks },
     { id: 'history' as TabType, label: 'Historial del Cliente', icon: HiSearch },
+    { id: 'appointments' as TabType, label: 'Citas', icon: HiCalendar },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-yellow-800">Tareas Pendientes</p>
-              <p className="text-3xl font-bold text-yellow-900 mt-2">{summary.pendingTasks}</p>
-            </div>
-            <HiClipboardCheck className="w-10 h-10 text-yellow-600" />
-          </div>
+    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">CRM</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestión de tareas y seguimiento de clientes</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-red-800">Tareas Vencidas</p>
-              <p className="text-3xl font-bold text-red-900 mt-2">{summary.overdueTasks}</p>
-            </div>
-            <HiExclamationCircle className="w-10 h-10 text-red-600" />
-          </div>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-blue-800">Recordatorios</p>
-              <p className="text-3xl font-bold text-blue-900 mt-2">{summary.reminders}</p>
-            </div>
-            <HiBell className="w-10 h-10 text-blue-600" />
-          </div>
-        </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-800">Historial del Cliente</p>
-              <p className="text-xs text-gray-600 mt-1">Vista 360°</p>
-            </div>
-            <HiChartBar className="w-8 h-8 text-gray-600" />
-          </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Módulo activo</p>
+          <p className="text-sm font-medium text-gray-900">CRM</p>
         </div>
       </div>
 
-      {/* Tabs with Export Buttons */}
-      <div className="border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <nav className="-mb-px flex space-x-8">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  py-4 px-1 border-b-2 font-medium text-sm transition-colors relative inline-flex items-center
-                  ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                <tab.icon className="w-4 h-4 mr-2" />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <MinimalStatCard
+          title="Tareas Pendientes"
+          value={summary.pendingTasks}
+          icon={<HiClipboardCheck className="w-full h-full" />}
+          color="orange"
+        />
+        <MinimalStatCard
+          title="Tareas Vencidas"
+          value={summary.overdueTasks}
+          icon={<HiExclamationCircle className="w-full h-full" />}
+          color="red"
+        />
+        <MinimalStatCard
+          title="Recordatorios"
+          value={summary.reminders}
+          icon={<HiBell className="w-full h-full" />}
+          color="blue"
+        />
+        <MinimalStatCard
+          title="Completadas Hoy"
+          value={0}
+          icon={<HiCheckCircle className="w-full h-full" />}
+          color="green"
+        />
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <nav className="flex space-x-8 px-6 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
+                ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <span className="inline-flex items-center gap-2">
+                <tab.icon className="w-5 h-5" />
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  <span className="bg-red-100 text-red-600 py-1 px-2 rounded-full text-xs font-medium">
                     {tab.badge}
                   </span>
                 )}
-              </button>
-            ))}
-          </nav>
-          {/* Export Buttons - Only show for tasks tabs */}
-          {activeTab === 'tasks' && tasksTabRef.current && (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  tasksTabRef.current?.handleExportExcel();
-                }}
-                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center text-sm transition-colors"
-              >
-                <HiDocumentDownload className="w-4 h-4 mr-2" />
-                Exportar Excel
-              </button>
-              <button
-                onClick={() => {
-                  tasksTabRef.current?.handleExportPDF();
-                }}
-                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md inline-flex items-center text-sm transition-colors"
-              >
-                <HiDocumentDownload className="w-4 h-4 mr-2" />
-                Exportar PDF
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+              </span>
+            </button>
+          ))}
+        </nav>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === 'tasks' && <TasksTab ref={tasksTabRef} onTaskChanged={fetchSummary} />}
-        {activeTab === 'overdue' && <OverdueTasksTab onTaskChanged={fetchSummary} />}
-        {activeTab === 'history' && <ClientHistoryTab />}
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'tasks' && <TasksTab ref={tasksTabRef} onTaskChanged={fetchSummary} />}
+          {activeTab === 'overdue' && <OverdueTasksTab onTaskChanged={fetchSummary} />}
+          {activeTab === 'history' && <ClientHistoryTab />}
+          {activeTab === 'appointments' && <Appointments />}
+        </div>
       </div>
     </div>
   );

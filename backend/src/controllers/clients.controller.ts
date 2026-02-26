@@ -1,10 +1,9 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { AuthRequest } from '../middleware/auth.middleware';
 import { z } from 'zod';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { validateIdentification, normalizeIdentification } from '../utils/identificationValidator';
 
-const prisma = new PrismaClient();
 
 const createClientSchema = z.object({
   name: z.string().min(1),
@@ -20,6 +19,7 @@ const createClientSchema = z.object({
 
 export const getClients = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -124,6 +124,7 @@ export const getClients = async (req: AuthRequest, res: Response) => {
 
 export const getClient = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     const client = await prisma.client.findUnique({
@@ -202,6 +203,7 @@ export const getClient = async (req: AuthRequest, res: Response) => {
 
 export const createClient = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const data = createClientSchema.parse(req.body);
 
     // Validar formato de identificación
@@ -282,6 +284,7 @@ export const createClient = async (req: AuthRequest, res: Response) => {
 
 export const updateClient = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const data = createClientSchema.partial().parse(req.body);
 
@@ -356,6 +359,7 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
 
 export const toggleClientStatus = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const { isActive } = req.body;
 
@@ -390,6 +394,7 @@ export const toggleClientStatus = async (req: AuthRequest, res: Response) => {
 
 export const getClientInvoices = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -448,6 +453,7 @@ export const getClientInvoices = async (req: AuthRequest, res: Response) => {
 
 export const getClientQuotes = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -499,6 +505,7 @@ export const getClientQuotes = async (req: AuthRequest, res: Response) => {
 
 export const getClientPayments = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -554,6 +561,7 @@ export const getClientPayments = async (req: AuthRequest, res: Response) => {
 
 export const deleteClient = async (req: AuthRequest, res: Response) => {
   try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
     // Check if client has history (invoices, payments, quotes, tasks)

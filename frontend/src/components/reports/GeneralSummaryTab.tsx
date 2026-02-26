@@ -235,7 +235,7 @@ const GeneralSummaryTab = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Ventas Hoy</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.salesToday?.amount || 0)}
@@ -245,7 +245,7 @@ const GeneralSummaryTab = () => {
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Ingresos</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.salesMonth?.amount || 0)}
@@ -255,7 +255,7 @@ const GeneralSummaryTab = () => {
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-emerald-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Ganancia Neta Estimada</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(netProfit)}
@@ -267,7 +267,7 @@ const GeneralSummaryTab = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Productos Críticos</p>
           {data.lowStockProducts && data.lowStockProducts.length > 0 ? (
             <>
@@ -283,7 +283,7 @@ const GeneralSummaryTab = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+        <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Caja</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(data.cash?.balance || 0)}
