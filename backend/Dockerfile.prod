@@ -11,6 +11,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
+# Instalar openssl para Prisma
+RUN apk add --no-cache openssl
+
 # Limpiar cache e instalar dependencias
 RUN npm cache clean --force
 RUN npm install --no-fund --no-audit
