@@ -138,7 +138,7 @@ const Cash = () => {
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <nav className="flex space-x-8 px-6 overflow-x-auto">
+        <nav className="flex space-x-4 sm:space-x-8 px-3 sm:px-6 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -162,7 +162,7 @@ const Cash = () => {
         </nav>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'open' && <OpenCashTab onCashOpened={fetchCurrentCash} currentCash={currentCash} />}
           {activeTab === 'movements' && <MovementsTab currentCash={currentCash[0] || null} onMovementCreated={fetchCurrentCash} />}
           {activeTab === 'close' && <CloseCashTab currentCash={currentCash[0] || null} onCashClosed={fetchCurrentCash} />}

@@ -137,7 +137,7 @@ const Reports = () => {
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <nav className="flex space-x-8 px-6 overflow-x-auto">
+        <nav className="flex space-x-4 sm:space-x-8 px-3 sm:px-6 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -161,7 +161,7 @@ const Reports = () => {
         </nav>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'summary' && <GeneralSummaryTab />}
           {activeTab === 'sales' && <SalesReportTab />}
           {activeTab === 'receivables' && <ReceivablesReportTab />}

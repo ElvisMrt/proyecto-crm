@@ -311,7 +311,7 @@ const Purchases = () => {
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <nav className="flex space-x-8 px-6 overflow-x-auto">
+        <nav className="flex space-x-4 sm:space-x-8 px-3 sm:px-6 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -335,7 +335,7 @@ const Purchases = () => {
         </nav>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'list' && (
             <div className="space-y-4">
               {/* Search and Actions */}
@@ -528,7 +528,7 @@ const Purchases = () => {
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6">
+            <div className="p-3 sm:p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {editingPurchase ? 'Editar Compra' : 'Nueva Compra'}
               </h2>
