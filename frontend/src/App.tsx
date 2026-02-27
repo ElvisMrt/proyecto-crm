@@ -66,9 +66,6 @@ const isSaaSAdminMode = (): boolean => {
   // localhost sin subdominio = SaaS Admin
   if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
 
-  // Dominio raíz neypier.com y www → SaaS Admin
-  if (hostname === 'neypier.com' || hostname === 'www.neypier.com') return true;
-
   // nip.io: admin.IP.nip.io → SaaS | slug.IP.nip.io → CRM
   const nipIoMatch = hostname.match(/^([^.]+)\.\d+\.\d+\.\d+\.\d+\.nip\.io$/);
   if (nipIoMatch) {

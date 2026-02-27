@@ -40,12 +40,7 @@ const detectSubdomain = (): string | null => {
     return nipIoMatch[1];
   }
 
-  // 5. neypier.com raíz y www → admin (panel SaaS)
-  if (hostname === 'neypier.com' || hostname === 'www.neypier.com') {
-    return 'admin';
-  }
-
-  // 6. slug.neypier.com → subdominio del tenant
+  // 5. slug.neypier.com → subdominio del tenant (admin.neypier.com → panel SaaS)
   const neypierMatch = hostname.match(/^([^.]+)\.neypier\.com$/);
   if (neypierMatch) {
     return neypierMatch[1];
