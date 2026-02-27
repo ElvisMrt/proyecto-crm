@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import logoSrc from '../utils/3.svg';
+import logoSrc from '../utils/Logos.svg';
 
 const Login = () => {
   const [email, setEmail] = useState('');

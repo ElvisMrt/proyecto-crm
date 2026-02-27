@@ -100,7 +100,7 @@ const Sidebar = ({ isMobileOpen = false, onMobileClose }: SidebarProps) => {
         ${isCollapsed ? 'w-16' : 'w-64'} 
         bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 
         flex flex-col transition-all duration-300 relative shadow-sm
-        fixed lg:static inset-y-0 left-0 z-50
+        fixed lg:static inset-y-0 left-0 z-50 shrink-0
         transform lg:transform-none
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>

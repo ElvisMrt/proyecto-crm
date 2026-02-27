@@ -12,7 +12,8 @@ const Layout = () => {
         isMobileOpen={isMobileSidebarOpen} 
         onMobileClose={() => setIsMobileSidebarOpen(false)}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* En móvil el sidebar es fixed, por eso w-full. En lg ocupa su espacio estático */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 w-full lg:w-auto">
         <Header onMobileMenuClick={() => setIsMobileSidebarOpen(true)} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-4 sm:p-6">
           <Outlet />
