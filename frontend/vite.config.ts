@@ -9,10 +9,8 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: true,
     hmr: {
-      // En produccion detras de nginx, el WS debe ir por el mismo host/puerto publico
-      clientPort: 80,
-      host: 'localhost',
-      protocol: 'ws',
+      clientPort: 443,
+      protocol: 'wss',
     },
     proxy: {
       '/api': {
