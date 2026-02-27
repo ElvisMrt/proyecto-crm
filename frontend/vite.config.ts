@@ -7,10 +7,16 @@ export default defineConfig({
   server: {
     port: 5174,
     host: '0.0.0.0',
-    allowedHosts: ['localhost', '*.neypier.com', '*.tudominio.com', '.neypier.com', '.tudominio.com'],
+    allowedHosts: true,
+    hmr: {
+      // En produccion detras de nginx, el WS debe ir por el mismo host/puerto publico
+      clientPort: 80,
+      host: 'localhost',
+      protocol: 'ws',
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://backend:3000',
         changeOrigin: true,
       },
     },
