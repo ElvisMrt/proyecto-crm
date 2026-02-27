@@ -20,6 +20,7 @@ app.use(cors({
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:5175',
+      'http://66.94.111.139',
       'http://admin.neypier.com:5173',
       'http://admin.neypier.com:5174',
       'http://mi-empresa-demo.neypier.com:5173',
