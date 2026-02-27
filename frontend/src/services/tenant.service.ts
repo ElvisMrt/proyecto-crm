@@ -40,7 +40,18 @@ const detectSubdomain = (): string | null => {
     return nipIoMatch[1];
   }
 
-  // 5. Dominio real con subdominio: slug.dominio.tld
+  // 5. neypier.com raíz y www → admin (panel SaaS)
+  if (hostname === 'neypier.com' || hostname === 'www.neypier.com') {
+    return 'admin';
+  }
+
+  // 6. slug.neypier.com → subdominio del tenant
+  const neypierMatch = hostname.match(/^([^.]+)\.neypier\.com$/);
+  if (neypierMatch) {
+    return neypierMatch[1];
+  }
+
+  // 7. Dominio real genérico con subdominio: slug.dominio.tld
   const parts = hostname.split('.');
   if (parts.length >= 3 && parts[0] !== 'www') {
     return parts[0];

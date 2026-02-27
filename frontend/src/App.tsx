@@ -66,19 +66,28 @@ const isSaaSAdminMode = (): boolean => {
   // localhost sin subdominio = SaaS Admin
   if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
 
+  // Dominio raíz neypier.com y www → SaaS Admin
+  if (hostname === 'neypier.com' || hostname === 'www.neypier.com') return true;
+
   // nip.io: admin.IP.nip.io → SaaS | slug.IP.nip.io → CRM
   const nipIoMatch = hostname.match(/^([^.]+)\.\d+\.\d+\.\d+\.\d+\.nip\.io$/);
   if (nipIoMatch) {
     return nipIoMatch[1] === 'admin';
   }
 
-  // Dominio real: subdominio "admin" → SaaS, cualquier otro → CRM
+  // neypier.com subdominios: admin.neypier.com → SaaS | slug.neypier.com → CRM
+  const neypierMatch = hostname.match(/^([^.]+)\.neypier\.com$/);
+  if (neypierMatch) {
+    return neypierMatch[1] === 'admin';
+  }
+
+  // Dominio real genérico con subdominio: admin.dominio.tld → SaaS
   const parts = hostname.split('.');
   if (parts.length >= 3) {
     return parts[0] === 'admin';
   }
 
-  // Dominio base sin subdominio (neypier.com) → SaaS Admin
+  // Dominio base sin subdominio → SaaS Admin
   return true;
 };
 

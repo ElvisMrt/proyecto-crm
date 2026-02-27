@@ -17,18 +17,21 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
+      // Localhost dev
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:5175',
+      // IP directa VPS
       'http://66.94.111.139',
-      'http://admin.neypier.com:5173',
-      'http://admin.neypier.com:5174',
-      'http://mi-empresa-demo.neypier.com:5173',
-      'http://mi-empresa-demo.neypier.com:5174',
-      /https?:\/\/.*\.localhost(:\d+)?$/, // Cualquier subdominio de localhost
-      /https?:\/\/.*\.nip\.io(:\d+)?$/, // Cualquier subdominio de nip.io
-      /https?:\/\/.*\.neypier\.com(:\d+)?$/, // Cualquier subdominio de neypier.com
-      /https?:\/\/.*\.tudominio\.com(:\d+)?$/, // Cualquier subdominio de tudominio.com
+      // Dominio raíz
+      'http://neypier.com',
+      'https://neypier.com',
+      // Wildcard subdominios localhost
+      /https?:\/\/.*\.localhost(:\d+)?$/,
+      // Wildcard nip.io (acceso por IP)
+      /https?:\/\/.*\.nip\.io(:\d+)?$/,
+      // Wildcard neypier.com (todos los tenants + admin)
+      /https?:\/\/[^.]+\.neypier\.com(:\d+)?$/,
     ];
     
     const isAllowed = allowedOrigins.some(allowed => {
