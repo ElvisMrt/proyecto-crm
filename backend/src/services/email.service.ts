@@ -218,7 +218,7 @@ export const sendSaaSWelcomeEmail = async (data: {
       <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: #1e40af;">Datos de acceso:</h3>
         <table style="width: 100%;">
-          <tr><td><strong>URL:</strong></td><td>http://${subdomain}.${CRM_DOMAIN}</td></tr>
+          <tr><td><strong>URL:</strong></td><td>https://${subdomain}.${CRM_DOMAIN}</td></tr>
           <tr><td><strong>Email:</strong></td><td>${adminEmail}</td></tr>
           <tr><td><strong>Contraseña:</strong></td><td>${adminPassword}</td></tr>
         </table>
@@ -392,7 +392,7 @@ export const sendPasswordResetEmail = async (data: {
   tenantSlug: string;
 }): Promise<void> => {
   const { to, name, resetToken, tenantSlug } = data;
-  const resetUrl = `http://${tenantSlug}.${CRM_DOMAIN}/reset-password?token=${resetToken}`;
+  const resetUrl = `https://${tenantSlug}.${CRM_DOMAIN}/reset-password?token=${resetToken}`;
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -446,7 +446,7 @@ export const sendTenantWelcomeEmail = async (data: {
   adminPassword: string;
 }): Promise<void> => {
   const { to, tenantName, subdomain, adminEmail, adminPassword } = data;
-  const crmUrl = `http://${subdomain}.${CRM_DOMAIN}`;
+  const crmUrl = `https://${subdomain}.${CRM_DOMAIN}`;
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
