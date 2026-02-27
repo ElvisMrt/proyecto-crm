@@ -34,7 +34,8 @@ FROM node:18-alpine AS production
 # Instalar dependencias del sistema
 RUN apk add --no-cache \
     curl \
-    postgresql-client
+    postgresql-client \
+    openssl
 
 WORKDIR /app
 
