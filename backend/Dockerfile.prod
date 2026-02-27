@@ -3,16 +3,16 @@
 # ============================================
 
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 
 WORKDIR /app
+
+# Instalar openssl para Prisma generate
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
 # Copiar package files
 COPY package*.json ./
 COPY tsconfig.json ./
-
-# Instalar openssl para Prisma
-RUN apk add --no-cache openssl
 
 # Limpiar cache e instalar dependencias
 RUN npm cache clean --force
