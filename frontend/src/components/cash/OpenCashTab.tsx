@@ -46,7 +46,7 @@ const OpenCashTab = ({ onCashOpened, currentCash }: OpenCashTabProps) => {
       } catch (error: any) {
         // Si falla por permisos, intentar con el endpoint directo
         if (error.response?.status === 403 || error.response?.status === 401) {
-          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+          const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.host}/api/v1`;
           const token = localStorage.getItem('token');
           const directResponse = await fetch(`${API_BASE_URL}/branches`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},

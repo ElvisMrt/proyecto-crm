@@ -104,15 +104,11 @@ export default function SaaSLogin() {
 
       <div className="relative z-10 w-full max-w-md px-4 sm:px-6">
         <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8 sm:p-10">
-          {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <img src={logoSrc} alt="Neypier" className="h-16 w-auto" />
-          </div>
-
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: '#1f2937' }}>Administrador SaaS</h1>
-            <p className="text-sm text-gray-600">Gestión de empresas y sistema</p>
+          {/* Logo + Header */}
+          <div className="bg-[#1D79C4] -mx-8 sm:-mx-10 -mt-8 sm:-mt-10 px-8 py-6 mb-8 text-center rounded-t-2xl">
+            <img src={logoSrc} alt="Neypier" className="h-12 w-auto mx-auto mb-2 brightness-0 invert" />
+            <h1 className="text-xl font-bold text-white">Administrador SaaS</h1>
+            <p className="text-sm text-blue-100">Gestión de empresas y sistema</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">

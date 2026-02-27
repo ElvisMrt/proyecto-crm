@@ -99,5 +99,6 @@ export const isSaaSAdmin = (): boolean => {
  * Obtiene la URL del backend API
  */
 export const getApiUrl = (): string => {
-  return import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+  return import.meta.env.VITE_API_URL ||
+    (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}/api/v1` : 'http://localhost:3001/api/v1');
 };
