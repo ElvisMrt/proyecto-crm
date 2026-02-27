@@ -4,7 +4,7 @@ import axios from 'axios';
 import { HiMail, HiLockClosed, HiEye, HiEyeOff } from 'react-icons/hi';
 import logoSrc from '../utils/3.svg';
 
-const API_BASE_URL = 'http://localhost:3001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export default function SaaSLogin() {
   const [email, setEmail] = useState('');
