@@ -31,9 +31,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copiar configuración nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar archivos públicos del formulario
-COPY ../public /usr/share/nginx/html/public
-
 # Crear directorios necesarios
 RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run/nginx
 
