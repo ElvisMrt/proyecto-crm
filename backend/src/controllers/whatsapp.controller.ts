@@ -238,7 +238,7 @@ export const renderTemplate = (template: string, variables: Record<string, any>)
   let rendered = template;
   
   // Reemplazar variables {{variableName}}
-  Object.keys(variables).forEach((key) => {
+  Object.keys(variables).forEach((key: any) => {
     const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
     const value = variables[key] != null ? String(variables[key]) : '';
     rendered = rendered.replace(regex, value);

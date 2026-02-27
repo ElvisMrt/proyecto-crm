@@ -39,50 +39,47 @@ import SaaSSettings from './pages/SaaSSettings';
 import { SaaSLayout } from './components/SaaSLayout';
 import { SaaSPrivateRoute } from './components/SaaSPrivateRoute';
 
-// Detectar si estamos en modo SaaS Admin (sin tenant específico)
+// Detectar si estamos en modo SaaS Admin
+// Reglas:
+//   admin.IP.nip.io       → SaaS Admin
+//   admin.dominio.com     → SaaS Admin
+//   IP pura (sin sub)     → SaaS Admin  (acceso directo)
+//   localhost sin sub     → SaaS Admin  (dev)
+//   ?mode=saas            → SaaS Admin  (override dev)
+//   ?mode=crm             → CRM Tenant  (override dev)
+//   neypier.IP.nip.io     → CRM Tenant
+//   neypier.dominio.com   → CRM Tenant
 const isSaaSAdminMode = (): boolean => {
   if (typeof window === 'undefined') return false;
-  
+
   const hostname = window.location.hostname;
   const searchParams = new URLSearchParams(window.location.search);
-  
-  // Si hay parámetro ?mode=saas en localhost, forzar modo SaaS
-  if ((hostname === 'localhost' || hostname === '127.0.0.1') && searchParams.get('mode') === 'saas') {
-    return true;
+
+  // Override por query param (útil en desarrollo)
+  const mode = searchParams.get('mode');
+  if (mode === 'saas') return true;
+  if (mode === 'crm') return false;
+
+  // IP pura = SaaS Admin (sin subdominio)
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return true;
+
+  // localhost sin subdominio = SaaS Admin
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+
+  // nip.io: admin.IP.nip.io → SaaS | slug.IP.nip.io → CRM
+  const nipIoMatch = hostname.match(/^([^.]+)\.\d+\.\d+\.\d+\.\d+\.nip\.io$/);
+  if (nipIoMatch) {
+    return nipIoMatch[1] === 'admin';
   }
-  
-  // Si hay parámetro ?mode=crm en localhost, forzar modo CRM
-  if ((hostname === 'localhost' || hostname === '127.0.0.1') && searchParams.get('mode') === 'crm') {
-    return false;
-  }
-  
-  // Localhost sin subdominio = CRM por defecto (para desarrollo)
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return false;
-  }
-  
-  // Detectar subdominios de localhost (ej: mi-empresa-demo.localhost)
-  if (hostname.includes('.localhost')) {
-    const parts = hostname.split('.');
-    // Si tiene un subdominio antes de .localhost, es modo CRM
-    if (parts.length > 1) {
-      return false; // cualquier subdominio.localhost = CRM
-    }
-  }
-  
-  // Subdominios específicos de admin = SaaS
-  if (hostname.startsWith('admin.') || hostname.startsWith('app.') || hostname.startsWith('www.')) {
-    return true;
-  }
-  
-  // Dominio base sin subdominio = SaaS
+
+  // Dominio real: subdominio "admin" → SaaS, cualquier otro → CRM
   const parts = hostname.split('.');
-  if (parts.length <= 2) {
-    return true; // neypier.com = SaaS
+  if (parts.length >= 3) {
+    return parts[0] === 'admin';
   }
-  
-  // Cualquier otro subdominio = Tenant CRM
-  return false; // tenant.neypier.com = CRM
+
+  // Dominio base sin subdominio (neypier.com) → SaaS Admin
+  return true;
 };
 
 function App() {

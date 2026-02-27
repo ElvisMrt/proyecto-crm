@@ -1,7 +1,12 @@
 import axios from 'axios';
 import { getTenantSubdomain } from './tenant.service';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+// URL del API: si hay VITE_API_URL la usa, sino construye dinámicamente
+// desde el host actual (funciona con cualquier subdominio nip.io o dominio real)
+const API_BASE_URL = import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.host}/api/v1`
+    : 'http://localhost:3001/api/v1');
 
 // ============================================
 // API para CRM (usa token del tenant)

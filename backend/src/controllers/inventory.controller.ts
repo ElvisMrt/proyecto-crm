@@ -443,7 +443,7 @@ export const getStock = async (req: AuthRequest, res: Response) => {
 
     // Filtrar solo productos que controlan stock y evitar mostrar stock negativo
     const mappedStocks = stocks
-      .filter((stock) => stock.product.controlsStock)
+      .filter((stock: any) => stock.product.controlsStock)
       .map((stock) => ({
         id: stock.id,
         product: stock.product,

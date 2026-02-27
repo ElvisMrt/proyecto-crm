@@ -709,7 +709,7 @@ export const getPermissions = async (req: AuthRequest, res: Response) => {
     const { PERMISSIONS } = require('../middleware/permissions.middleware');
     
     const permissionsByModule: any = {};
-    Object.entries(PERMISSIONS).forEach(([key, value]) => {
+    Object.entries(PERMISSIONS).forEach(([key, value]: any) => {
       const module = key.split('_')[0].toLowerCase();
       if (!permissionsByModule[module]) {
         permissionsByModule[module] = [];

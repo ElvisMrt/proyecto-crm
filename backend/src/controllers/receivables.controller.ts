@@ -109,11 +109,11 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
       };
     });
 
-    const pendingInvoices = invoicesWithDetails.filter((inv) => Number(inv.balance) > 0);
-    const totalReceivable = pendingInvoices.reduce((sum, inv) => sum + inv.balance, 0);
+    const pendingInvoices = invoicesWithDetails.filter((inv: any) => Number(inv.balance) > 0);
+    const totalReceivable = pendingInvoices.reduce((sum: number, inv: any) => sum + inv.balance, 0);
     const totalOverdue = pendingInvoices
-      .filter((inv) => inv.daysOverdue > 0)
-      .reduce((sum, inv) => sum + inv.balance, 0);
+      .filter((inv: any) => inv.daysOverdue > 0)
+      .reduce((sum: number, inv: any) => sum + inv.balance, 0);
 
     res.json({
       client,
@@ -123,7 +123,7 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
         totalInvoices: invoices.length,
         pendingInvoices: pendingInvoices.length,
         averageDaysOverdue: pendingInvoices.length > 0
-          ? Math.round(pendingInvoices.reduce((sum, inv) => sum + inv.daysOverdue, 0) / pendingInvoices.length)
+          ? Math.round(pendingInvoices.reduce((sum: number, inv: any) => sum + inv.daysOverdue, 0) / pendingInvoices.length)
           : 0,
       },
       invoices: invoicesWithDetails,
@@ -303,7 +303,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       }
 
       // Validate amounts
-      const totalPaymentAmount = invoicePayments.reduce((sum, ip) => sum + ip.amount, 0);
+      const totalPaymentAmount = invoicePayments.reduce((sum: number, ip: any) => sum + ip.amount, 0);
       if (Math.abs(totalPaymentAmount - data.amount) > 0.01) {
         return res.status(400).json({
           error: {
@@ -314,7 +314,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       }
 
       for (const ip of invoicePayments) {
-        const invoice = invoices.find((inv) => inv.id === ip.invoiceId);
+        const invoice = invoices.find((inv: any) => inv.id === ip.invoiceId);
         if (!invoice) {
           return res.status(400).json({
             error: {
@@ -367,7 +367,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
 
       // Validate all invoices are from the same branch (if branchId is specified)
       if (branchId) {
-        const invalidBranchInvoices = invoices.filter((inv) => inv.branchId !== branchId);
+        const invalidBranchInvoices = invoices.filter((inv: any) => inv.branchId !== branchId);
         if (invalidBranchInvoices.length > 0) {
           return res.status(400).json({
             error: {
@@ -383,7 +383,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         invoiceBranchId = invoices[0].branchId;
       }
 
-      const totalBalance = invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
       if (data.amount > totalBalance) {
         return res.status(400).json({
           error: {
@@ -416,7 +416,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         orderBy: { dueDate: 'asc' },
       });
 
-      const totalBalance = invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
       if (data.amount > totalBalance) {
         return res.status(400).json({
           error: {
@@ -428,7 +428,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
 
       // Validate all invoices are from the same branch (if branchId is specified)
       if (branchId) {
-        const invalidBranchInvoices = invoices.filter((inv) => inv.branchId !== branchId);
+        const invalidBranchInvoices = invoices.filter((inv: any) => inv.branchId !== branchId);
         if (invalidBranchInvoices.length > 0) {
           return res.status(400).json({
             error: {
@@ -477,7 +477,7 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       if (invoicePayments.length > 0) {
         // Distribución manual - crear un payment por cada factura
         for (const ip of invoicePayments) {
-          const invoice = invoices.find((inv) => inv.id === ip.invoiceId);
+          const invoice = invoices.find((inv: any) => inv.id === ip.invoiceId);
           if (!invoice) continue;
 
           const invoiceBalance = Number(invoice.balance);
@@ -808,41 +808,41 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const totalReceivable = allInvoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+    const totalReceivable = allInvoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
-    const overdue = allInvoices.filter((inv) => inv.dueDate && inv.dueDate < now);
-    const totalOverdue = overdue.reduce((sum, inv) => sum + Number(inv.balance), 0);
+    const overdue = allInvoices.filter((inv: any) => inv.dueDate && inv.dueDate < now);
+    const totalOverdue = overdue.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     // Group by age (days overdue)
     const byAge = {
       '0-30': overdue
-        .filter((inv) => {
+        .filter((inv: any) => {
           if (!inv.dueDate) return false;
           const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
           return days >= 0 && days <= 30;
         })
-        .reduce((sum, inv) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
       '31-60': overdue
-        .filter((inv) => {
+        .filter((inv: any) => {
           if (!inv.dueDate) return false;
           const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
           return days > 30 && days <= 60;
         })
-        .reduce((sum, inv) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
       '61-90': overdue
-        .filter((inv) => {
+        .filter((inv: any) => {
           if (!inv.dueDate) return false;
           const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
           return days > 60 && days <= 90;
         })
-        .reduce((sum, inv) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
       '90+': overdue
-        .filter((inv) => {
+        .filter((inv: any) => {
           if (!inv.dueDate) return false;
           const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
           return days > 90;
         })
-        .reduce((sum, inv) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
     };
 
     // Count delinquent clients (clients with overdue invoices)
@@ -856,7 +856,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     // Get top 10 clients by receivable amount
     const clientReceivables = new Map<string, { clientId: string; total: number; overdue: number; invoiceCount: number }>();
     
-    allInvoices.forEach((inv) => {
+    allInvoices.forEach((inv: any) => {
       if (!inv.clientId) return;
       const existing = clientReceivables.get(inv.clientId) || { clientId: inv.clientId, total: 0, overdue: 0, invoiceCount: 0 };
       existing.total += Number(inv.balance);
@@ -876,7 +876,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
 
     // Fetch client details for top clients
     const topClients = await Promise.all(
-      topClientsData.map(async (data) => {
+      topClientsData.map(async (data: any) => {
         const client = await prisma.client.findUnique({
           where: { id: data.clientId },
           select: {
@@ -899,7 +899,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       .slice(0, 10);
 
     const topDebtors = await Promise.all(
-      topDebtorsData.map(async (data) => {
+      topDebtorsData.map(async (data: any) => {
         const client = await prisma.client.findUnique({
           where: { id: data.clientId },
           select: {

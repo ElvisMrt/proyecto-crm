@@ -88,18 +88,18 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
 
     // Calculate current balance for each cash register
     const cashRegistersWithBalance = await Promise.all(
-      cashRegisters.map(async (cashRegister) => {
+      cashRegisters.map(async (cashRegister: any) => {
         const movements = await prisma.cashMovement.findMany({
           where: { cashRegisterId: cashRegister.id },
         });
 
         const totalIncome = movements
-          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
         const totalExpenses = movements
-          .filter((m) => m.type === 'MANUAL_EXIT')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'MANUAL_EXIT')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
         const currentBalance = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
 
@@ -289,12 +289,12 @@ export const closeCash = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     const totalIncome = cashRegister.movements
-      .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const totalExpenses = cashRegister.movements
-      .filter((m) => m.type === 'MANUAL_EXIT')
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === 'MANUAL_EXIT')
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const expectedAmount = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
     const difference = Number(data.finalAmount) - expectedAmount;
@@ -556,30 +556,30 @@ export const getDailySummary = async (req: AuthRequest, res: Response) => {
     });
 
     const salesTotal = movements
-      .filter((m) => m.type === MovementType.SALE)
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === MovementType.SALE)
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const paymentsTotal = movements
-      .filter((m) => m.type === MovementType.PAYMENT)
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === MovementType.PAYMENT)
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const manualEntriesTotal = movements
-      .filter((m) => m.type === MovementType.MANUAL_ENTRY)
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === MovementType.MANUAL_ENTRY)
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const manualExitsTotal = Math.abs(
       movements
-        .filter((m) => m.type === MovementType.MANUAL_EXIT)
-        .reduce((sum, m) => sum + Number(m.amount), 0)
+        .filter((m: any) => m.type === MovementType.MANUAL_EXIT)
+        .reduce((sum: number, m: any) => sum + Number(m.amount), 0)
     );
 
     const openingTotal = movements
-      .filter((m) => m.type === MovementType.OPENING)
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === MovementType.OPENING)
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     const closingTotal = movements
-      .filter((m) => m.type === MovementType.CLOSING)
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+      .filter((m: any) => m.type === MovementType.CLOSING)
+      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
     res.json({
       date: date.toISOString().split('T')[0],
@@ -668,12 +668,12 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
 
     const data = cashRegisters.map((cr) => {
       const totalIncome = cr.movements
-        .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
-        .reduce((sum, m) => sum + Number(m.amount), 0);
+        .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
+        .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
       const totalExpenses = cr.movements
-        .filter((m) => m.type === 'MANUAL_EXIT')
-        .reduce((sum, m) => sum + Number(m.amount), 0);
+        .filter((m: any) => m.type === 'MANUAL_EXIT')
+        .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
       return {
         id: cr.id,

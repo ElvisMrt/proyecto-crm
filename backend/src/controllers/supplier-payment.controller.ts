@@ -495,13 +495,13 @@ export async function getPaymentStats(req: TenantRequest, res: Response) {
       })
     ]);
 
-    const totalAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
     const amountThisMonth = payments
       .filter(p => p.paymentDate >= startOfMonth)
-      .reduce((sum, p) => sum + Number(p.amount), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
     const amountThisYear = payments
       .filter(p => p.paymentDate >= startOfYear)
-      .reduce((sum, p) => sum + Number(p.amount), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
     res.json({
       success: true,

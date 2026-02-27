@@ -482,7 +482,7 @@ export const getNcfStats = async (req: AuthRequest, res: Response) => {
       expiredSequences: [] as any[],
     };
 
-    activeSequences.forEach((seq) => {
+    activeSequences.forEach((seq: any) => {
       // Contar por prefijo
       stats.sequencesByPrefix[seq.prefix] = (stats.sequencesByPrefix[seq.prefix] || 0) + 1;
 

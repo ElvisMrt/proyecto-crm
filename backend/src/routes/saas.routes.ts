@@ -181,11 +181,12 @@ router.post('/tenants', saasAdminMiddleware, async (req, res) => {
       });
     }
 
-    // En arquitectura de BD compartida, todos los tenants usan la misma URL
-    const databaseName = `crm_tenant_${slug}`; // Solo para referencia
-    const databaseUrl = process.env.DATABASE_URL || ''; // Usar la misma BD para todos
+    // Cada tenant tiene su propia base de datos
+    const databaseName = `crm_tenant_${slug}`;
+    const baseDbUrl = process.env.DATABASE_URL || '';
+    const databaseUrl = baseDbUrl.replace(/\/[^/?]+(\?.*)?$/, `/${databaseName}$1`);
 
-    // Crear tenant
+    // Crear tenant en estado PENDING hasta que provisioning complete
     const tenant = await masterPrisma.tenant.create({
       data: {
         slug,
@@ -195,7 +196,7 @@ router.post('/tenants', saasAdminMiddleware, async (req, res) => {
         phone,
         address,
         rnc,
-        status: 'ACTIVE',
+        status: 'PENDING',
         plan: plan || 'BASIC',
         databaseName,
         databaseUrl,

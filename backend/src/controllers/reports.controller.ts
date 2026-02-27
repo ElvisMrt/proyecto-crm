@@ -96,11 +96,11 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
     if (currentCash) {
       const income = currentCash.movements
-        .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
-        .reduce((sum, m) => sum + Number(m.amount), 0);
+        .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+        .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
       const expenses = currentCash.movements
-        .filter((m) => m.type === 'MANUAL_EXIT')
-        .reduce((sum, m) => sum + Number(m.amount), 0);
+        .filter((m: any) => m.type === 'MANUAL_EXIT')
+        .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
       cashStatus = {
         balance: Number(currentCash.initialAmount) + income - expenses,
         status: 'OPEN',
@@ -122,7 +122,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
     });
 
     const lowStockProducts = allStocks
-      .filter((s) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock))
+      .filter((s: any) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock))
       .slice(0, 5)
       .map((s) => ({
         id: s.product.id,
@@ -138,7 +138,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
     }
 
     const chartData = await Promise.all(
-      days.map(async (day) => {
+      days.map(async (day: any) => {
         const dayStart = new Date(day);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(day);
@@ -212,8 +212,8 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
     const productsWithDetails = await Promise.all(
       topProducts
-        .filter((item) => item.productId) // Filter out null productIds
-        .map(async (item) => {
+        .filter((item: any) => item.productId) // Filter out null productIds
+        .map(async (item: any) => {
         const product = await prisma.product.findUnique({
             where: { id: item.productId! },
           select: { id: true, name: true },
@@ -245,8 +245,8 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
     const clientsWithDetails = await Promise.all(
       bestClients
-        .filter((item) => item.clientId) // Filter out null clientIds
-        .map(async (item) => {
+        .filter((item: any) => item.clientId) // Filter out null clientIds
+        .map(async (item: any) => {
         const client = await prisma.client.findUnique({
             where: { id: item.clientId! },
           select: { id: true, name: true },
@@ -339,7 +339,7 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const costs = invoiceItems.reduce((sum, item) => {
+    const costs = invoiceItems.reduce((sum: number, item: any) => {
       const cost = item.product?.cost ? Number(item.product.cost) : 0;
       return sum + cost * Number(item.quantity);
     }, 0);
@@ -495,7 +495,7 @@ export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
     let totalReceivable = 0;
     let totalOverdue = 0;
 
-    invoices.forEach((inv) => {
+    invoices.forEach((inv: any) => {
       const balance = Number(inv.balance);
       totalReceivable += balance;
 
@@ -585,11 +585,11 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     const summary = cashRegisters.reduce(
       (acc, cash) => {
         const income = cash.movements
-          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
         const expenses = cash.movements
-          .filter((m) => m.type === 'MANUAL_EXIT')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'MANUAL_EXIT')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
         acc.totalIncome += income;
         acc.totalExpenses += expenses;
@@ -602,11 +602,11 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     res.json({
       data: cashRegisters.map((cash) => {
         const income = cash.movements
-          .filter((m) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
         const expenses = cash.movements
-          .filter((m) => m.type === 'MANUAL_EXIT')
-          .reduce((sum, m) => sum + Number(m.amount), 0);
+          .filter((m: any) => m.type === 'MANUAL_EXIT')
+          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
 
         return {
           id: cash.id,
@@ -660,9 +660,9 @@ export const getInventoryReport = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const lowStock = stocks.filter((s) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock));
+    const lowStock = stocks.filter((s: any) => s.product.controlsStock && Number(s.quantity) <= Number(s.minStock));
 
-    const totalValue = stocks.reduce((sum, s) => {
+    const totalValue = stocks.reduce((sum: number, s: any) => {
       const cost = s.product.cost ? Number(s.product.cost) : 0;
       return sum + cost * Number(s.quantity);
     }, 0);
@@ -717,9 +717,9 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
 
     const now = new Date();
     const suppliersWithFinancials = suppliers.map((supplier) => {
-      const totalPurchased = supplier.invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
-      const totalPaid = supplier.invoices.reduce((sum, inv) => sum + Number(inv.paid), 0);
-      const totalBalance = supplier.invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+      const totalPurchased = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0);
+      const totalPaid = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.paid), 0);
+      const totalBalance = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
       const overdueInvoices = supplier.invoices.filter(
         (inv) => Number(inv.balance) > 0 && inv.dueDate && inv.dueDate < now
       ).length;
@@ -739,11 +739,11 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
 
     const summary = {
       totalSuppliers: suppliers.length,
-      activeSuppliers: suppliers.filter((s) => s.isActive).length,
-      totalDebt: suppliersWithFinancials.reduce((sum, s) => sum + s.totalBalance, 0),
+      activeSuppliers: suppliers.filter((s: any) => s.isActive).length,
+      totalDebt: suppliersWithFinancials.reduce((sum: number, s: any) => sum + s.totalBalance, 0),
       totalOverdue: suppliersWithFinancials
-        .filter((s) => s.overdueInvoices > 0)
-        .reduce((sum, s) => sum + s.totalBalance, 0),
+        .filter((s: any) => s.overdueInvoices > 0)
+        .reduce((sum: number, s: any) => sum + s.totalBalance, 0),
     };
 
     res.json({
@@ -789,9 +789,9 @@ export const getPurchasesReport = async (req: AuthRequest, res: Response) => {
 
     const summary = {
       totalPurchases: purchases.length,
-      totalAmount: purchases.reduce((sum, p) => sum + Number(p.total), 0),
-      pending: purchases.filter((p) => p.status === 'PENDING').length,
-      received: purchases.filter((p) => p.status === 'RECEIVED').length,
+      totalAmount: purchases.reduce((sum: number, p: any) => sum + Number(p.total), 0),
+      pending: purchases.filter((p: any) => p.status === 'PENDING').length,
+      received: purchases.filter((p: any) => p.status === 'RECEIVED').length,
     };
 
     res.json({

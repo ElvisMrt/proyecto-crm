@@ -168,10 +168,10 @@ export const getClient = async (req: AuthRequest, res: Response) => {
     }
 
     // Calculate summary
-    const totalSales = client.invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+    const totalSales = client.invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0);
     const totalReceivable = client.invoices
-      .filter((inv) => inv.status !== 'PAID' && inv.status !== 'CANCELLED')
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .filter((inv: any) => inv.status !== 'PAID' && inv.status !== 'CANCELLED')
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     res.json({
       ...client,

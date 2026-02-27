@@ -1,7 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import path from 'path';
 import bcrypt from 'bcryptjs';
 
 const execAsync = promisify(exec);
@@ -14,28 +13,38 @@ export class TenantProvisioningService {
   }
 
   /**
-   * Crea una nueva base de datos física para un tenant
-   * ACTUALIZADO: Ahora crea bases de datos separadas para cada tenant
+   * Construye la URL de DB para un tenant dado su nombre de DB
+   */
+  private buildTenantDbUrl(databaseName: string): string {
+    const base = process.env.DATABASE_URL || '';
+    return base.replace(/\/[^/?]+(\?.*)?$/, `/${databaseName}$1`);
+  }
+
+  /**
+   * Crea la base de datos física del tenant usando una conexión Prisma a postgres
    */
   async createTenantDatabase(databaseName: string): Promise<boolean> {
     try {
-      console.log(`[Provisioning] Creando base de datos física: ${databaseName}`);
-      
-      // Ejecutar comando SQL para crear la base de datos
-      const createDbCommand = `docker exec crm_postgres psql -U postgres -c "CREATE DATABASE ${databaseName};"`;
-      
+      console.log(`[Provisioning] Creando base de datos: ${databaseName}`);
+
+      // Conectar a la DB de administración (postgres) para ejecutar CREATE DATABASE
+      const adminUrl = (process.env.DATABASE_URL || '').replace(/\/[^/?]+(\?.*)?$/, '/postgres$1');
+      const adminPrisma = new PrismaClient({ datasources: { db: { url: adminUrl } } });
+
       try {
-        await execAsync(createDbCommand);
-        console.log(`[Provisioning] ✅ Base de datos ${databaseName} creada exitosamente`);
-        return true;
-      } catch (error: any) {
-        // Si la base de datos ya existe, no es un error
-        if (error.stderr && error.stderr.includes('already exists')) {
+        await adminPrisma.$executeRawUnsafe(`CREATE DATABASE "${databaseName}"`);
+        console.log(`[Provisioning] ✅ Base de datos ${databaseName} creada`);
+      } catch (err: any) {
+        if (err.message?.includes('already exists')) {
           console.log(`[Provisioning] ℹ️  Base de datos ${databaseName} ya existe`);
-          return true;
+        } else {
+          throw err;
         }
-        throw error;
+      } finally {
+        await adminPrisma.$disconnect();
       }
+
+      return true;
     } catch (error) {
       console.error('[Provisioning] Error creando base de datos:', error);
       return false;
@@ -43,34 +52,34 @@ export class TenantProvisioningService {
   }
 
   /**
-   * Aplica el schema del CRM a la base de datos del tenant
-   * ACTUALIZADO: Ahora aplica migraciones a cada base de datos separada
+   * Aplica migraciones Prisma a la DB del tenant usando child_process con env variable
    */
   async applyTenantSchema(databaseUrl: string): Promise<boolean> {
     try {
-      console.log('[Provisioning] Aplicando schema CRM a base de datos separada...');
-      
-      // Ejecutar migraciones de Prisma en la base de datos del tenant
-      const migrateCommand = `DATABASE_URL="${databaseUrl}" npx prisma migrate deploy`;
-      
-      try {
-        await execAsync(migrateCommand, {
-          cwd: process.cwd(),
-        });
-        console.log('[Provisioning] ✅ Schema aplicado exitosamente');
-        return true;
-      } catch (error: any) {
-        console.error('[Provisioning] Error aplicando schema:', error);
-        return false;
-      }
-    } catch (error) {
-      console.error('[Provisioning] Error aplicando schema:', error);
+      console.log('[Provisioning] Aplicando migraciones Prisma...');
+
+      const { stdout, stderr } = await execAsync(
+        'npx prisma migrate deploy --schema=/app/prisma/schema.prisma',
+        {
+          cwd: '/app',
+          env: { ...process.env, DATABASE_URL: databaseUrl },
+          timeout: 60000,
+        }
+      );
+
+      if (stdout) console.log('[Provisioning] migrate stdout:', stdout.slice(0, 500));
+      if (stderr && !stderr.includes('warn')) console.warn('[Provisioning] migrate stderr:', stderr.slice(0, 300));
+
+      console.log('[Provisioning] ✅ Migraciones aplicadas');
+      return true;
+    } catch (error: any) {
+      console.error('[Provisioning] Error aplicando migraciones:', error.message);
       return false;
     }
   }
 
   /**
-   * Crea datos iniciales para un tenant (usuario admin, sucursal default, etc.)
+   * Crea datos iniciales para el tenant: admin, sucursal, categoría, NCF
    */
   async seedTenantData(tenantId: string, adminData: {
     name: string;
@@ -79,26 +88,18 @@ export class TenantProvisioningService {
     companyName: string;
   }): Promise<boolean> {
     try {
-      const tenant = await this.masterPrisma.tenant.findUnique({
-        where: { id: tenantId },
-      });
+      const tenant = await this.masterPrisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) throw new Error('Tenant no encontrado');
 
-      if (!tenant) {
-        throw new Error('Tenant no encontrado');
-      }
-
-      // Crear Prisma Client para la DB del tenant
       const tenantPrisma = new PrismaClient({
-        datasources: {
-          db: { url: tenant.databaseUrl },
-        },
+        datasources: { db: { url: tenant.databaseUrl } },
       });
 
-      console.log('[Provisioning] Creando datos iniciales...');
+      console.log('[Provisioning] Creando datos iniciales para:', tenant.name);
 
-      // 1. Crear usuario administrador
       const hashedPassword = await bcrypt.hash(adminData.password, 10);
 
+      // 1. Admin
       const adminUser = await tenantPrisma.user.create({
         data: {
           email: adminData.email,
@@ -109,7 +110,7 @@ export class TenantProvisioningService {
         },
       });
 
-      // 2. Crear sucursal principal
+      // 2. Sucursal principal
       const mainBranch = await tenantPrisma.branch.create({
         data: {
           name: 'Sucursal Principal',
@@ -127,16 +128,16 @@ export class TenantProvisioningService {
         data: { branchId: mainBranch.id },
       });
 
-      // 4. Crear categoría de productos por defecto
+      // 4. Categoría por defecto
       await tenantPrisma.category.create({
         data: {
           name: 'General',
-          description: 'Categoría por defecto para productos',
+          description: 'Categoría por defecto',
           isActive: true,
         },
       });
 
-      // 5. Crear secuencia NCF por defecto
+      // 5. Secuencia NCF por defecto
       await tenantPrisma.ncfSequence.create({
         data: {
           prefix: 'B01',
@@ -150,17 +151,16 @@ export class TenantProvisioningService {
       });
 
       await tenantPrisma.$disconnect();
-
-      console.log('[Provisioning] Datos iniciales creados exitosamente');
+      console.log('[Provisioning] ✅ Datos iniciales creados');
       return true;
     } catch (error) {
-      console.error('[Provisioning] Error creando datos iniciales:', error);
+      console.error('[Provisioning] Error en seed:', error);
       return false;
     }
   }
 
   /**
-   * Provisioning completo de un tenant
+   * Provisioning completo: crear DB + migraciones + seed + activar tenant
    */
   async provisionTenant(tenantId: string, adminData: {
     name: string;
@@ -169,51 +169,46 @@ export class TenantProvisioningService {
     companyName: string;
   }): Promise<{ success: boolean; message: string }> {
     try {
-      const tenant = await this.masterPrisma.tenant.findUnique({
-        where: { id: tenantId },
-      });
+      const tenant = await this.masterPrisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) return { success: false, message: 'Tenant no encontrado' };
 
-      if (!tenant) {
-        return { success: false, message: 'Tenant no encontrado' };
+      console.log(`\n[Provisioning] ▶ Iniciando para: ${tenant.name} (${tenant.databaseName})`);
+
+      // Asegurarse de que la databaseUrl sea la correcta (basada en databaseName)
+      const tenantDbUrl = this.buildTenantDbUrl(tenant.databaseName);
+
+      // Actualizar databaseUrl en master si difiere
+      if (tenant.databaseUrl !== tenantDbUrl) {
+        await this.masterPrisma.tenant.update({
+          where: { id: tenantId },
+          data: { databaseUrl: tenantDbUrl },
+        });
+        console.log(`[Provisioning] ✅ databaseUrl actualizada: ${tenantDbUrl}`);
       }
 
-      console.log(`\n[Provisioning] Iniciando provisioning para tenant: ${tenant.name}`);
-      console.log(`[Provisioning] Database: ${tenant.databaseName}`);
-      console.log(`[Provisioning] URL: ${tenant.databaseUrl}\n`);
-
-      // 1. Crear base de datos física
+      // 1. Crear DB
       const dbCreated = await this.createTenantDatabase(tenant.databaseName);
-      if (!dbCreated) {
-        return { success: false, message: 'Error creando base de datos física' };
-      }
+      if (!dbCreated) return { success: false, message: 'Error creando base de datos física' };
 
-      // 2. Aplicar schema CRM
-      const schemaApplied = await this.applyTenantSchema(tenant.databaseUrl);
-      if (!schemaApplied) {
-        return { success: false, message: 'Error aplicando schema CRM' };
-      }
+      // 2. Migraciones
+      const schemaOk = await this.applyTenantSchema(tenantDbUrl);
+      if (!schemaOk) return { success: false, message: 'Error aplicando migraciones' };
 
-      // 3. Crear datos iniciales
-      const dataSeeded = await this.seedTenantData(tenantId, adminData);
-      if (!dataSeeded) {
-        return { success: false, message: 'Error creando datos iniciales' };
-      }
+      // 3. Seed (con la URL actualizada en el tenant)
+      const updatedTenant = await this.masterPrisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!updatedTenant) return { success: false, message: 'Tenant no encontrado tras actualización' };
 
-      // 4. Actualizar estado del tenant a ACTIVE
+      const seeded = await this.seedTenantData(tenantId, adminData);
+      if (!seeded) return { success: false, message: 'Error en datos iniciales' };
+
+      // 4. Activar
       await this.masterPrisma.tenant.update({
         where: { id: tenantId },
-        data: { 
-          status: 'ACTIVE',
-          lastActiveAt: new Date(),
-        },
+        data: { status: 'ACTIVE', lastActiveAt: new Date() },
       });
 
-      console.log(`\n[Provisioning] ✅ Tenant ${tenant.name} provisionado exitosamente!\n`);
-
-      return { 
-        success: true, 
-        message: 'Tenant provisionado exitosamente',
-      };
+      console.log(`[Provisioning] ✅ Tenant ${tenant.name} provisionado y ACTIVO\n`);
+      return { success: true, message: 'Tenant provisionado exitosamente' };
     } catch (error: any) {
       console.error('[Provisioning] Error general:', error);
       return { success: false, message: error.message || 'Error en provisioning' };
@@ -221,24 +216,24 @@ export class TenantProvisioningService {
   }
 
   /**
-   * Elimina la base de datos de un tenant (uso con precaución)
+   * Elimina la base de datos de un tenant
    */
   async deleteTenantDatabase(databaseName: string): Promise<boolean> {
     try {
-      const baseDatabaseUrl = process.env.DATABASE_URL || '';
-      const baseUrl = baseDatabaseUrl.replace(/\/[^/]*$/, '/postgres');
+      const adminUrl = (process.env.DATABASE_URL || '').replace(/\/[^/?]+(\?.*)?$/, '/postgres$1');
+      const adminPrisma = new PrismaClient({ datasources: { db: { url: adminUrl } } });
 
-      console.log(`[Provisioning] Eliminando base de datos: ${databaseName}`);
+      try {
+        // Terminar conexiones activas
+        await adminPrisma.$executeRawUnsafe(
+          `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${databaseName}' AND pid <> pg_backend_pid()`
+        );
+        await adminPrisma.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${databaseName}"`);
+        console.log(`[Provisioning] Base de datos ${databaseName} eliminada`);
+      } finally {
+        await adminPrisma.$disconnect();
+      }
 
-      // Terminar conexiones activas
-      const terminateCommand = `psql "${baseUrl}" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${databaseName}' AND pid <> pg_backend_pid();"`;
-      await execAsync(terminateCommand).catch(() => {}); // Ignorar errores aquí
-
-      // Eliminar base de datos
-      const dropCommand = `psql "${baseUrl}" -c "DROP DATABASE IF EXISTS \\"${databaseName}\\";"`;
-      await execAsync(dropCommand);
-
-      console.log(`[Provisioning] Base de datos ${databaseName} eliminada`);
       return true;
     } catch (error) {
       console.error('[Provisioning] Error eliminando base de datos:', error);

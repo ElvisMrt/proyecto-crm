@@ -527,11 +527,11 @@ export async function getInvoiceStats(req: TenantRequest, res: Response) {
 
     const totalDebt = invoices
       .filter(inv => inv.status !== 'PAID' && inv.status !== 'CANCELLED')
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     const overdueDebt = invoices
       .filter(inv => inv.status === 'OVERDUE')
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     const next30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const upcomingDue = invoices
@@ -540,7 +540,7 @@ export async function getInvoiceStats(req: TenantRequest, res: Response) {
         inv.dueDate <= next30Days && 
         inv.dueDate >= now
       )
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     res.json({
       success: true,

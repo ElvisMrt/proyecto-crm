@@ -393,7 +393,7 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     let subtotal = 0;
-    data.items.forEach((item) => {
+    data.items.forEach((item: any) => {
       const itemSubtotal = item.quantity * item.price - item.discount;
       subtotal += itemSubtotal;
     });
@@ -844,7 +844,7 @@ export const updateInvoice = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     let subtotal = 0;
-    data.items.forEach((item) => {
+    data.items.forEach((item: any) => {
       const itemSubtotal = item.quantity * item.price - item.discount;
       subtotal += itemSubtotal;
     });
@@ -1390,7 +1390,7 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
 
     // Check if invoice has payments - cannot cancel if it has partial payments
     if (invoice.payments && invoice.payments.length > 0) {
-      const totalPaid = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const totalPaid = invoice.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
       if (totalPaid > 0) {
         return res.status(400).json({
           error: {
@@ -1724,7 +1724,7 @@ export const createQuote = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     let subtotal = 0;
-    data.items.forEach((item) => {
+    data.items.forEach((item: any) => {
       const itemSubtotal = item.quantity * item.price - item.discount;
       subtotal += itemSubtotal;
     });
@@ -1838,7 +1838,7 @@ export const updateQuote = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     let subtotal = 0;
-    data.items.forEach((item) => {
+    data.items.forEach((item: any) => {
       const itemSubtotal = item.quantity * item.price - item.discount;
       subtotal += itemSubtotal;
     });
@@ -2274,7 +2274,7 @@ export const createPOSSale = async (req: AuthRequest, res: Response) => {
     // Validate amountReceived for cash payments
     if (data.paymentMethod === 'CASH' && data.amountReceived !== undefined) {
       // Calculate total first to validate
-      const subtotal = data.items.reduce((sum, item) => {
+      const subtotal = data.items.reduce((sum: number, item: any) => {
         const itemSubtotal = item.quantity * item.price - item.discount;
         return sum + itemSubtotal;
       }, 0) - (data.discount || 0);
@@ -2504,7 +2504,7 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
         
         if (newTotalCredited > invoiceQuantity) {
           // Find product name for error message
-          const invoiceItem = invoice.items.find((i) => i.productId === item.productId);
+          const invoiceItem = invoice.items.find((i: any) => i.productId === item.productId);
           const productName = invoiceItem?.description || 'producto';
           
           return res.status(400).json({
@@ -2543,7 +2543,7 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
 
     // Calculate totals
     let subtotal = 0;
-    data.items.forEach((item) => {
+    data.items.forEach((item: any) => {
       const itemSubtotal = item.quantity * item.price - item.discount;
       subtotal += itemSubtotal;
     });

@@ -26,6 +26,7 @@ app.use(cors({
       'http://mi-empresa-demo.neypier.com:5173',
       'http://mi-empresa-demo.neypier.com:5174',
       /https?:\/\/.*\.localhost(:\d+)?$/, // Cualquier subdominio de localhost
+      /https?:\/\/.*\.nip\.io(:\d+)?$/, // Cualquier subdominio de nip.io
       /https?:\/\/.*\.neypier\.com(:\d+)?$/, // Cualquier subdominio de neypier.com
       /https?:\/\/.*\.tudominio\.com(:\d+)?$/, // Cualquier subdominio de tudominio.com
     ];

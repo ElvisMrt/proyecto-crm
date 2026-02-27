@@ -11,10 +11,15 @@
 ---
 🚀 **Acceso Directo al Sistema**
 
-Ve a: http://localhost:5174/login
-Email: admin@test.com
-Password: admin123
-Click "Iniciar Sesión"
+✅ Para acceder al CRM (Tenant Demo):
+🔗 URL:      http://localhost:5174/login
+📧 Email:    admin@test.com
+🔑 Password: admin123
+✅ Para acceder al SAAS Admin:
+🔗 URL:      http://localhost:5174/login?mode=saas
+📧 Email:    superadmin@crm.com
+🔑 Password: admin123
+
 
 *(Por defecto entra al CRM. Para SaaS Admin usa ?mode=saas)*
 

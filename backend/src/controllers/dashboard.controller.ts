@@ -160,7 +160,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     let currentBalance = 0;
     if (currentCash) {
       currentBalance = Number(currentCash.initialAmount);
-      currentCash.movements.forEach((movement) => {
+      currentCash.movements.forEach((movement: any) => {
         if (['SALE', 'PAYMENT', 'MANUAL_ENTRY'].includes(movement.type)) {
           currentBalance += Number(movement.amount);
         } else {
@@ -228,7 +228,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     });
 
     // Calcular cuántas secuencias tienen menos del 10% disponibles
-    const ncfAboutToExpire = lowStockNcf.filter((seq) => {
+    const ncfAboutToExpire = lowStockNcf.filter((seq: any) => {
       const remaining = seq.endRange - seq.currentNumber;
       const totalRange = seq.endRange - seq.startRange + 1;
       const percentageRemaining = (remaining / totalRange) * 100;
@@ -322,7 +322,7 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
     }
 
     // Llenar con datos reales
-    sales.forEach((sale) => {
+    sales.forEach((sale: any) => {
       const dateKey = sale.issueDate.toISOString().split('T')[0];
       dataMap.set(dateKey, Number(sale._sum.total || 0));
     });

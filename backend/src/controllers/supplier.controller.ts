@@ -186,9 +186,9 @@ export async function getSupplierById(req: TenantRequest, res: Response) {
     });
 
     const financials = {
-      totalPurchased: invoices.reduce((sum, inv) => sum + Number(inv.total), 0),
-      totalPaid: invoices.reduce((sum, inv) => sum + Number(inv.paid), 0),
-      totalBalance: invoices.reduce((sum, inv) => sum + Number(inv.balance), 0),
+      totalPurchased: invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0),
+      totalPaid: invoices.reduce((sum: number, inv: any) => sum + Number(inv.paid), 0),
+      totalBalance: invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
       pendingInvoices: invoices.filter(inv => inv.status === 'PENDING').length,
       overdueInvoices: invoices.filter(inv => inv.status === 'OVERDUE').length
     };
@@ -441,16 +441,16 @@ export async function getSupplierStats(req: TenantRequest, res: Response) {
       select: { total: true, paid: true, balance: true, status: true, dueDate: true }
     });
 
-    const totalDebt = invoices.reduce((sum, inv) => sum + Number(inv.balance), 0);
+    const totalDebt = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
     const overdueDebt = invoices
       .filter(inv => inv.status === 'OVERDUE')
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     const now = new Date();
     const next30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const upcomingDue = invoices
       .filter(inv => inv.status === 'PENDING' && inv.dueDate <= next30Days && inv.dueDate >= now)
-      .reduce((sum, inv) => sum + Number(inv.balance), 0);
+      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     const recentPayments = await prisma.supplierPayment.findMany({
       where: {
@@ -461,7 +461,7 @@ export async function getSupplierStats(req: TenantRequest, res: Response) {
       select: { amount: true }
     });
 
-    const recentPaymentsTotal = recentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const recentPaymentsTotal = recentPayments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
     res.json({
       success: true,
