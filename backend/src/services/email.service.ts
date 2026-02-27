@@ -1,15 +1,20 @@
 import nodemailer from 'nodemailer';
 
-// Configuración del transporter SMTP
+// Configuración SMTP — Hostinger con info@neypier.com
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
+  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+  port: parseInt(process.env.SMTP_PORT || '465'),
+  secure: process.env.SMTP_SECURE !== 'false', // true por defecto (465 = SSL)
   auth: {
-    user: process.env.SMTP_USER || '',
+    user: process.env.SMTP_USER || 'info@neypier.com',
     pass: process.env.SMTP_PASS || '',
   },
 });
+
+const FROM_NAME = process.env.SMTP_FROM_NAME || 'CRM Neypier';
+const FROM_EMAIL = process.env.SMTP_USER || 'info@neypier.com';
+const FROM = `${FROM_NAME} <${FROM_EMAIL}>`;
+const CRM_DOMAIN = process.env.CRM_DOMAIN || 'neypier.com';
 
 // Verificar configuración SMTP
 export const verifyEmailConfig = async (): Promise<boolean> => {
@@ -104,7 +109,7 @@ export const sendNewAppointmentNotification = async (data: {
   `;
 
   const mailOptions = {
-    from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+    from: FROM,
     to,
     subject: `🔔 Nueva Cita: ${appointment.clientName} - ${dateStr}`,
     html: htmlContent,
@@ -171,7 +176,7 @@ export const sendClientConfirmation = async (data: {
   `;
 
   const mailOptions = {
-    from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+    from: FROM,
     to,
     subject: '✅ Tu cita ha sido confirmada',
     html: htmlContent,
@@ -213,7 +218,7 @@ export const sendSaaSWelcomeEmail = async (data: {
       <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: #1e40af;">Datos de acceso:</h3>
         <table style="width: 100%;">
-          <tr><td><strong>URL:</strong></td><td>https://${subdomain}.tudominio.com</td></tr>
+          <tr><td><strong>URL:</strong></td><td>http://${subdomain}.${CRM_DOMAIN}</td></tr>
           <tr><td><strong>Email:</strong></td><td>${adminEmail}</td></tr>
           <tr><td><strong>Contraseña:</strong></td><td>${adminPassword}</td></tr>
         </table>
@@ -232,7 +237,7 @@ export const sendSaaSWelcomeEmail = async (data: {
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+      from: FROM,
       to,
       subject: `¡Bienvenido a ${tenantName}! Tu CRM está listo`,
       html: htmlContent,
@@ -279,7 +284,7 @@ export const sendSaaSInvoiceEmail = async (data: {
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+      from: FROM,
       to,
       subject: `Nueva Factura - $${amount.toFixed(2)} DOP`,
       html: htmlContent,
@@ -323,7 +328,7 @@ export const sendSaaSPaymentConfirmation = async (data: {
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+      from: FROM,
       to,
       subject: `Pago Confirmado - $${amount.toFixed(2)} DOP`,
       html: htmlContent,
@@ -366,7 +371,7 @@ export const sendSaaSSuspensionEmail = async (data: {
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'CRM <noreply@crm.local>',
+      from: FROM,
       to,
       subject: `Cuenta Suspendida - ${tenantName}`,
       html: htmlContent,
@@ -375,4 +380,118 @@ export const sendSaaSSuspensionEmail = async (data: {
   } catch (error) {
     console.error('❌ Error enviando email de suspensión:', error);
   }
+};
+
+// ============================================
+// Reset de Contraseña
+// ============================================
+export const sendPasswordResetEmail = async (data: {
+  to: string;
+  name: string;
+  resetToken: string;
+  tenantSlug: string;
+}): Promise<void> => {
+  const { to, name, resetToken, tenantSlug } = data;
+  const resetUrl = `http://${tenantSlug}.${CRM_DOMAIN}/reset-password?token=${resetToken}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #1e40af; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Recuperar Contraseña</h1>
+      </div>
+      <div style="padding: 30px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p style="font-size: 16px; color: #374151;">Hola <strong>${name}</strong>,</p>
+        <p style="color: #6b7280;">Recibimos una solicitud para restablecer la contraseña de tu cuenta CRM.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}"
+             style="display: inline-block; background: #1e40af; color: white; padding: 14px 36px;
+                    text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            Restablecer Contraseña
+          </a>
+        </div>
+
+        <p style="color: #9ca3af; font-size: 13px;">O copia este enlace en tu navegador:</p>
+        <p style="background: #f3f4f6; padding: 10px; border-radius: 4px; font-size: 12px; word-break: break-all; color: #374151;">
+          ${resetUrl}
+        </p>
+
+        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 4px; margin-top: 20px;">
+          <p style="margin: 0; color: #92400e; font-size: 13px;">
+            ⚠️ Este enlace expira en <strong>1 hora</strong>. Si no solicitaste esto, ignora este correo.
+          </p>
+        </div>
+      </div>
+      <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px;">
+        Enviado desde info@neypier.com · CRM Neypier
+      </p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: FROM,
+    to,
+    subject: '🔐 Restablecer contraseña - CRM Neypier',
+    html: htmlContent,
+  });
+  console.log(`✅ Email de reset password enviado a ${to}`);
+};
+
+// Email de bienvenida al crear un tenant (con dominio real)
+export const sendTenantWelcomeEmail = async (data: {
+  to: string;
+  tenantName: string;
+  subdomain: string;
+  adminEmail: string;
+  adminPassword: string;
+}): Promise<void> => {
+  const { to, tenantName, subdomain, adminEmail, adminPassword } = data;
+  const crmUrl = `http://${subdomain}.${CRM_DOMAIN}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #1e40af; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0;">¡Bienvenido a ${tenantName}!</h1>
+        <p style="color: #bfdbfe; margin: 10px 0 0 0;">Tu CRM está listo para usar</p>
+      </div>
+      <div style="padding: 30px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p style="font-size: 16px; color: #374151;">Hola,</p>
+        <p style="color: #6b7280;">Tu cuenta en el sistema CRM ha sido creada exitosamente. Aquí están tus datos de acceso:</p>
+
+        <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1e40af;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="padding: 6px 0; color: #6b7280; width: 120px;"><strong>URL:</strong></td>
+                <td style="padding: 6px 0;"><a href="${crmUrl}" style="color: #1e40af;">${crmUrl}</a></td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Email:</strong></td>
+                <td style="padding: 6px 0;">${adminEmail}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Contraseña:</strong></td>
+                <td style="padding: 6px 0; font-family: monospace; font-size: 16px;">${adminPassword}</td></tr>
+          </table>
+        </div>
+
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="${crmUrl}"
+             style="display: inline-block; background: #1e40af; color: white; padding: 14px 36px;
+                    text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            Ingresar al CRM
+          </a>
+        </div>
+
+        <p style="color: #dc2626; font-size: 13px;">
+          <strong>Importante:</strong> Por seguridad, cambia tu contraseña después del primer inicio de sesión.
+        </p>
+      </div>
+      <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px;">
+        Enviado desde info@neypier.com · CRM Neypier
+      </p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: FROM,
+    to,
+    subject: `¡Tu CRM ${tenantName} está listo! Datos de acceso`,
+    html: htmlContent,
+  });
+  console.log(`✅ Email de bienvenida tenant enviado a ${to}`);
 };

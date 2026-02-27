@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
 import { masterPrisma } from '../middleware/tenant.middleware';
 import { saasAdminMiddleware } from '../middleware/tenant.middleware';
 import TenantProvisioningService from '../services/tenantProvisioning.service';
 import BillingService from '../services/billing.service';
+import { sendTenantWelcomeEmail } from '../services/email.service';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
@@ -120,30 +122,118 @@ router.get('/tenants', saasAdminMiddleware, async (req, res) => {
   }
 });
 
-// GET /saas/tenants/:id - Obtener detalle de un tenant
+// GET /saas/tenants/:id - Obtener detalle de un tenant + usuarios de su DB
 router.get('/tenants/:id', saasAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const tenant = await masterPrisma.tenant.findUnique({
-      where: { id },
-    });
-
+    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
     if (!tenant) {
       return res.status(404).json({
         error: { code: 'TENANT_NOT_FOUND', message: 'Tenant no encontrado' }
       });
     }
 
+    // Obtener usuarios de la DB del tenant
+    let tenantUsers: any[] = [];
+    if (tenant.databaseUrl && tenant.status === 'ACTIVE') {
+      try {
+        const tenantPrisma = new PrismaClient({ datasources: { db: { url: tenant.databaseUrl } } });
+        tenantUsers = await tenantPrisma.user.findMany({
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            isActive: true,
+            branchId: true,
+            lastLogin: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        await tenantPrisma.$disconnect();
+      } catch (e) {
+        console.warn('[SaaS] No se pudieron obtener usuarios del tenant:', (e as any).message);
+      }
+    }
+
     res.json({
       success: true,
-      data: tenant,
+      data: {
+        ...tenant,
+        settings: typeof tenant.settings === 'string' ? JSON.parse(tenant.settings) : tenant.settings,
+        limits: typeof tenant.limits === 'string' ? JSON.parse(tenant.limits) : tenant.limits,
+        tenantUsers,
+        users: [], // compatibilidad
+        invoices: [],
+        activities: [],
+      },
     });
   } catch (error) {
     console.error('Get tenant error:', error);
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'Error al obtener tenant' }
     });
+  }
+});
+
+// PUT /saas/tenants/:id/users/:userId - Editar usuario de un tenant
+router.put('/tenants/:id/users/:userId', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { name, email, role, isActive, newPassword } = req.body;
+
+    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
+    if (!tenant) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Tenant no encontrado' } });
+
+    const tenantPrisma = new PrismaClient({ datasources: { db: { url: tenant.databaseUrl } } });
+    try {
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (email !== undefined) updateData.email = email;
+      if (role !== undefined) updateData.role = role;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (newPassword) updateData.password = await bcrypt.hash(newPassword, 10);
+
+      const user = await tenantPrisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+      });
+      res.json({ success: true, data: user });
+    } finally {
+      await tenantPrisma.$disconnect();
+    }
+  } catch (error) {
+    console.error('Update tenant user error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error actualizando usuario' } });
+  }
+});
+
+// POST /saas/tenants/:id/users/:userId/reset-password - Resetear contraseña desde admin
+router.post('/tenants/:id/users/:userId/reset-password', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'La contraseña debe tener al menos 6 caracteres' } });
+    }
+
+    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
+    if (!tenant) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Tenant no encontrado' } });
+
+    const tenantPrisma = new PrismaClient({ datasources: { db: { url: tenant.databaseUrl } } });
+    try {
+      const hashed = await bcrypt.hash(newPassword, 10);
+      await tenantPrisma.user.update({ where: { id: userId }, data: { password: hashed } });
+      res.json({ success: true, message: 'Contraseña actualizada exitosamente' });
+    } finally {
+      await tenantPrisma.$disconnect();
+    }
+  } catch (error) {
+    console.error('Reset tenant user password error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error reseteando contraseña' } });
   }
 });
 
@@ -251,6 +341,19 @@ router.post('/tenants', saasAdminMiddleware, async (req, res) => {
           message: `Tenant creado pero falló el provisioning: ${provisioningResult.message}. Requiere provisioning manual.` 
         }
       });
+    }
+
+    // Enviar email de bienvenida al admin del tenant
+    try {
+      await sendTenantWelcomeEmail({
+        to: adminEmail,
+        tenantName: name,
+        subdomain: slug,
+        adminEmail,
+        adminPassword,
+      });
+    } catch (emailErr) {
+      console.warn('[SaaS] Email de bienvenida no enviado:', (emailErr as any).message);
     }
 
     res.status(201).json({
