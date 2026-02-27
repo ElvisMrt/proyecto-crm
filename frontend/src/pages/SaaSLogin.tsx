@@ -137,7 +137,7 @@ export default function SaaSLogin() {
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-[#1D79C4]'
                   }`}
-                  placeholder="superadmin@crm.com"
+                  placeholder="tu@correo.com"
                 />
               </div>
               {emailError && (
@@ -212,14 +212,6 @@ export default function SaaSLogin() {
             </button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <p className="text-xs text-center text-gray-500">
-              <span className="font-medium">Credenciales de prueba:</span>
-              <br />
-              <span className="font-mono">superadmin@crm.com / admin123</span>
-            </p>
-          </div>
         </div>
 
         {/* Footer */}
