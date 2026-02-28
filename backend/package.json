@@ -37,6 +37,7 @@
     "pg": "^8.18.0",
     "react-icons": "^5.5.0",
     "multer": "^1.4.5-lts.1",
+    "tsx": "^4.7.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -51,7 +52,6 @@
     "@typescript-eslint/parser": "^6.15.0",
     "eslint": "^8.56.0",
     "prisma": "^5.7.1",
-    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }
