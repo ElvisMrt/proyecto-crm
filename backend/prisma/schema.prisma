@@ -665,6 +665,28 @@ enum AdjustmentType {
   EXIT
 }
 
+// ============================================
+// MÓDULO DE PRODUCTOS DEL WEBSITE NEYPIER
+// ============================================
+model WebsiteProduct {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  category    String   // gorras, tshirts, tazas, termos, llaveros, otros
+  imageUrl    String?
+  colors      String[] // lista de colores disponibles
+  tags        String[] // best-seller, new, discount, trending
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
 // SaaS Models - Invoice for tenant billing
 model TenantInvoice {
   id              String          @id @default(uuid())

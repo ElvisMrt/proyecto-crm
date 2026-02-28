@@ -27,6 +27,10 @@ const CreditCardIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
 );
 
+const ShoppingBagIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+);
+
 export const SaaSLayout: React.FC = () => {
   const navigate = useNavigate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -134,6 +138,23 @@ export const SaaSLayout: React.FC = () => {
             >
               <CreditCardIcon />
               <span className="ml-2 sm:ml-3 font-medium">Facturación</span>
+            </Link>
+            <Link
+              to="/products"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="flex items-center px-3 sm:px-4 py-2.5 text-sm sm:text-base rounded-lg transition-colors group"
+              style={{ color: '#1f2937' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(29, 121, 196, 0.1)';
+                e.currentTarget.style.color = '#1D79C4';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#1f2937';
+              }}
+            >
+              <ShoppingBagIcon />
+              <span className="ml-2 sm:ml-3 font-medium">Productos Website</span>
             </Link>
             <Link
               to="/settings"

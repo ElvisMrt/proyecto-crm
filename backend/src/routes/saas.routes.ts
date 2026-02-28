@@ -692,4 +692,94 @@ router.post('/backup-all', saasAdminMiddleware, async (req, res) => {
   }
 });
 
+// ============================================
+// CRUD PRODUCTOS WEBSITE
+// ============================================
+
+// GET /saas/website-products - Listar todos
+router.get('/website-products', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { category, active } = req.query;
+    const where: any = {};
+    if (category && category !== 'all') where.category = category;
+    if (active !== undefined) where.isActive = active === 'true';
+
+    const products = await masterPrisma.websiteProduct.findMany({
+      where,
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    });
+    res.json({ success: true, data: products });
+  } catch (error) {
+    console.error('List website products error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al listar productos' } });
+  }
+});
+
+// POST /saas/website-products - Crear
+router.post('/website-products', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { name, description, price, category, imageUrl, colors, tags, isActive, sortOrder, note } = req.body;
+    if (!name || !price || !category) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Nombre, precio y categoría son requeridos' } });
+    }
+    const product = await masterPrisma.websiteProduct.create({
+      data: {
+        name,
+        description: description || null,
+        price: parseFloat(price),
+        category,
+        imageUrl: imageUrl || null,
+        colors: colors || [],
+        tags: tags || [],
+        isActive: isActive !== false,
+        sortOrder: parseInt(sortOrder) || 0,
+        note: note || null,
+      },
+    });
+    res.status(201).json({ success: true, data: product });
+  } catch (error) {
+    console.error('Create website product error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al crear producto' } });
+  }
+});
+
+// PUT /saas/website-products/:id - Actualizar
+router.put('/website-products/:id', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, price, category, imageUrl, colors, tags, isActive, sortOrder, note } = req.body;
+    const product = await masterPrisma.websiteProduct.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(price !== undefined && { price: parseFloat(price) }),
+        ...(category !== undefined && { category }),
+        ...(imageUrl !== undefined && { imageUrl }),
+        ...(colors !== undefined && { colors }),
+        ...(tags !== undefined && { tags }),
+        ...(isActive !== undefined && { isActive }),
+        ...(sortOrder !== undefined && { sortOrder: parseInt(sortOrder) }),
+        ...(note !== undefined && { note }),
+      },
+    });
+    res.json({ success: true, data: product });
+  } catch (error) {
+    console.error('Update website product error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al actualizar producto' } });
+  }
+});
+
+// DELETE /saas/website-products/:id - Eliminar
+router.delete('/website-products/:id', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await masterPrisma.websiteProduct.delete({ where: { id } });
+    res.json({ success: true, message: 'Producto eliminado' });
+  } catch (error) {
+    console.error('Delete website product error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al eliminar producto' } });
+  }
+});
+
 export default router;

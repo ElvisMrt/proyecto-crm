@@ -39,6 +39,7 @@ import SaaSTenants from './pages/SaaSTenants';
 import SaaSTenantDetail from './pages/SaaSTenantDetail';
 import SaaSBilling from './pages/SaaSBilling';
 import SaaSSettings from './pages/SaaSSettings';
+import SaaSProducts from './pages/SaaSProducts';
 import { SaaSLayout } from './components/SaaSLayout';
 import { SaaSPrivateRoute } from './components/SaaSPrivateRoute';
 
@@ -114,6 +115,7 @@ function App() {
               <Route path="tenants" element={<SaaSTenants />} />
               <Route path="tenants/:id" element={<SaaSTenantDetail />} />
               <Route path="billing" element={<SaaSBilling />} />
+              <Route path="products" element={<SaaSProducts />} />
               <Route path="settings" element={<SaaSSettings />} />
             </Route>
           </>

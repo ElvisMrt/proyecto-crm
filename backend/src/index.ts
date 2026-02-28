@@ -97,6 +97,26 @@ app.use('/api/v1', supplierRoutes);
 // WhatsApp routes disabled
 // app.use('/api/v1/whatsapp', whatsappRoutes);
 
+// Endpoint público: listar productos del website
+app.get('/api/website/products', async (req, res) => {
+  try {
+    const { PrismaClient: MasterPrisma } = await import('@prisma/client');
+    const mp = new MasterPrisma({ datasources: { db: { url: process.env.MASTER_DATABASE_URL || process.env.DATABASE_URL } } });
+    const { category } = req.query;
+    const where: any = { isActive: true };
+    if (category && category !== 'all') where.category = category;
+    const products = await mp.websiteProduct.findMany({
+      where,
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    });
+    await mp.$disconnect();
+    res.json({ success: true, data: products });
+  } catch (error) {
+    console.error('[Website Products] Error:', error);
+    res.status(500).json({ success: false, message: 'Error al cargar productos' });
+  }
+});
+
 // Endpoints públicos del website Neypier (sin tenant middleware)
 app.post('/api/website/contact', async (req, res) => {
   try {
