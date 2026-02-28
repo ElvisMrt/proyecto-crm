@@ -549,7 +549,7 @@ export const sendWebsiteContact = async (data: {
     from: FROM,
     to: 'info@neypier.com',
     replyTo: `${name} <${email}>`,
-    subject: `📬 Contacto web: ${subject || name} - neypier.com`,
+    subject: `Contacto web: ${subject || name}`,
     html: htmlContent,
   });
   console.log(`✅ Mensaje de contacto web enviado desde ${email}`);
@@ -628,7 +628,7 @@ export const sendWebsiteQuote = async (data: {
     from: FROM,
     to: 'info@neypier.com',
     replyTo: email ? `${name} <${email}>` : undefined,
-    subject: `🛒 Cotización web: ${name} - $${total.toFixed(2)}`,
+    subject: `Cotizacion web: ${name} - $${total.toFixed(2)}`,
     html: htmlContent,
   });
   console.log(`✅ Cotización web enviada de ${name} - $${total.toFixed(2)}`);
