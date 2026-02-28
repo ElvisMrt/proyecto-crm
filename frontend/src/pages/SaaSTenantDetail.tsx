@@ -59,6 +59,7 @@ const SaaSTenantDetail: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [togglingMaintenance, setTogglingMaintenance] = useState(false);
   const [editingUser, setEditingUser] = useState<TenantUser | null>(null);
   const [userEditForm, setUserEditForm] = useState<any>({});
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
@@ -104,16 +105,38 @@ const SaaSTenantDetail: React.FC = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      await axios.put(`${API_BASE_URL}/saas/tenants/${id}`, editForm, {
+      const res = await axios.put(`${API_BASE_URL}/saas/tenants/${id}`, editForm, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       setShowEditModal(false);
+      // Actualizar tenant en estado local con la respuesta del servidor (incluye limits actualizados)
+      if (res.data?.data) {
+        setTenant(prev => prev ? { ...prev, ...res.data.data } : prev);
+      }
       fetchTenant();
       showToast('Información actualizada correctamente');
     } catch (err: any) {
       showToast(err.response?.data?.error?.message || 'Error al actualizar', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleMaintenance = async () => {
+    if (!tenant) return;
+    const newMode = !tenant.settings?.maintenanceMode;
+    setTogglingMaintenance(true);
+    try {
+      await axios.put(`${API_BASE_URL}/saas/tenants/${id}`,
+        { maintenanceMode: newMode },
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
+      fetchTenant();
+      showToast(newMode ? '⚠️ Modo mantenimiento ACTIVADO' : '✅ Modo mantenimiento desactivado');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Error al cambiar modo mantenimiento', 'error');
+    } finally {
+      setTogglingMaintenance(false);
     }
   };
 
@@ -199,7 +222,7 @@ const SaaSTenantDetail: React.FC = () => {
   if (error) return <div className="p-8 text-red-600 bg-red-50 rounded-lg m-6">{error}</div>;
   if (!tenant) return <div className="p-8">Tenant no encontrado</div>;
 
-  const crmUrl = `http://${tenant.subdomain}.${CRM_DOMAIN}`;
+  const crmUrl = `https://${tenant.subdomain}.${CRM_DOMAIN}`;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -240,7 +263,17 @@ const SaaSTenantDetail: React.FC = () => {
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={handleToggleMaintenance}
+            disabled={togglingMaintenance}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+              tenant.settings?.maintenanceMode
+                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}>
+            {togglingMaintenance ? '...' : tenant.settings?.maintenanceMode ? '🔧 Mantenimiento ON' : '🔧 Mantenimiento'}
+          </button>
           <button onClick={() => setShowEditModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
             ✏️ Editar

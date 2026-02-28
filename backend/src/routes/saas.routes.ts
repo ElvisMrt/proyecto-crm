@@ -369,16 +369,47 @@ router.post('/tenants', saasAdminMiddleware, async (req, res) => {
   }
 });
 
+// Límites por plan
+const PLAN_LIMITS: Record<string, { maxUsers: number; maxBranches: number; maxStorage: string }> = {
+  BASIC:        { maxUsers: 5,   maxBranches: 1,  maxStorage: '1GB'   },
+  STARTER:      { maxUsers: 10,  maxBranches: 2,  maxStorage: '5GB'   },
+  PROFESSIONAL: { maxUsers: 20,  maxBranches: 3,  maxStorage: '10GB'  },
+  ENTERPRISE:   { maxUsers: 100, maxBranches: 10, maxStorage: '100GB' },
+};
+
 // PUT /saas/tenants/:id - Actualizar tenant
 router.put('/tenants/:id', saasAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
 
     // No permitir actualizar ciertos campos críticos
     delete updateData.id;
     delete updateData.databaseName;
     delete updateData.databaseUrl;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+
+    // Si cambia el plan, actualizar limits automáticamente
+    if (updateData.plan && PLAN_LIMITS[updateData.plan]) {
+      updateData.limits = JSON.stringify(PLAN_LIMITS[updateData.plan]);
+    }
+
+    // Manejar maintenanceMode dentro de settings
+    if (typeof updateData.maintenanceMode !== 'undefined') {
+      const current = await masterPrisma.tenant.findUnique({ where: { id } });
+      const currentSettings = typeof current?.settings === 'string'
+        ? JSON.parse(current.settings as string)
+        : (current?.settings || {});
+      currentSettings.maintenanceMode = updateData.maintenanceMode;
+      updateData.settings = JSON.stringify(currentSettings);
+      delete updateData.maintenanceMode;
+    }
+
+    // Si settings viene como objeto, serializarlo
+    if (updateData.settings && typeof updateData.settings === 'object') {
+      updateData.settings = JSON.stringify(updateData.settings);
+    }
 
     const tenant = await masterPrisma.tenant.update({
       where: { id },
@@ -388,7 +419,11 @@ router.put('/tenants/:id', saasAdminMiddleware, async (req, res) => {
     res.json({
       success: true,
       message: 'Tenant actualizado',
-      data: tenant,
+      data: {
+        ...tenant,
+        settings: typeof tenant.settings === 'string' ? JSON.parse(tenant.settings as string) : tenant.settings,
+        limits: typeof tenant.limits === 'string' ? JSON.parse(tenant.limits as string) : tenant.limits,
+      },
     });
   } catch (error) {
     console.error('Update tenant error:', error);

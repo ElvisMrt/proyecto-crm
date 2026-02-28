@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import logoSrc from '../utils/Logos.svg';
 
 const Login = () => {
@@ -11,6 +12,7 @@ const Login = () => {
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const { login } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     emailInputRef.current?.focus();
@@ -25,6 +27,13 @@ const Login = () => {
       await login(email.trim().toLowerCase(), password);
       window.location.href = '/dashboard';
     } catch (err: any) {
+      const code = err.response?.data?.error?.code;
+      if (code === 'MAINTENANCE_MODE' || code === 'TENANT_SUSPENDED' || code === 'TENANT_CANCELLED') {
+        sessionStorage.setItem('tenantStatus', code);
+        sessionStorage.setItem('tenantMessage', err.response?.data?.error?.message || '');
+        navigate('/status');
+        return;
+      }
       setError(err.response?.data?.error?.message || 'Credenciales incorrectas');
     } finally {
       setLoading(false);

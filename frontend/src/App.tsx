@@ -7,6 +7,7 @@ import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import TenantStatus from './pages/TenantStatus';
 import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import Sales from './pages/Sales';
@@ -145,6 +146,7 @@ function CRMRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/status" element={<TenantStatus />} />
       <Route
         path="/"
         element={

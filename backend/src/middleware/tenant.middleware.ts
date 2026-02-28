@@ -92,12 +92,43 @@ export async function tenantMiddleware(req: TenantRequest, res: Response, next: 
     });
 
     if (!tenant) {
+      // Buscar si existe pero está suspendido/mantenimiento para dar mensaje preciso
+      const inactiveTenant = await masterPrisma.tenant.findFirst({
+        where: { OR: [{ subdomain }, { customDomain: host }] },
+      });
+      if (inactiveTenant) {
+        const settings = typeof inactiveTenant.settings === 'string'
+          ? JSON.parse(inactiveTenant.settings as string)
+          : (inactiveTenant.settings || {});
+        if (settings.maintenanceMode) {
+          return res.status(503).json({
+            error: { code: 'MAINTENANCE_MODE', message: 'El sistema está en mantenimiento. Por favor intenta más tarde.' },
+          });
+        }
+        if (inactiveTenant.status === 'SUSPENDED') {
+          return res.status(403).json({
+            error: { code: 'TENANT_SUSPENDED', message: 'Esta cuenta está suspendida. Contacta al administrador.' },
+          });
+        }
+        if (inactiveTenant.status === 'CANCELLED') {
+          return res.status(403).json({
+            error: { code: 'TENANT_CANCELLED', message: 'Esta cuenta ha sido cancelada.' },
+          });
+        }
+      }
       console.log('❌ Tenant NOT FOUND:', { subdomain, host });
       return res.status(404).json({
-        error: {
-          code: 'TENANT_NOT_FOUND',
-          message: 'Tenant no encontrado o inactivo',
-        },
+        error: { code: 'TENANT_NOT_FOUND', message: 'Tenant no encontrado o inactivo' },
+      });
+    }
+
+    // Verificar maintenanceMode aunque esté ACTIVE
+    const tenantSettings = typeof tenant.settings === 'string'
+      ? JSON.parse(tenant.settings as string)
+      : (tenant.settings || {});
+    if (tenantSettings.maintenanceMode) {
+      return res.status(503).json({
+        error: { code: 'MAINTENANCE_MODE', message: 'El sistema está en mantenimiento. Por favor intenta más tarde.' },
       });
     }
 
