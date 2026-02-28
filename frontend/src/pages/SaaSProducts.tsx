@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = (() => {
   const url = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.host}/api/v1`;
@@ -6,6 +6,7 @@ const API_BASE = (() => {
 })();
 
 const SAAS_API = `${API_BASE}/api/v1/saas/website-products`;
+const UPLOAD_API = `${API_BASE}/api/v1/saas/upload-image`;
 
 const CATEGORIES = [
   { id: 'gorras', name: 'Gorras' },
@@ -65,8 +66,56 @@ export default function SaaSProducts() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [colorInput, setColorInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const token = localStorage.getItem('saasToken');
+
+  const uploadImage = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Solo se permiten imágenes (JPG, PNG, SVG, WebP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen no puede superar 5MB');
+      return;
+    }
+    setUploading(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch(UPLOAD_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setForm(f => ({ ...f, imageUrl: data.url }));
+      } else {
+        setError(data.message || 'Error al subir imagen');
+      }
+    } catch {
+      setError('Error de conexión al subir imagen');
+    } finally {
+      setUploading(false);
+    }
+  }, [token]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadImage(file);
+  }, [uploadImage]);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadImage(file);
+    e.target.value = '';
+  };
 
   const headers = {
     'Content-Type': 'application/json',
@@ -427,19 +476,91 @@ export default function SaaSProducts() {
                 </div>
               </div>
 
-              {/* URL Imagen */}
+              {/* Imagen: Drag & Drop */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL de Imagen</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Imagen del producto</label>
+
+                {/* Input file oculto */}
                 <input
-                  type="text"
-                  value={form.imageUrl}
-                  onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="/imagenes/producto.svg o https://..."
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileInput}
                 />
-                {form.imageUrl && (
-                  <img src={form.imageUrl} alt="preview" className="mt-2 h-16 w-16 object-contain rounded-lg border border-gray-200 bg-gray-50" />
+
+                {form.imageUrl ? (
+                  /* Preview con imagen ya cargada */
+                  <div className="relative inline-flex group">
+                    <img
+                      src={form.imageUrl.startsWith('/uploads/')
+                        ? `${API_BASE}${form.imageUrl}`
+                        : form.imageUrl}
+                      alt="preview"
+                      className="h-28 w-28 object-contain rounded-xl border-2 border-blue-200 bg-gray-50 p-1 shadow-sm"
+                    />
+                    <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-1.5 bg-white rounded-lg text-gray-700 hover:bg-blue-50"
+                        title="Cambiar imagen"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, imageUrl: '' }))}
+                        className="p-1.5 bg-white rounded-lg text-red-500 hover:bg-red-50"
+                        title="Quitar imagen"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className={`
+                      relative flex flex-col items-center justify-center gap-2 w-full h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all
+                      ${dragOver
+                        ? 'border-blue-500 bg-blue-50 scale-[1.01]'
+                        : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50'}
+                      ${uploading ? 'pointer-events-none opacity-60' : ''}
+                    `}
+                  >
+                    {uploading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="animate-spin rounded-full h-7 w-7 border-2 border-blue-600 border-t-transparent"></div>
+                        <span className="text-xs text-blue-600 font-medium">Subiendo imagen...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={dragOver ? 'text-blue-500' : 'text-gray-400'}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-gray-700">
+                            {dragOver ? 'Suelta la imagen aquí' : 'Arrastra una imagen o haz clic'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, SVG, WebP · máx 5MB</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
+
+                {/* URL manual como alternativa */}
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={form.imageUrl}
+                    onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 focus:ring-1 focus:ring-blue-400 focus:border-transparent"
+                    placeholder="O pega una URL: /imagenes/producto.svg o https://..."
+                  />
+                </div>
               </div>
 
               {/* Colores */}

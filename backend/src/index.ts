@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
 import { PrismaClient } from '@prisma/client';
 
 // Load environment variables
@@ -52,6 +55,28 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' })); // Aumentar límite para imágenes base64
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Carpeta de uploads
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Multer storage
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `product-${Date.now()}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes'));
+  },
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -94,6 +119,18 @@ app.use('/api/v1/appointments', appointmentsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/v1/saas', saasRoutes);
 app.use('/api/v1', supplierRoutes);
+
+// Upload imagen para productos del website (solo SaaS admin)
+import { saasAdminMiddleware } from './middleware/tenant.middleware';
+app.post('/api/v1/saas/upload-image', saasAdminMiddleware, upload.single('image'), (req: any, res: any) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió imagen' });
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ success: true, url });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al subir imagen' });
+  }
+});
 // WhatsApp routes disabled
 // app.use('/api/v1/whatsapp', whatsappRoutes);
 
