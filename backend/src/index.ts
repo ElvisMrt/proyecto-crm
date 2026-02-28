@@ -23,9 +23,11 @@ app.use(cors({
       'http://localhost:5175',
       // IP directa VPS
       'http://66.94.111.139',
-      // Dominio raíz
+      // Dominio raíz y www
       'http://neypier.com',
       'https://neypier.com',
+      'http://www.neypier.com',
+      'https://www.neypier.com',
       // Wildcard subdominios localhost
       /https?:\/\/.*\.localhost(:\d+)?$/,
       // Wildcard nip.io (acceso por IP)
@@ -72,6 +74,7 @@ import appointmentsRoutes from './routes/appointments.routes';
 import publicRoutes from './routes/public.routes';
 import saasRoutes from './routes/saas.routes';
 import supplierRoutes from './routes/supplier.routes';
+import { sendWebsiteContact, sendWebsiteQuote } from './services/email.service';
 // WhatsApp module disabled
 // import whatsappRoutes from './routes/whatsapp.routes';
 
@@ -93,6 +96,35 @@ app.use('/api/v1/saas', saasRoutes);
 app.use('/api/v1', supplierRoutes);
 // WhatsApp routes disabled
 // app.use('/api/v1/whatsapp', whatsappRoutes);
+
+// Endpoints públicos del website Neypier (sin tenant middleware)
+app.post('/api/website/contact', async (req, res) => {
+  try {
+    const { name, email, phone, subject, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ success: false, message: 'Nombre, email y mensaje son requeridos' });
+    }
+    await sendWebsiteContact({ name, email, phone, subject, message });
+    res.json({ success: true, message: 'Mensaje enviado correctamente' });
+  } catch (error) {
+    console.error('[Website Contact] Error:', error);
+    res.status(500).json({ success: false, message: 'Error al enviar el mensaje. Intenta de nuevo.' });
+  }
+});
+
+app.post('/api/website/quote', async (req, res) => {
+  try {
+    const { name, email, phone, notes, products, total } = req.body;
+    if (!name || !products || !products.length) {
+      return res.status(400).json({ success: false, message: 'Nombre y productos son requeridos' });
+    }
+    await sendWebsiteQuote({ name, email, phone, notes, products, total });
+    res.json({ success: true, message: 'Cotización enviada correctamente' });
+  } catch (error) {
+    console.error('[Website Quote] Error:', error);
+    res.status(500).json({ success: false, message: 'Error al enviar la cotización. Intenta de nuevo.' });
+  }
+});
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
