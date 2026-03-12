@@ -47,7 +47,10 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
 
     try {
       setLoading(true);
-      await cashApi.createMovement(form);
+      await cashApi.createMovement({
+        ...form,
+        cashRegisterId: currentCash.id,
+      });
       showToast('Movimiento registrado exitosamente', 'success');
       setForm({
         type: 'MANUAL_ENTRY',
@@ -102,12 +105,12 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
 
   if (!currentCash) {
     return (
-      <div className="bg-white rounded-lg shadow p-12 text-center">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-4">
-          <HiLockClosed className="w-10 h-10 text-red-600" />
+      <div className="rounded-[24px] border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
+          <HiLockClosed className="w-10 h-10 text-slate-600 dark:text-slate-300" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Caja Cerrada</h2>
-        <p className="text-gray-600">
+        <h2 className="mb-2 text-2xl font-bold text-slate-900 dark:text-white">Caja cerrada</h2>
+        <p className="text-slate-600 dark:text-slate-400">
           Debe abrir la caja primero para registrar movimientos
         </p>
       </div>
@@ -116,15 +119,14 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
 
   return (
     <div className="space-y-4">
-      {/* Botón para agregar movimiento */}
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-          <HiSwitchHorizontal className="w-5 h-5 mr-2 text-gray-400" />
-          Movimientos de Caja
+        <h2 className="flex items-center text-lg font-semibold text-slate-900 dark:text-white">
+          <HiSwitchHorizontal className="mr-2 h-5 w-5 text-slate-400" />
+          Movimientos de caja
         </h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md flex items-center"
+          className="flex items-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-950"
         >
           {showForm ? (
             <>
@@ -139,15 +141,13 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
         </button>
       </div>
 
-      {/* Formulario de Movimiento */}
       {showForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Registrar Movimiento Manual</h3>
+        <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Registrar movimiento manual</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Tipo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <label className="mb-1 flex items-center text-sm font-medium text-slate-700 dark:text-slate-300">
                   {form.type === 'MANUAL_ENTRY' ? (
                     <HiArrowUp className="w-4 h-4 mr-1 text-green-600" />
                   ) : (
@@ -159,24 +159,23 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value as any })}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
                 >
                   <option value="MANUAL_ENTRY">Entrada (Ingreso)</option>
                   <option value="MANUAL_EXIT">Salida (Egreso)</option>
                 </select>
               </div>
 
-              {/* Método */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-                  <HiCurrencyDollar className="w-4 h-4 mr-1 text-gray-400" />
+                <label className="mb-1 flex items-center text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <HiCurrencyDollar className="mr-1 h-4 w-4 text-slate-400" />
                   Método *
                 </label>
                 <select
                   value={form.method}
                   onChange={(e) => setForm({ ...form, method: e.target.value as any })}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
                 >
                   <option value="CASH">Efectivo</option>
                   <option value="TRANSFER">Transferencia</option>
@@ -184,22 +183,20 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
               </div>
             </div>
 
-            {/* Concepto */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Concepto *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Concepto *</label>
               <input
                 type="text"
                 value={form.concept}
                 onChange={(e) => setForm({ ...form, concept: e.target.value })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
                 placeholder="Ej: Pago de servicios, Retiro de efectivo, etc."
               />
             </div>
 
-            {/* Monto */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Monto (RD$) *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Monto (RD$) *</label>
               <input
                 type="number"
                 min="0"
@@ -207,36 +204,34 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
                 placeholder="0.00"
               />
             </div>
 
-            {/* Observaciones */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Observaciones</label>
               <textarea
                 value={form.observations}
                 onChange={(e) => setForm({ ...form, observations: e.target.value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
                 placeholder="Notas adicionales (opcional)"
               />
             </div>
 
-            {/* Botones */}
             <div className="flex space-x-3">
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50"
+                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
               >
                 {loading ? 'Registrando...' : 'Registrar Movimiento'}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
               >
                 Cancelar
               </button>
@@ -245,32 +240,31 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
         </div>
       )}
 
-      {/* Tabla de Movimientos */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/80">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha/Hora</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Concepto</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Método</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observaciones</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Fecha/Hora</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Tipo</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Concepto</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Método</th>
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Monto</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Usuario</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Observaciones</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-slate-200 dark:bg-slate-950 dark:divide-slate-800">
               {movements.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
                     No hay movimientos registrados
                   </td>
                 </tr>
               ) : (
                 movements.map((movement) => (
-                  <tr key={movement.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <tr key={movement.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {formatDate(movement.movementDate)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -283,18 +277,18 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
                         {getTypeLabel(movement.type)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                       {movement.concept}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 flex items-center">
                       {movement.method === 'CASH' ? (
                         <>
-                          <HiCash className="w-4 h-4 mr-1 text-gray-400" />
+                          <HiCash className="w-4 h-4 mr-1 text-slate-400" />
                           Efectivo
                         </>
                       ) : (
                         <>
-                          <HiSwitchHorizontal className="w-4 h-4 mr-1 text-gray-400" />
+                          <HiSwitchHorizontal className="w-4 h-4 mr-1 text-slate-400" />
                           Transferencia
                         </>
                       )}
@@ -304,10 +298,10 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
                     }`}>
                       {movement.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(movement.amount))}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {movement.user?.name || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                    <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 max-w-xs truncate">
                       {movement.observations || '-'}
                     </td>
                   </tr>
@@ -322,5 +316,3 @@ const MovementsTab = ({ currentCash, onMovementCreated }: MovementsTabProps) => 
 };
 
 export default MovementsTab;
-
-

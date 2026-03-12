@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HiPlus, HiCash, HiCheckCircle, HiCalendar, HiDotsVertical, HiPencil, HiTrash } from 'react-icons/hi';
+import { HiPlus, HiCash, HiCheckCircle, HiCalendar, HiDotsVertical, HiTrash } from 'react-icons/hi';
 import api from '../services/api';
 import { MinimalStatCard } from '../components/MinimalStatCard';
 import { useToast } from '../hooks/useToast';
@@ -53,6 +53,18 @@ const SupplierPayments = () => {
       fetchPendingInvoices(formData.supplierId);
     }
   }, [formData.supplierId]);
+
+  useEffect(() => {
+    if (editingPayment) {
+      return;
+    }
+
+    const totalInvoices = formData.invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+    setFormData((prev) => ({
+      ...prev,
+      amount: totalInvoices,
+    }));
+  }, [formData.invoices, editingPayment]);
 
   const fetchPayments = async () => {
     try {
@@ -129,20 +141,6 @@ const SupplierPayments = () => {
     setShowModal(true);
   };
 
-  const handleEdit = (payment: SupplierPayment) => {
-    setEditingPayment(payment);
-    setFormData({
-      supplierId: payment.supplierId,
-      paymentDate: new Date(payment.paymentDate).toISOString().split('T')[0],
-      amount: payment.amount,
-      paymentMethod: payment.paymentMethod,
-      reference: payment.reference || '',
-      notes: payment.notes || '',
-      invoices: [],
-    });
-    setShowModal(true);
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar este pago? Esto revertirá los montos aplicados a las facturas.')) return;
     try {
@@ -168,13 +166,8 @@ const SupplierPayments = () => {
     }
     
     try {
-      if (editingPayment) {
-        await api.put(`/supplier-payments/${editingPayment.id}`, formData);
-        showToast('Pago actualizado exitosamente', 'success');
-      } else {
-        await api.post('/supplier-payments', formData);
-        showToast('Pago registrado exitosamente', 'success');
-      }
+      await api.post('/supplier-payments', formData);
+      showToast('Pago registrado exitosamente', 'success');
       setShowModal(false);
       fetchPayments();
     } catch (error: any) {
@@ -212,22 +205,23 @@ const SupplierPayments = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5 p-4 md:p-6">
+      <div className="flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Pagos a Proveedores</h1>
-          <p className="text-sm text-gray-500">Historial de pagos realizados</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Tesorería</p>
+          <h1 className="text-xl font-bold text-slate-950">Pagos a Proveedores</h1>
+          <p className="text-sm text-slate-500">Historial de pagos realizados</p>
         </div>
         <button 
           onClick={handleCreate}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center space-x-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           <HiPlus className="w-4 h-4" />
           <span>Registrar Pago</span>
@@ -324,16 +318,6 @@ const SupplierPayments = () => {
                           <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
                             <div className="py-1">
                               <button
-                                onClick={() => {
-                                  handleEdit(payment);
-                                  setOpenMenuId(null);
-                                }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              >
-                                <HiPencil className="h-4 w-4 mr-2" />
-                                Editar
-                              </button>
-                              <button
                                 onClick={() => handleDelete(payment.id)}
                                 className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
@@ -364,7 +348,7 @@ const SupplierPayments = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-lg font-bold mb-4">
-              {editingPayment ? 'Editar Pago' : 'Registrar Pago'}
+              Registrar Pago
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -488,7 +472,6 @@ const SupplierPayments = () => {
                 >
                   <option value="CASH">Efectivo</option>
                   <option value="TRANSFER">Transferencia</option>
-                  <option value="CHECK">Cheque</option>
                   <option value="CARD">Tarjeta</option>
                 </select>
               </div>

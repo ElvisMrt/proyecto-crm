@@ -79,7 +79,7 @@ export default function SupplierDetailPanel({ supplierId, supplierName, onClose 
       </div>
 
       {/* Sub-tabs */}
-      <div className="border-b border-gray-200 bg-gray-50">
+      <div className="border-b border-slate-200 bg-slate-50">
         <nav className="flex px-6">
           {subTabs.map((tab) => (
             <button
@@ -89,8 +89,8 @@ export default function SupplierDetailPanel({ supplierId, supplierName, onClose 
                 flex items-center gap-2 py-3 px-4 border-b-2 font-medium text-sm transition-colors
                 ${
                   activeSubTab === tab.id
-                    ? 'border-blue-500 text-blue-600 bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-slate-900 bg-white text-slate-950'
+                    : 'border-transparent text-gray-500 hover:text-slate-700'
                 }
               `}
             >
@@ -98,7 +98,7 @@ export default function SupplierDetailPanel({ supplierId, supplierName, onClose 
               <span>{tab.label}</span>
               <span className={`
                 px-2 py-0.5 text-xs rounded-full
-                ${activeSubTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}
+                ${activeSubTab === tab.id ? 'bg-slate-100 text-slate-700' : 'bg-gray-200 text-gray-600'}
               `}>
                 {tab.count}
               </span>
@@ -111,7 +111,7 @@ export default function SupplierDetailPanel({ supplierId, supplierName, onClose 
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
           </div>
         ) : (
           <>

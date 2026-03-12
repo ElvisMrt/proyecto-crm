@@ -3,6 +3,37 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 
+const NOTE_TITLE_PREFIX = '[NOTA]';
+
+const getStartOfToday = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
+
+const getEndOfTomorrow = () => {
+  const tomorrow = getStartOfToday();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(23, 59, 59, 999);
+  return tomorrow;
+};
+
+const getEndOfToday = () => {
+  const today = getStartOfToday();
+  today.setHours(23, 59, 59, 999);
+  return today;
+};
+
+const getNonNoteTaskFilter = () => ({
+  NOT: {
+    title: {
+      startsWith: NOTE_TITLE_PREFIX,
+    },
+  },
+});
+
+const canManageAllTasks = (role?: string) =>
+  role === 'ADMINISTRATOR' || role === 'SUPERVISOR';
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -25,7 +56,9 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = {
+      ...getNonNoteTaskFilter(),
+    };
 
     // Filter by user if not admin/supervisor
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
@@ -70,8 +103,7 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
     }
 
     if (req.query.overdue === 'true') {
-      const now = new Date();
-      where.dueDate = { lt: now };
+      where.dueDate = { lt: getStartOfToday() };
       where.status = 'PENDING';
     }
 
@@ -104,11 +136,11 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
       prisma.task.count({ where }),
     ]);
 
-    const now = new Date();
+    const startOfToday = getStartOfToday();
     const data = tasks.map((task) => {
-      const isOverdue = task.dueDate && task.dueDate < now && task.status === 'PENDING';
+      const isOverdue = task.dueDate && task.dueDate < startOfToday && task.status === 'PENDING';
       const daysOverdue = isOverdue && task.dueDate
-        ? Math.floor((now.getTime() - task.dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        ? Math.floor((startOfToday.getTime() - new Date(task.dueDate).setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
         : 0;
 
       return {
@@ -157,11 +189,20 @@ export const getTask = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    if (!task) {
+    if (!task || task.title.startsWith(NOTE_TITLE_PREFIX)) {
       return res.status(404).json({
         error: {
           code: 'NOT_FOUND',
           message: 'Task not found',
+        },
+      });
+    }
+
+    if (!canManageAllTasks(req.user?.role) && task.userId !== req.user?.id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No tienes permiso para ver esta tarea',
         },
       });
     }
@@ -249,6 +290,33 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const data = createTaskSchema.partial().parse(req.body);
 
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        title: true,
+      },
+    });
+
+    if (!existingTask || existingTask.title.startsWith(NOTE_TITLE_PREFIX)) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Task not found',
+        },
+      });
+    }
+
+    if (!canManageAllTasks(req.user?.role) && existingTask.userId !== req.user?.id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No tienes permiso para editar esta tarea',
+        },
+      });
+    }
+
     const updateData: any = {};
     if (data.title) updateData.title = data.title;
     if (data.description !== undefined) updateData.description = data.description;
@@ -291,6 +359,33 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
 
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        title: true,
+      },
+    });
+
+    if (!existingTask || existingTask.title.startsWith(NOTE_TITLE_PREFIX)) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Task not found',
+        },
+      });
+    }
+
+    if (!canManageAllTasks(req.user?.role) && existingTask.userId !== req.user?.id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No tienes permiso para completar esta tarea',
+        },
+      });
+    }
+
     const task = await prisma.task.update({
       where: { id },
       data: {
@@ -326,11 +421,12 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
 export const getOverdueTasks = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const now = new Date();
+    const startOfToday = getStartOfToday();
 
     const where: any = {
+      ...getNonNoteTaskFilter(),
       status: 'PENDING',
-      dueDate: { lt: now },
+      dueDate: { lt: startOfToday },
     };
 
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
@@ -360,7 +456,7 @@ export const getOverdueTasks = async (req: AuthRequest, res: Response) => {
 
     const data = tasks.map((task) => {
       const daysOverdue = task.dueDate
-        ? Math.floor((now.getTime() - task.dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        ? Math.floor((startOfToday.getTime() - new Date(task.dueDate).setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
         : 0;
 
       return {
@@ -407,8 +503,13 @@ export const getClientHistory = async (req: AuthRequest, res: Response) => {
     }
 
     // Get tasks
+    const taskWhere = {
+      clientId,
+      ...getNonNoteTaskFilter(),
+    };
+
     const tasks = await prisma.task.findMany({
-      where: { clientId },
+      where: taskWhere,
       include: {
         user: {
           select: {
@@ -447,19 +548,42 @@ export const getClientHistory = async (req: AuthRequest, res: Response) => {
       take: 10,
     });
 
-    const totalSales = invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0);
-    const totalReceivable = invoices
-      .filter((inv: any) => inv.status !== 'PAID' && inv.status !== 'CANCELLED')
-      .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+    const [invoiceMetrics, receivableMetrics, paymentCount, taskCount] = await Promise.all([
+      prisma.invoice.aggregate({
+        where: {
+          clientId,
+          status: { not: 'CANCELLED' },
+        },
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.invoice.aggregate({
+        where: {
+          clientId,
+          status: { not: 'CANCELLED' },
+          balance: { gt: 0 },
+        },
+        _sum: { balance: true },
+      }),
+      prisma.payment.count({
+        where: { clientId },
+      }),
+      prisma.task.count({
+        where: taskWhere,
+      }),
+    ]);
+
+    const totalSales = Number(invoiceMetrics._sum.total || 0);
+    const totalReceivable = Number(receivableMetrics._sum.balance || 0);
 
     res.json({
       client,
       summary: {
         totalSales,
         totalReceivable,
-        invoiceCount: invoices.length,
-        paymentCount: payments.length,
-        taskCount: tasks.length,
+        invoiceCount: invoiceMetrics._count.id,
+        paymentCount,
+        taskCount,
       },
       tasks: tasks.map((task) => ({
         id: task.id,
@@ -554,7 +678,7 @@ export const createNote = async (req: AuthRequest, res: Response) => {
     // Create as a task with special title prefix
     const note = await prisma.task.create({
       data: {
-        title: '[NOTA] Nota interna',
+        title: `${NOTE_TITLE_PREFIX} Nota interna`,
         description: data.content,
         clientId: data.clientId,
         userId: req.user.id,
@@ -590,14 +714,17 @@ export const createNote = async (req: AuthRequest, res: Response) => {
 export const getCRMSummary = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const now = new Date();
+    const startOfToday = getStartOfToday();
+    const endOfToday = getEndOfToday();
     
     const wherePending: any = {
       status: 'PENDING',
+      ...getNonNoteTaskFilter(),
     };
     const whereOverdue: any = {
       status: 'PENDING',
-      dueDate: { lt: now },
+      dueDate: { lt: startOfToday },
+      ...getNonNoteTaskFilter(),
     };
 
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
@@ -607,25 +734,28 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
 
     const whereCompleted: any = {
       status: 'COMPLETED',
+      ...getNonNoteTaskFilter(),
     };
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
       whereCompleted.userId = req.user?.id;
     }
 
-    const [pendingTasks, overdueTasks, completedTasks] = await Promise.all([
+    const whereCompletedToday: any = {
+      ...whereCompleted,
+      completedAt: { gte: startOfToday, lte: endOfToday },
+    };
+
+    const [pendingTasks, overdueTasks, completedTasks, completedToday] = await Promise.all([
       prisma.task.count({ where: wherePending }),
       prisma.task.count({ where: whereOverdue }),
       prisma.task.count({ where: whereCompleted }),
+      prisma.task.count({ where: whereCompletedToday }),
     ]);
-
-    // Reminders: tasks due today or tomorrow
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(23, 59, 59, 999);
 
     const whereReminders: any = {
       status: 'PENDING',
-      dueDate: { gte: now, lte: tomorrow },
+      dueDate: { gte: startOfToday, lte: getEndOfTomorrow() },
+      ...getNonNoteTaskFilter(),
     };
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
       whereReminders.userId = req.user?.id;
@@ -634,7 +764,7 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
     const reminders = await prisma.task.count({ where: whereReminders });
 
     // Calcular total y porcentaje de completadas
-    const totalTasks = pendingTasks + overdueTasks + completedTasks;
+    const totalTasks = pendingTasks + completedTasks;
     const completionPercentage = totalTasks > 0 
       ? Math.round((completedTasks / totalTasks) * 100) 
       : 0;
@@ -643,6 +773,7 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
       pendingTasks,
       overdueTasks,
       completedTasks,
+      completedToday,
       totalTasks,
       completionPercentage,
       reminders,
@@ -661,14 +792,11 @@ export const getCRMSummary = async (req: AuthRequest, res: Response) => {
 export const getReminders = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(23, 59, 59, 999);
 
     const where: any = {
       status: 'PENDING',
-      dueDate: { gte: now, lte: tomorrow },
+      dueDate: { gte: getStartOfToday(), lte: getEndOfTomorrow() },
+      ...getNonNoteTaskFilter(),
     };
 
     if (req.user?.role !== 'ADMINISTRATOR' && req.user?.role !== 'SUPERVISOR') {
@@ -721,6 +849,33 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const { id } = req.params;
+
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        title: true,
+      },
+    });
+
+    if (!existingTask || existingTask.title.startsWith(NOTE_TITLE_PREFIX)) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Task not found',
+        },
+      });
+    }
+
+    if (!canManageAllTasks(req.user?.role) && existingTask.userId !== req.user?.id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No tienes permiso para eliminar esta tarea',
+        },
+      });
+    }
 
     await prisma.task.delete({
       where: { id },
@@ -798,4 +953,3 @@ export const getLateCollections = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

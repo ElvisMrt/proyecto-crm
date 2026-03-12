@@ -4,6 +4,55 @@ import { getTenantPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 import { whatsappService } from '../services/whatsapp.service';
 
+const extractEvolutionQrCode = (payload: any): string | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    payload?.qrcode?.base64,
+    payload?.qrcode?.code,
+    typeof payload?.qrcode === 'string' ? payload.qrcode : null,
+    payload?.base64,
+    payload?.code,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return candidates[0].replace(/^data:image\/[^;]+;base64,/, '');
+};
+
+const extractEvolutionQrText = (payload: any): string | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  if (typeof payload?.code === 'string' && payload.code.trim().length > 0) {
+    return payload.code.trim();
+  }
+
+  if (typeof payload?.qrcode?.code === 'string' && payload.qrcode.code.trim().length > 0) {
+    return payload.qrcode.code.trim();
+  }
+
+  return null;
+};
+
+const buildEvolutionConnectUrl = (apiUrl: string, instanceId: string, phone?: string | null) => {
+  const url = new URL(`${apiUrl}/instance/connect/${instanceId}`);
+
+  if (phone) {
+    const normalizedPhone = phone.replace(/\D/g, '');
+    if (normalizedPhone) {
+      url.searchParams.set('number', normalizedPhone);
+    }
+  }
+
+  return url.toString();
+};
+
 
 // Schema para crear template
 const createTemplateSchema = z.object({
@@ -102,7 +151,12 @@ export const createTemplate = async (req: AuthRequest, res: Response) => {
     const data = createTemplateSchema.parse(req.body);
 
     const template = await prisma.whatsAppTemplate.create({
-      data,
+      data: {
+        name: data.name,
+        type: data.type,
+        subject: data.subject,
+        message: data.message,
+      },
     });
 
     res.status(201).json(template);
@@ -410,6 +464,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
     const instanceId = process.env.EVOLUTION_INSTANCE_ID || 'crm-whatsapp-instance';
     const apiUrl = process.env.WHATSAPP_API_URL || 'http://evolution:8080';
     const apiKey = process.env.EVOLUTION_TOKEN || process.env.EVOLUTION_API_KEY;
+    const phone = typeof req.body?.phone === 'string' ? req.body.phone : null;
 
     if (!apiKey) {
       return res.status(500).json({
@@ -473,6 +528,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
         body: JSON.stringify({
           instanceName: instanceId,
           token: apiKey,
+          ...(phone ? { number: phone.replace(/\D/g, '') } : {}),
           qrcode: true,
           integration: 'WHATSAPP-BAILEYS',
         }),
@@ -494,13 +550,15 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
 
     // Intentar obtener QR code - esperar un poco más para que se genere
     let qrCode = null;
+    let qrText: string | null = null;
+    let pairingCode: string | null = null;
     let attempts = 0;
     const maxAttempts = 5;
     
     while (!qrCode && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos entre intentos
       
-      const qrResponse = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
+      const qrResponse = await fetch(buildEvolutionConnectUrl(apiUrl, instanceId, phone), {
         method: 'GET',
         headers: {
           'apikey': apiKey,
@@ -509,30 +567,15 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
 
       if (qrResponse.ok) {
         const qrData: any = await qrResponse.json();
-        // El QR puede venir en diferentes formatos
-        let rawQR: string | null = null;
-        if (qrData.qrcode) {
-          // Si qrcode es un objeto con base64 o code
-          if (qrData.qrcode.base64) {
-            rawQR = qrData.qrcode.base64;
-          } else if (qrData.qrcode.code) {
-            rawQR = qrData.qrcode.code;
-          } else if (typeof qrData.qrcode === 'string') {
-            // Si qrcode es directamente un string (base64)
-            rawQR = qrData.qrcode;
-          }
-        } else if (qrData.base64) {
-          rawQR = qrData.base64;
-        } else if (qrData.code) {
-          rawQR = qrData.code;
-        } else if (qrData.count === 0) {
+        qrCode = extractEvolutionQrCode(qrData);
+        qrText = extractEvolutionQrText(qrData) || qrText;
+        pairingCode = typeof qrData?.pairingCode === 'string' && qrData.pairingCode.trim()
+          ? qrData.pairingCode.trim()
+          : pairingCode;
+
+        if (!qrCode && qrData.count === 0) {
           // Si count es 0, el QR aún no está disponible, continuar intentando
           console.log(`QR no disponible aún, intento ${attempts + 1}/${maxAttempts}`);
-        }
-        
-        // Limpiar el QR: remover el prefijo data: si existe, dejar solo el base64 puro
-        if (rawQR) {
-          qrCode = rawQR.replace(/^data:image\/[^;]+;base64,/, '');
         }
       }
       attempts++;
@@ -561,6 +604,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
       body: JSON.stringify({
             instanceName: instanceId,
             token: apiKey,
+            ...(phone ? { number: phone.replace(/\D/g, '') } : {}),
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
       }),
@@ -574,7 +618,7 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
           while (!qrCode && qrAttempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            const qrResponse2 = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
+            const qrResponse2 = await fetch(buildEvolutionConnectUrl(apiUrl, instanceId, phone), {
               method: 'GET',
               headers: {
                 'apikey': apiKey,
@@ -583,25 +627,11 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
 
             if (qrResponse2.ok) {
               const qrData2: any = await qrResponse2.json();
-              let rawQR2: string | null = null;
-              if (qrData2.qrcode) {
-                if (qrData2.qrcode.base64) {
-                  rawQR2 = qrData2.qrcode.base64;
-                } else if (qrData2.qrcode.code) {
-                  rawQR2 = qrData2.qrcode.code;
-                } else if (typeof qrData2.qrcode === 'string') {
-                  rawQR2 = qrData2.qrcode;
-                }
-              } else if (qrData2.base64) {
-                rawQR2 = qrData2.base64;
-              } else if (qrData2.code) {
-                rawQR2 = qrData2.code;
-              }
-              
-              // Limpiar el QR: remover el prefijo data: si existe
-              if (rawQR2) {
-                qrCode = rawQR2.replace(/^data:image\/[^;]+;base64,/, '');
-              }
+              qrCode = extractEvolutionQrCode(qrData2);
+              qrText = extractEvolutionQrText(qrData2) || qrText;
+              pairingCode = typeof qrData2?.pairingCode === 'string' && qrData2.pairingCode.trim()
+                ? qrData2.pairingCode.trim()
+                : pairingCode;
             }
             qrAttempts++;
           }
@@ -622,6 +652,8 @@ export const createInstance = async (req: AuthRequest, res: Response) => {
       success: true,
       message: instanceExists ? 'La instancia ya existe. QR code obtenido.' : 'Instancia creada exitosamente',
       qrCode: qrCode,
+      qrText,
+      pairingCode,
       connected: instanceStatus ? (instanceStatus === 'open' || instanceStatus === 'connected') : false,
     });
   } catch (error: any) {
@@ -651,6 +683,7 @@ export const getQRCode = async (req: AuthRequest, res: Response) => {
     const instanceId = process.env.EVOLUTION_INSTANCE_ID || 'crm-whatsapp-instance';
     const apiUrl = process.env.WHATSAPP_API_URL || 'http://evolution:8080';
     const apiKey = process.env.EVOLUTION_TOKEN || process.env.EVOLUTION_API_KEY;
+    const phone = typeof req.query.number === 'string' ? req.query.number : null;
 
     if (!apiKey) {
       return res.status(500).json({
@@ -661,68 +694,36 @@ export const getQRCode = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Conectar instancia y obtener QR (usar PUT para conectar)
-    const response = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
-      method: 'PUT',
+    const response = await fetch(buildEvolutionConnectUrl(apiUrl, instanceId, phone), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'apikey': apiKey,
       },
-      body: JSON.stringify({
-        qrcode: true,
-      }),
     });
 
-    let qrCode = null;
-    if (response.ok) {
-      const data: any = await response.json();
-      // El QR puede venir en diferentes formatos
-      let rawQR: string | null = null;
-      if (data.qrcode) {
-        rawQR = data.qrcode.base64 || data.qrcode.code || null;
-      } else if (data.base64) {
-        rawQR = data.base64;
-      } else if (data.code) {
-        rawQR = data.code;
-      }
-      
-      // Limpiar el QR: remover el prefijo data: si existe
-      if (rawQR) {
-        qrCode = rawQR.replace(/^data:image\/[^;]+;base64,/, '');
-      }
-    } else {
-      // Si PUT falla, intentar con GET
-      const responseGet = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
-        method: 'GET',
-        headers: {
-          'apikey': apiKey,
-        },
-      });
-      if (responseGet.ok) {
-        const dataGet: any = await responseGet.json();
-        let rawQRGet: string | null = null;
-        if (dataGet.qrcode) {
-          rawQRGet = dataGet.qrcode.base64 || dataGet.qrcode.code || null;
-        }
-        
-        // Limpiar el QR: remover el prefijo data: si existe
-        if (rawQRGet) {
-          qrCode = rawQRGet.replace(/^data:image\/[^;]+;base64,/, '');
-        }
-      } else {
-        throw new Error(`Evolution API error: ${responseGet.status}`);
-      }
+    if (!response.ok) {
+      throw new Error(`Evolution API error: ${response.status}`);
     }
 
-    if (!qrCode) {
+    const data: any = await response.json();
+    const qrCode = extractEvolutionQrCode(data);
+    const qrText = extractEvolutionQrText(data);
+    const pairingCode = typeof data?.pairingCode === 'string' && data.pairingCode.trim()
+      ? data.pairingCode.trim()
+      : null;
+
+    if (!qrCode && !pairingCode) {
       return res.json({
         qrCode: null,
+        qrText: null,
         message: 'No hay QR code disponible. La instancia puede estar conectada.',
       });
     }
 
     res.json({
       qrCode: qrCode,
+      qrText,
+      pairingCode,
       message: 'QR code obtenido exitosamente',
     });
   } catch (error: any) {
@@ -928,5 +929,3 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-
-

@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
 
 // Configuración SMTP — Hostinger con info@neypier.com
 const transporter = nodemailer.createTransport({
@@ -15,6 +17,37 @@ const FROM_NAME = process.env.SMTP_FROM_NAME || 'CRM Neypier';
 const FROM_EMAIL = process.env.SMTP_USER || 'info@neypier.com';
 const FROM = `${FROM_NAME} <${FROM_EMAIL}>`;
 const CRM_DOMAIN = process.env.CRM_DOMAIN || 'neypier.com';
+const SMTP_CONFIGURED = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+const EMAIL_PREVIEW_DIR = path.join(__dirname, '..', '..', 'uploads', 'email-previews');
+
+if (!fs.existsSync(EMAIL_PREVIEW_DIR)) {
+  fs.mkdirSync(EMAIL_PREVIEW_DIR, { recursive: true });
+}
+
+const simulateEmailSend = (options: {
+  to: string;
+  subject: string;
+  html: string;
+  attachmentName?: string;
+}) => {
+  const timestamp = Date.now();
+  const filePath = path.join(EMAIL_PREVIEW_DIR, `email-preview-${timestamp}.html`);
+  const previewHtml = `
+    <html>
+      <body>
+        <h2>Email simulado</h2>
+        <p><strong>Para:</strong> ${options.to}</p>
+        <p><strong>Asunto:</strong> ${options.subject}</p>
+        ${options.attachmentName ? `<p><strong>Adjunto:</strong> ${options.attachmentName}</p>` : ''}
+        <hr />
+        ${options.html}
+      </body>
+    </html>
+  `;
+
+  fs.writeFileSync(filePath, previewHtml);
+  console.log(`📧 [EMAIL SIMULADO] Guardado en ${filePath}`);
+};
 
 // Verificar configuración SMTP
 export const verifyEmailConfig = async (): Promise<boolean> => {
@@ -632,4 +665,52 @@ export const sendWebsiteQuote = async (data: {
     html: htmlContent,
   });
   console.log(`✅ Cotización web enviada de ${name} - $${total.toFixed(2)}`);
+};
+
+export const sendLoanReceiptEmail = async (data: {
+  to: string;
+  clientName: string;
+  subject: string;
+  title: string;
+  summaryLines: string[];
+  attachmentPath: string;
+  attachmentName: string;
+}): Promise<void> => {
+  const { to, clientName, subject, title, summaryLines, attachmentPath, attachmentName } = data;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #111827;">${title}</h2>
+      <p style="color: #374151;">Hola <strong>${clientName}</strong>,</p>
+      <p style="color: #6b7280;">Adjunto encontrarás tu comprobante en formato PDF.</p>
+      <div style="background: #f9fafb; border-radius: 8px; padding: 18px; margin: 20px 0;">
+        ${summaryLines.map((line) => `<p style="margin: 6px 0; color: #374151;">${line}</p>`).join('')}
+      </div>
+      <p style="color: #6b7280;">Este mensaje fue generado automáticamente por el CRM.</p>
+    </div>
+  `;
+
+  if (!SMTP_CONFIGURED && process.env.NODE_ENV !== 'production') {
+    simulateEmailSend({
+      to,
+      subject,
+      html: htmlContent,
+      attachmentName,
+    });
+    return;
+  }
+
+  await transporter.sendMail({
+    from: FROM,
+    to,
+    subject,
+    html: htmlContent,
+    attachments: [
+      {
+        filename: attachmentName,
+        path: attachmentPath,
+      },
+    ],
+  });
+  console.log(`✅ Comprobante de préstamo enviado a ${to}`);
 };

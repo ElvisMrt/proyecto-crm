@@ -1,9 +1,11 @@
 import { PrismaClient } from '@prisma/client';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import bcrypt from 'bcryptjs';
+import path from 'path';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class TenantProvisioningService {
   private masterPrisma: PrismaClient;
@@ -58,10 +60,14 @@ export class TenantProvisioningService {
     try {
       console.log('[Provisioning] Aplicando migraciones Prisma...');
 
-      const { stdout, stderr } = await execAsync(
-        'npx prisma migrate deploy --schema=/app/prisma/schema.prisma',
+      const projectRoot = path.resolve(__dirname, '..', '..');
+      const prismaSchemaPath = path.join(projectRoot, 'prisma', 'schema.prisma');
+
+      const { stdout, stderr } = await execFileAsync(
+        'npx',
+        ['prisma', 'migrate', 'deploy', `--schema=${prismaSchemaPath}`],
         {
-          cwd: '/app',
+          cwd: projectRoot,
           env: { ...process.env, DATABASE_URL: databaseUrl },
           timeout: 60000,
         }
@@ -73,7 +79,13 @@ export class TenantProvisioningService {
       console.log('[Provisioning] ✅ Migraciones aplicadas');
       return true;
     } catch (error: any) {
-      console.error('[Provisioning] Error aplicando migraciones:', error.message);
+      const message = error?.message || 'Error desconocido';
+      if (message.includes('P3005')) {
+        console.warn('[Provisioning] Base existente detectada; se omite migrate deploy y se continua con el seed idempotente');
+        return true;
+      }
+
+      console.error('[Provisioning] Error aplicando migraciones:', message);
       return false;
     }
   }
@@ -100,55 +112,86 @@ export class TenantProvisioningService {
       const hashedPassword = await bcrypt.hash(adminData.password, 10);
 
       // 1. Admin
-      const adminUser = await tenantPrisma.user.create({
-        data: {
-          email: adminData.email,
-          password: hashedPassword,
-          name: adminData.name,
-          role: 'ADMINISTRATOR',
-          isActive: true,
-        },
+      let adminUser = await tenantPrisma.user.findUnique({
+        where: { email: adminData.email },
       });
+
+      if (!adminUser) {
+        adminUser = await tenantPrisma.user.create({
+          data: {
+            email: adminData.email,
+            password: hashedPassword,
+            name: adminData.name,
+            role: 'ADMINISTRATOR',
+            isActive: true,
+          },
+        });
+      }
 
       // 2. Sucursal principal
-      const mainBranch = await tenantPrisma.branch.create({
-        data: {
-          name: 'Sucursal Principal',
-          code: 'MAIN001',
-          address: tenant.address || 'Dirección no especificada',
-          phone: tenant.phone,
-          email: tenant.email,
-          isActive: true,
+      let mainBranch = await tenantPrisma.branch.findFirst({
+        where: {
+          OR: [{ code: 'MAIN001' }, { name: 'Sucursal Principal' }],
         },
       });
+
+      if (!mainBranch) {
+        mainBranch = await tenantPrisma.branch.create({
+          data: {
+            name: 'Sucursal Principal',
+            code: 'MAIN001',
+            address: tenant.address || 'Dirección no especificada',
+            phone: tenant.phone,
+            email: tenant.email,
+            isActive: true,
+          },
+        });
+      }
 
       // 3. Asignar sucursal al admin
-      await tenantPrisma.user.update({
-        where: { id: adminUser.id },
-        data: { branchId: mainBranch.id },
-      });
+      if (!adminUser.branchId) {
+        await tenantPrisma.user.update({
+          where: { id: adminUser.id },
+          data: { branchId: mainBranch.id },
+        });
+      }
 
       // 4. Categoría por defecto
-      await tenantPrisma.category.create({
-        data: {
-          name: 'General',
-          description: 'Categoría por defecto',
-          isActive: true,
-        },
+      const generalCategory = await tenantPrisma.category.findUnique({
+        where: { name: 'General' },
       });
 
+      if (!generalCategory) {
+        await tenantPrisma.category.create({
+          data: {
+            name: 'General',
+            description: 'Categoría por defecto',
+            isActive: true,
+          },
+        });
+      }
+
       // 5. Secuencia NCF por defecto
-      await tenantPrisma.ncfSequence.create({
-        data: {
+      const defaultNcf = await tenantPrisma.ncfSequence.findFirst({
+        where: {
           prefix: 'B01',
-          description: 'Facturas de Crédito Fiscal',
-          startRange: 1,
-          endRange: 1000000,
-          currentNumber: 0,
-          isActive: true,
           branchId: mainBranch.id,
         },
       });
+
+      if (!defaultNcf) {
+        await tenantPrisma.ncfSequence.create({
+          data: {
+            prefix: 'B01',
+            description: 'Facturas de Crédito Fiscal',
+            startRange: 1,
+            endRange: 1000000,
+            currentNumber: 0,
+            isActive: true,
+            branchId: mainBranch.id,
+          },
+        });
+      }
 
       await tenantPrisma.$disconnect();
       console.log('[Provisioning] ✅ Datos iniciales creados');

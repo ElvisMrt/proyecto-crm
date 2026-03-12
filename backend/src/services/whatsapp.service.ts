@@ -25,7 +25,8 @@ class WhatsAppService {
 
   constructor() {
     this.config = {
-      provider: (process.env.WHATSAPP_PROVIDER as any) || 'EVOLUTION',
+      provider: (process.env.WHATSAPP_PROVIDER as any)
+        || (process.env.NODE_ENV === 'production' ? 'EVOLUTION' : 'SIMULATION'),
       apiUrl: process.env.WHATSAPP_API_URL || 'http://evolution:8080',
       apiKey: process.env.WHATSAPP_API_KEY,
       accountSid: process.env.TWILIO_ACCOUNT_SID,
@@ -84,6 +85,10 @@ class WhatsAppService {
     
     try {
       if (!this.config.apiUrl || !this.config.instanceId || !this.config.token) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[WhatsApp] Configuración incompleta en desarrollo; usando modo simulado');
+          return this.sendViaSimulation(phone, message, subject);
+        }
         console.error('[WhatsApp] ❌ Configuración incompleta:');
         console.error(`  apiUrl: ${this.config.apiUrl || 'NO CONFIGURADO'}`);
         console.error(`  instanceId: ${this.config.instanceId || 'NO CONFIGURADO'}`);
@@ -281,6 +286,10 @@ class WhatsAppService {
         throw fetchError;
       }
     } catch (error: any) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[WhatsApp] Fallback a simulación en desarrollo: ${error.message}`);
+        return this.sendViaSimulation(phone, message, subject);
+      }
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/43b96eb6-9b87-4fa0-8226-73f51dc2add4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.service.ts:156',message:'Evolution API error caught',data:{errorMessage:error.message,errorStack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
@@ -409,4 +418,3 @@ class WhatsAppService {
 }
 
 export const whatsappService = new WhatsAppService();
-

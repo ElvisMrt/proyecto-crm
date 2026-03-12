@@ -2,6 +2,201 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  button.bg-blue-600,
+  a.bg-blue-600,
+  input[type='submit'].bg-blue-600,
+  input[type='button'].bg-blue-600 {
+    background-color: #0f172a !important;
+    border-color: #0f172a !important;
+  }
+
+  button.hover\:bg-blue-700:hover,
+  a.hover\:bg-blue-700:hover,
+  input[type='submit'].hover\:bg-blue-700:hover,
+  input[type='button'].hover\:bg-blue-700:hover {
+    background-color: #1e293b !important;
+    border-color: #1e293b !important;
+  }
+
+  button.bg-green-600,
+  a.bg-green-600,
+  input[type='submit'].bg-green-600,
+  input[type='button'].bg-green-600 {
+    background-color: #0f766e !important;
+    border-color: #0f766e !important;
+  }
+
+  button.hover\:bg-green-700:hover,
+  a.hover\:bg-green-700:hover,
+  input[type='submit'].hover\:bg-green-700:hover,
+  input[type='button'].hover\:bg-green-700:hover {
+    background-color: #115e59 !important;
+    border-color: #115e59 !important;
+  }
+
+  button.bg-red-600,
+  a.bg-red-600,
+  input[type='submit'].bg-red-600,
+  input[type='button'].bg-red-600 {
+    background-color: #be123c !important;
+    border-color: #be123c !important;
+  }
+
+  button.hover\:bg-red-700:hover,
+  a.hover\:bg-red-700:hover,
+  input[type='submit'].hover\:bg-red-700:hover,
+  input[type='button'].hover\:bg-red-700:hover {
+    background-color: #9f1239 !important;
+    border-color: #9f1239 !important;
+  }
+
+  button.bg-yellow-600,
+  a.bg-yellow-600,
+  button.bg-orange-600,
+  a.bg-orange-600 {
+    background-color: #a16207 !important;
+    border-color: #a16207 !important;
+  }
+
+  button.hover\:bg-yellow-700:hover,
+  a.hover\:bg-yellow-700:hover,
+  button.hover\:bg-orange-700:hover,
+  a.hover\:bg-orange-700:hover {
+    background-color: #854d0e !important;
+    border-color: #854d0e !important;
+  }
+
+  .dark button.bg-blue-600,
+  .dark a.bg-blue-600,
+  .dark input[type='submit'].bg-blue-600,
+  .dark input[type='button'].bg-blue-600 {
+    background-color: #e2e8f0 !important;
+    border-color: #e2e8f0 !important;
+    color: #020617 !important;
+  }
+
+  .dark button.hover\:bg-blue-700:hover,
+  .dark a.hover\:bg-blue-700:hover,
+  .dark input[type='submit'].hover\:bg-blue-700:hover,
+  .dark input[type='button'].hover\:bg-blue-700:hover {
+    background-color: #cbd5e1 !important;
+    border-color: #cbd5e1 !important;
+    color: #020617 !important;
+  }
+
+  .dark button.bg-green-600,
+  .dark a.bg-green-600,
+  .dark input[type='submit'].bg-green-600,
+  .dark input[type='button'].bg-green-600 {
+    background-color: #115e59 !important;
+    border-color: #115e59 !important;
+  }
+
+  .dark button.bg-red-600,
+  .dark a.bg-red-600,
+  .dark input[type='submit'].bg-red-600,
+  .dark input[type='button'].bg-red-600 {
+    background-color: #9f1239 !important;
+    border-color: #9f1239 !important;
+  }
+
+  .dark button.bg-yellow-600,
+  .dark a.bg-yellow-600,
+  .dark button.bg-orange-600,
+  .dark a.bg-orange-600 {
+    background-color: #92400e !important;
+    border-color: #92400e !important;
+  }
+
+  .dark .bg-white {
+    background-color: #020617 !important;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-slate-50 {
+    background-color: #0f172a !important;
+  }
+
+  .dark .bg-gray-100,
+  .dark .bg-slate-100 {
+    background-color: #1e293b !important;
+  }
+
+  .dark .bg-gray-200,
+  .dark .bg-slate-200 {
+    background-color: #334155 !important;
+  }
+
+  .dark .border-gray-100,
+  .dark .border-slate-100 {
+    border-color: #1e293b !important;
+  }
+
+  .dark .border-gray-200,
+  .dark .border-slate-200 {
+    border-color: #334155 !important;
+  }
+
+  .dark .border-gray-300,
+  .dark .border-slate-300 {
+    border-color: #475569 !important;
+  }
+
+  .dark .text-gray-900,
+  .dark .text-slate-900,
+  .dark .text-slate-950 {
+    color: #f8fafc !important;
+  }
+
+  .dark .text-gray-800,
+  .dark .text-slate-800 {
+    color: #e2e8f0 !important;
+  }
+
+  .dark .text-gray-700,
+  .dark .text-slate-700 {
+    color: #cbd5e1 !important;
+  }
+
+  .dark .text-gray-600,
+  .dark .text-slate-600 {
+    color: #94a3b8 !important;
+  }
+
+  .dark .text-gray-500,
+  .dark .text-slate-500 {
+    color: #94a3b8 !important;
+  }
+
+  .dark .text-gray-400,
+  .dark .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-slate-50:hover {
+    background-color: #0f172a !important;
+  }
+
+  .dark .hover\:bg-gray-100:hover,
+  .dark .hover\:bg-slate-100:hover {
+    background-color: #1e293b !important;
+  }
+
+  .dark .hover\:text-gray-700:hover,
+  .dark .hover\:text-slate-700:hover,
+  .dark .hover\:text-gray-900:hover,
+  .dark .hover\:text-slate-900:hover {
+    color: #f8fafc !important;
+  }
+
+  .dark thead.bg-gray-50,
+  .dark thead.bg-slate-50 {
+    background-color: #0f172a !important;
+  }
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -9,6 +204,48 @@ body {
   -moz-osx-font-smoothing: grayscale;
   /* Evitar zoom involuntario en iOS al hacer focus en inputs */
   -webkit-text-size-adjust: 100%;
+  /* Overflow-x hidden a nivel global para evitar scroll horizontal */
+  overflow-x: hidden;
+}
+
+/* Safe area padding para iOS (notch / home indicator) */
+.bottom-nav-safe {
+  position: fixed;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: #ffffff !important;
+  background-image: none !important;
+  opacity: 1 !important;
+}
+
+.bottom-nav-safe::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #ffffff;
+}
+
+.dark .bottom-nav-safe {
+  background-color: #020617 !important;
+  background-image: none !important;
+  opacity: 1 !important;
+}
+
+.dark .bottom-nav-safe::before {
+  background: #020617;
+}
+
+/* El main content necesita espacio para el bottom nav + safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-bottom-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Prevenir scroll horizontal en toda la app */
+#root {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* ---- Responsividad global de tablas ---- */
@@ -99,4 +336,3 @@ code {
 .animate-fade-in {
   animation: fade-in 0.5s ease-out;
 }
-

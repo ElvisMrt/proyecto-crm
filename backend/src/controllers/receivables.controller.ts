@@ -27,6 +27,308 @@ const createPaymentSchema = z.object({
   observations: z.string().optional(),
 });
 
+const createFinancingPlanSchema = z.object({
+  interestRate: z.number().min(0),
+  termMonths: z.number().int().positive(),
+  paymentFrequency: z.enum(['MONTHLY', 'BIWEEKLY', 'WEEKLY']).default('MONTHLY'),
+  startDate: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const roundMoney = (value: number) => Math.round(value * 100) / 100;
+
+const getPeriods = (termMonths: number, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY') => {
+  switch (frequency) {
+    case 'BIWEEKLY':
+      return termMonths * 2;
+    case 'WEEKLY':
+      return termMonths * 4;
+    default:
+      return termMonths;
+  }
+};
+
+const getPeriodicRate = (annualRate: number, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY') => {
+  switch (frequency) {
+    case 'BIWEEKLY':
+      return annualRate / 26 / 100;
+    case 'WEEKLY':
+      return annualRate / 52 / 100;
+    default:
+      return annualRate / 12 / 100;
+  }
+};
+
+const addPeriod = (date: Date, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY', periods = 1) => {
+  const nextDate = new Date(date);
+
+  if (frequency === 'MONTHLY') {
+    nextDate.setMonth(nextDate.getMonth() + periods);
+  } else if (frequency === 'BIWEEKLY') {
+    nextDate.setDate(nextDate.getDate() + (14 * periods));
+  } else {
+    nextDate.setDate(nextDate.getDate() + (7 * periods));
+  }
+
+  return nextDate;
+};
+
+const calculateInstallmentAmount = (
+  principal: number,
+  periodicRate: number,
+  totalPeriods: number
+) => {
+  if (periodicRate === 0) {
+    return principal / totalPeriods;
+  }
+
+  const factor = Math.pow(1 + periodicRate, totalPeriods);
+  return principal * ((periodicRate * factor) / (factor - 1));
+};
+
+const buildFinancingSchedule = (
+  amount: number,
+  interestRate: number,
+  termMonths: number,
+  frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY',
+  startDate: Date
+) => {
+  const periods = getPeriods(termMonths, frequency);
+  const periodicRate = getPeriodicRate(interestRate, frequency);
+  const installmentAmount = calculateInstallmentAmount(amount, periodicRate, periods);
+  const schedule: Array<{
+    installmentNo: number;
+    dueDate: Date;
+    openingBalance: number;
+    scheduledPrincipal: number;
+    scheduledInterest: number;
+    scheduledTotal: number;
+  }> = [];
+
+  let balance = amount;
+
+  for (let i = 1; i <= periods; i++) {
+    const openingBalance = balance;
+    const scheduledInterest = periodicRate === 0 ? 0 : openingBalance * periodicRate;
+    const scheduledPrincipal = i === periods
+      ? openingBalance
+      : Math.min(openingBalance, installmentAmount - scheduledInterest);
+    const scheduledTotal = scheduledPrincipal + scheduledInterest;
+
+    schedule.push({
+      installmentNo: i,
+      dueDate: addPeriod(startDate, frequency, i - 1),
+      openingBalance: roundMoney(openingBalance),
+      scheduledPrincipal: roundMoney(scheduledPrincipal),
+      scheduledInterest: roundMoney(scheduledInterest),
+      scheduledTotal: roundMoney(scheduledTotal),
+    });
+
+    balance = Math.max(0, balance - scheduledPrincipal);
+  }
+
+  return schedule;
+};
+
+const getInstallmentStatus = (dueDate: Date, scheduledTotal: number, paidAmount: number) => {
+  if (paidAmount >= scheduledTotal) return 'PAID';
+  if (paidAmount > 0) return 'PARTIAL';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const normalizedDueDate = new Date(dueDate);
+  normalizedDueDate.setHours(0, 0, 0, 0);
+  return normalizedDueDate < today ? 'OVERDUE' : 'PENDING';
+};
+
+const getFinancingDisplayBalance = (invoice: any) =>
+  invoice.receivableFinancingPlan?.status === 'ACTIVE'
+    ? Number(invoice.receivableFinancingPlan.remainingAmount)
+    : Number(invoice.balance);
+
+const getFinancingPaidAmount = (invoice: any) =>
+  invoice.receivableFinancingPlan
+    ? Number(invoice.receivableFinancingPlan.paidAmount)
+    : Math.max(0, Number(invoice.total) - Number(invoice.balance));
+
+const getInvoiceOverdueMetrics = (invoice: any, now: Date) => {
+  const financingPlan = invoice.receivableFinancingPlan;
+
+  if (financingPlan?.status === 'ACTIVE') {
+    const overdueInstallments = (financingPlan.installments || []).filter((installment: any) => {
+      const dueDate = new Date(installment.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+
+      const remainingAmount = Math.max(0, Number(installment.scheduledTotal) - Number(installment.paidAmount));
+      if (remainingAmount <= 0) {
+        return false;
+      }
+
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      return dueDate < today;
+    });
+
+    if (overdueInstallments.length === 0) {
+      return {
+        daysOverdue: 0,
+        overdueAmount: 0,
+      };
+    }
+
+    const oldestDueDate = overdueInstallments.reduce((oldest: Date, installment: any) => {
+      const dueDate = new Date(installment.dueDate);
+      return dueDate < oldest ? dueDate : oldest;
+    }, new Date(overdueInstallments[0].dueDate));
+
+    const normalizedToday = new Date(now);
+    normalizedToday.setHours(0, 0, 0, 0);
+    oldestDueDate.setHours(0, 0, 0, 0);
+
+    return {
+      daysOverdue: Math.max(0, Math.floor((normalizedToday.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))),
+      overdueAmount: roundMoney(overdueInstallments.reduce((sum: number, installment: any) => (
+        sum + Math.max(0, Number(installment.scheduledTotal) - Number(installment.paidAmount))
+      ), 0)),
+    };
+  }
+
+  if (!invoice.dueDate || Number(invoice.balance) <= 0) {
+    return {
+      daysOverdue: 0,
+      overdueAmount: 0,
+    };
+  }
+
+  const normalizedToday = new Date(now);
+  normalizedToday.setHours(0, 0, 0, 0);
+  const dueDate = new Date(invoice.dueDate);
+  dueDate.setHours(0, 0, 0, 0);
+
+  if (dueDate >= normalizedToday) {
+    return {
+      daysOverdue: 0,
+      overdueAmount: 0,
+    };
+  }
+
+  return {
+    daysOverdue: Math.max(0, Math.floor((normalizedToday.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))),
+    overdueAmount: Number(invoice.balance),
+  };
+};
+
+const applyFinancingPayment = async (
+  tx: any,
+  financingPlanId: string,
+  paymentAmount: number,
+  paymentDate: Date
+) => {
+  const plan = await tx.receivableFinancingPlan.findUnique({
+    where: { id: financingPlanId },
+    include: {
+      installments: {
+        orderBy: { installmentNo: 'asc' },
+      },
+      invoice: {
+        select: {
+          id: true,
+          balance: true,
+          status: true,
+          dueDate: true,
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    throw new Error('FINANCING_PLAN_NOT_FOUND');
+  }
+
+  let remaining = paymentAmount;
+  let principalAppliedTotal = 0;
+
+  for (const installment of plan.installments) {
+    if (remaining <= 0) break;
+
+    const scheduledTotal = Number(installment.scheduledTotal);
+    const scheduledInterest = Number(installment.scheduledInterest);
+    const scheduledPrincipal = Number(installment.scheduledPrincipal);
+    const paidAmount = Number(installment.paidAmount);
+    const paidInterest = Number(installment.paidInterest);
+    const paidPrincipal = Number(installment.paidPrincipal);
+
+    const totalRemaining = Math.max(0, scheduledTotal - paidAmount);
+    if (totalRemaining <= 0) continue;
+
+    const paymentApplied = Math.min(remaining, totalRemaining);
+    const remainingInterest = Math.max(0, scheduledInterest - paidInterest);
+    const remainingPrincipal = Math.max(0, scheduledPrincipal - paidPrincipal);
+    const interestApplied = Math.min(paymentApplied, remainingInterest);
+    const principalApplied = Math.min(paymentApplied - interestApplied, remainingPrincipal);
+
+    const nextPaidAmount = roundMoney(paidAmount + paymentApplied);
+    const nextPaidInterest = roundMoney(paidInterest + interestApplied);
+    const nextPaidPrincipal = roundMoney(paidPrincipal + principalApplied);
+    const nextStatus = getInstallmentStatus(installment.dueDate, scheduledTotal, nextPaidAmount);
+
+    await tx.receivableInstallment.update({
+      where: { id: installment.id },
+      data: {
+        paidAmount: nextPaidAmount,
+        paidInterest: nextPaidInterest,
+        paidPrincipal: nextPaidPrincipal,
+        status: nextStatus,
+        paidAt: nextStatus === 'PAID' ? paymentDate : installment.paidAt,
+      },
+    });
+
+    remaining = roundMoney(remaining - paymentApplied);
+    principalAppliedTotal = roundMoney(principalAppliedTotal + principalApplied);
+  }
+
+  const updatedInstallments = await tx.receivableInstallment.findMany({
+    where: { financingPlanId },
+    orderBy: { installmentNo: 'asc' },
+  });
+
+  const totalPaid = updatedInstallments.reduce((sum: number, installment: any) => sum + Number(installment.paidAmount), 0);
+  const remainingAmount = roundMoney(Math.max(0, Number(plan.totalFinanced) - totalPaid));
+  const planStatus = remainingAmount === 0 ? 'PAID_OFF' : 'ACTIVE';
+
+  await tx.receivableFinancingPlan.update({
+    where: { id: financingPlanId },
+    data: {
+      paidAmount: totalPaid,
+      remainingAmount,
+      status: planStatus,
+    },
+  });
+
+  const nextPrincipalBalance = roundMoney(Math.max(0, Number(plan.invoice.balance) - principalAppliedTotal));
+  const hasOverdueInstallment = updatedInstallments.some((installment: any) => installment.status === 'OVERDUE');
+  const nextInvoiceStatus = remainingAmount === 0
+    ? InvoiceStatus.PAID
+    : hasOverdueInstallment
+      ? InvoiceStatus.OVERDUE
+      : InvoiceStatus.ISSUED;
+
+  await tx.invoice.update({
+    where: { id: plan.invoice.id },
+    data: {
+      balance: nextPrincipalBalance,
+      status: nextInvoiceStatus,
+    },
+  });
+
+  return {
+    principalApplied: principalAppliedTotal,
+    interestApplied: roundMoney(paymentAmount - principalAppliedTotal),
+    financingRemaining: remainingAmount,
+    invoicePrincipalBalance: nextPrincipalBalance,
+  };
+};
+
 export const getStatus = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
@@ -72,18 +374,23 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
             method: true,
           },
         },
+        receivableFinancingPlan: {
+          include: {
+            installments: {
+              orderBy: { installmentNo: 'asc' },
+            },
+          },
+        },
       },
       orderBy: { issueDate: 'desc' },
     });
 
     const now = new Date();
     const invoicesWithDetails = invoices.map((invoice) => {
-      const daysOverdue = invoice.dueDate && invoice.dueDate < now
-        ? Math.floor((now.getTime() - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24))
-        : 0;
-
-      const paid = Number(invoice.total) - Number(invoice.balance);
-      const isOverdue = daysOverdue > 0 && Number(invoice.balance) > 0;
+      const balance = getFinancingDisplayBalance(invoice);
+      const paid = getFinancingPaidAmount(invoice);
+      const { daysOverdue, overdueAmount } = getInvoiceOverdueMetrics(invoice, now);
+      const isOverdue = overdueAmount > 0 && balance > 0;
 
       return {
         id: invoice.id,
@@ -93,13 +400,31 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
         dueDate: invoice.dueDate,
         total: Number(invoice.total),
         paid,
-        balance: Number(invoice.balance),
+        balance,
+        principalBalance: Number(invoice.balance),
         daysOverdue,
         status: invoice.status === InvoiceStatus.PAID 
           ? InvoiceStatus.PAID 
           : isOverdue 
             ? InvoiceStatus.OVERDUE 
             : invoice.status,
+        financingPlan: invoice.receivableFinancingPlan ? {
+          id: invoice.receivableFinancingPlan.id,
+          installmentAmount: Number(invoice.receivableFinancingPlan.installmentAmount),
+          totalFinanced: Number(invoice.receivableFinancingPlan.totalFinanced),
+          totalInterest: Number(invoice.receivableFinancingPlan.totalInterest),
+          remainingAmount: Number(invoice.receivableFinancingPlan.remainingAmount),
+          paidAmount: Number(invoice.receivableFinancingPlan.paidAmount),
+          status: invoice.receivableFinancingPlan.status,
+          installments: invoice.receivableFinancingPlan.installments.map((installment: any) => ({
+            id: installment.id,
+            installmentNo: installment.installmentNo,
+            dueDate: installment.dueDate,
+            scheduledTotal: Number(installment.scheduledTotal),
+            paidAmount: Number(installment.paidAmount),
+            status: installment.status,
+          })),
+        } : null,
         payments: invoice.payments.map((p) => ({
           id: p.id,
           amount: Number(p.amount),
@@ -174,8 +499,7 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
     const branchId = req.query.branchId as string | undefined;
     const where: any = {
       status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
-      dueDate: dateFilter,
-      balance: { gt: 0 },
+      paymentMethod: 'CREDIT',
     };
 
     if (branchId) {
@@ -194,30 +518,76 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
       ];
     }
 
-    const [invoices, total] = await Promise.all([
-      prisma.invoice.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          client: {
-            select: {
-              id: true,
-              name: true,
-              phone: true,
-              email: true,
+    const invoices = await prisma.invoice.findMany({
+      where,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+        receivableFinancingPlan: {
+          include: {
+            installments: {
+              orderBy: { installmentNo: 'asc' },
             },
           },
         },
-        orderBy: { dueDate: 'asc' },
-      }),
-      prisma.invoice.count({ where }),
-    ]);
+      },
+      orderBy: { dueDate: 'asc' },
+    });
 
-    const data = invoices.map((invoice) => {
-      const daysOverdue = invoice.dueDate
-        ? Math.floor((now.getTime() - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24))
-        : 0;
+    const filteredInvoices = invoices.filter((invoice) => {
+      const { daysOverdue, overdueAmount } = getInvoiceOverdueMetrics(invoice, now);
+
+      if (overdueAmount <= 0) {
+        return false;
+      }
+
+      if (invoice.status === InvoiceStatus.PAID || getFinancingDisplayBalance(invoice) <= 0) {
+        return false;
+      }
+
+      if (daysFilter) {
+        if (daysFilter.includes('+')) {
+          const minDays = parseInt(daysFilter.replace('+', ''));
+          if (daysOverdue < minDays) return false;
+        } else if (daysFilter.includes('-')) {
+          const [min, max] = daysFilter.split('-').map((value) => parseInt(value));
+          if (daysOverdue < min || daysOverdue > max) return false;
+        } else {
+          const exactDays = parseInt(daysFilter);
+          if (daysOverdue !== exactDays) return false;
+        }
+      }
+
+      if (req.query.clientId && invoice.clientId !== req.query.clientId) {
+        return false;
+      }
+
+      if (req.query.search) {
+        const search = String(req.query.search).toLowerCase();
+        const matches = [
+          invoice.number,
+          invoice.ncf || '',
+          invoice.client?.name || '',
+        ].some((value) => value.toLowerCase().includes(search));
+
+        if (!matches) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const total = filteredInvoices.length;
+    const paginatedInvoices = filteredInvoices.slice(skip, skip + limit);
+    const data = paginatedInvoices.map((invoice) => {
+      const { daysOverdue, overdueAmount } = getInvoiceOverdueMetrics(invoice, now);
 
       return {
         id: invoice.id,
@@ -226,11 +596,18 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
           id: invoice.id,
           number: invoice.number,
           ncf: invoice.ncf,
-          balance: Number(invoice.balance),
+          balance: getFinancingDisplayBalance(invoice),
+          overdueBalance: overdueAmount,
           total: Number(invoice.total),
-          dueDate: invoice.dueDate,
+          dueDate: invoice.receivableFinancingPlan?.status === 'ACTIVE'
+            ? invoice.receivableFinancingPlan.installments.find((installment: any) => {
+                const remaining = Math.max(0, Number(installment.scheduledTotal) - Number(installment.paidAmount));
+                return remaining > 0 && new Date(installment.dueDate) < now;
+              })?.dueDate || invoice.dueDate
+            : invoice.dueDate,
           issueDate: invoice.issueDate,
           daysOverdue,
+          financingPlanId: invoice.receivableFinancingPlan?.id || null,
         },
       };
     });
@@ -250,6 +627,216 @@ export const getOverdue = async (req: AuthRequest, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error fetching overdue invoices',
+      },
+    });
+  }
+};
+
+export const createFinancingPlan = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    if (!req.user) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Not authenticated',
+        },
+      });
+    }
+
+    const { invoiceId } = req.params;
+    const data = createFinancingPlanSchema.parse(req.body);
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        client: true,
+        receivableFinancingPlan: true,
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({
+        error: {
+          code: 'INVOICE_NOT_FOUND',
+          message: 'Invoice not found',
+        },
+      });
+    }
+
+    if (!invoice.clientId || !invoice.client) {
+      return res.status(400).json({
+        error: {
+          code: 'CLIENT_REQUIRED',
+          message: 'Invoice must have a client to be financed',
+        },
+      });
+    }
+
+    if (invoice.status !== InvoiceStatus.ISSUED && invoice.status !== InvoiceStatus.OVERDUE) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_INVOICE_STATUS',
+          message: 'Only issued or overdue invoices can be financed',
+        },
+      });
+    }
+
+    if (invoice.paymentMethod !== 'CREDIT') {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_PAYMENT_METHOD',
+          message: 'Only credit invoices can be financed',
+        },
+      });
+    }
+
+    if (Number(invoice.balance) <= 0) {
+      return res.status(400).json({
+        error: {
+          code: 'INVOICE_WITHOUT_BALANCE',
+          message: 'Invoice does not have pending balance',
+        },
+      });
+    }
+
+    if (invoice.receivableFinancingPlan && invoice.receivableFinancingPlan.status === 'ACTIVE') {
+      return res.status(400).json({
+        error: {
+          code: 'FINANCING_ALREADY_EXISTS',
+          message: 'This invoice already has an active financing plan',
+        },
+      });
+    }
+
+    const startDate = data.startDate ? new Date(data.startDate) : new Date();
+    const schedule = buildFinancingSchedule(
+      Number(invoice.balance),
+      data.interestRate,
+      data.termMonths,
+      data.paymentFrequency,
+      startDate
+    );
+    const totalInterest = roundMoney(schedule.reduce((sum, installment) => sum + installment.scheduledInterest, 0));
+    const totalFinanced = roundMoney(schedule.reduce((sum, installment) => sum + installment.scheduledTotal, 0));
+    const installmentAmount = schedule[0]?.scheduledTotal || totalFinanced;
+
+    const plan = await prisma.$transaction(async (tx) => {
+      const createdPlan = await tx.receivableFinancingPlan.create({
+        data: {
+          invoiceId: invoice.id,
+          clientId: invoice.clientId!,
+          branchId: invoice.branchId,
+          createdById: req.user!.id,
+          principalAmount: Number(invoice.balance),
+          annualInterestRate: data.interestRate,
+          termMonths: data.termMonths,
+          paymentFrequency: data.paymentFrequency,
+          startDate,
+          firstDueDate: schedule[0].dueDate,
+          endDate: schedule[schedule.length - 1].dueDate,
+          installmentAmount,
+          totalInterest,
+          totalFinanced,
+          remainingAmount: totalFinanced,
+          notes: data.notes,
+        },
+      });
+
+      await tx.receivableInstallment.createMany({
+        data: schedule.map((installment) => ({
+          financingPlanId: createdPlan.id,
+          installmentNo: installment.installmentNo,
+          dueDate: installment.dueDate,
+          openingBalance: installment.openingBalance,
+          scheduledPrincipal: installment.scheduledPrincipal,
+          scheduledInterest: installment.scheduledInterest,
+          scheduledTotal: installment.scheduledTotal,
+          status: getInstallmentStatus(installment.dueDate, installment.scheduledTotal, 0),
+        })),
+      });
+
+      return tx.receivableFinancingPlan.findUnique({
+        where: { id: createdPlan.id },
+        include: {
+          installments: {
+            orderBy: { installmentNo: 'asc' },
+          },
+        },
+      });
+    });
+
+    res.status(201).json({
+      message: 'Financing plan created successfully',
+      data: plan,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid financing plan data',
+          details: error.errors,
+        },
+      });
+    }
+
+    console.error('Create financing plan error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error creating financing plan',
+      },
+    });
+  }
+};
+
+export const getFinancingPlan = async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
+    const { invoiceId } = req.params;
+
+    const plan = await prisma.receivableFinancingPlan.findUnique({
+      where: { invoiceId },
+      include: {
+        installments: {
+          orderBy: { installmentNo: 'asc' },
+        },
+        invoice: {
+          select: {
+            id: true,
+            number: true,
+            total: true,
+            balance: true,
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({
+        error: {
+          code: 'FINANCING_PLAN_NOT_FOUND',
+          message: 'Financing plan not found',
+        },
+      });
+    }
+
+    res.json({ data: plan });
+  } catch (error) {
+    console.error('Get financing plan error:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error fetching financing plan',
       },
     });
   }
@@ -275,9 +862,27 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
     let invoicePayments: Array<{ invoiceId: string; amount: number }> = [];
     let invoiceBranchId: string | null = null;
 
+    const validateSingleBranch = (invoiceList: Array<{ branchId?: string | null; number?: string }>) => {
+      const branchIds = Array.from(new Set(invoiceList.map((inv) => inv.branchId || null)));
+      if (branchIds.length > 1) {
+        return res.status(400).json({
+          error: {
+            code: 'MULTI_BRANCH_PAYMENT_NOT_ALLOWED',
+            message: 'No se pueden registrar pagos para facturas de distintas sucursales en una sola transacción',
+          },
+        });
+      }
+
+      invoiceBranchId = branchIds[0] || null;
+      return null;
+    };
+
     if (data.invoicePayments && data.invoicePayments.length > 0) {
       // Distribución manual por factura
-      invoicePayments = data.invoicePayments;
+      invoicePayments = data.invoicePayments.map((ip) => ({
+        invoiceId: ip.invoiceId,
+        amount: ip.amount,
+      }));
       const invoiceIds = invoicePayments.map((ip) => ip.invoiceId);
       
       const invoiceWhere: any = {
@@ -291,6 +896,15 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
       
       invoices = await prisma.invoice.findMany({
         where: invoiceWhere,
+        include: {
+          receivableFinancingPlan: {
+            select: {
+              id: true,
+              remainingAmount: true,
+              status: true,
+            },
+          },
+        },
       });
 
       if (invoices.length !== invoiceIds.length) {
@@ -300,6 +914,11 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
             message: 'Some invoices are invalid or do not belong to the client',
           },
         });
+      }
+
+      const branchValidation = validateSingleBranch(invoices);
+      if (branchValidation) {
+        return branchValidation;
       }
 
       // Validate amounts
@@ -323,7 +942,10 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
             },
           });
         }
-        if (ip.amount > Number(invoice.balance)) {
+        const availableBalance = invoice.receivableFinancingPlan?.status === 'ACTIVE'
+          ? Number(invoice.receivableFinancingPlan.remainingAmount)
+          : Number(invoice.balance);
+        if (ip.amount > availableBalance) {
           return res.status(400).json({
             error: {
               code: 'AMOUNT_EXCEEDS_BALANCE',
@@ -352,6 +974,13 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           status: true,
           dueDate: true,
           branchId: true,
+          receivableFinancingPlan: {
+            select: {
+              id: true,
+              remainingAmount: true,
+              status: true,
+            },
+          },
         },
         orderBy: { dueDate: 'asc' }, // Pagar primero las más vencidas
       });
@@ -365,7 +994,11 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // Validate all invoices are from the same branch (if branchId is specified)
+      const branchValidation = validateSingleBranch(invoices);
+      if (branchValidation) {
+        return branchValidation;
+      }
+
       if (branchId) {
         const invalidBranchInvoices = invoices.filter((inv: any) => inv.branchId !== branchId);
         if (invalidBranchInvoices.length > 0) {
@@ -378,12 +1011,11 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      // Get branchId from first invoice for cash validation
-      if (invoices.length > 0 && !invoiceBranchId) {
-        invoiceBranchId = invoices[0].branchId;
-      }
-
-      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + (
+        inv.receivableFinancingPlan?.status === 'ACTIVE'
+          ? Number(inv.receivableFinancingPlan.remainingAmount)
+          : Number(inv.balance)
+      ), 0);
       if (data.amount > totalBalance) {
         return res.status(400).json({
           error: {
@@ -412,11 +1044,22 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           status: true,
           dueDate: true,
           branchId: true,
+          receivableFinancingPlan: {
+            select: {
+              id: true,
+              remainingAmount: true,
+              status: true,
+            },
+          },
         },
         orderBy: { dueDate: 'asc' },
       });
 
-      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+      const totalBalance = invoices.reduce((sum: number, inv: any) => sum + (
+        inv.receivableFinancingPlan?.status === 'ACTIVE'
+          ? Number(inv.receivableFinancingPlan.remainingAmount)
+          : Number(inv.balance)
+      ), 0);
       if (data.amount > totalBalance) {
         return res.status(400).json({
           error: {
@@ -426,7 +1069,11 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // Validate all invoices are from the same branch (if branchId is specified)
+      const branchValidation = validateSingleBranch(invoices);
+      if (branchValidation) {
+        return branchValidation;
+      }
+
       if (branchId) {
         const invalidBranchInvoices = invoices.filter((inv: any) => inv.branchId !== branchId);
         if (invalidBranchInvoices.length > 0) {
@@ -438,21 +1085,22 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           });
         }
       }
-
-      // Get branchId from first invoice for cash validation
-      if (invoices.length > 0 && !invoiceBranchId) {
-        invoiceBranchId = invoices[0].branchId;
-      }
     }
 
     // Validate cash register branch matches invoice branch for cash payments
-    if (data.method === 'CASH' && invoiceBranchId) {
-      const cashWhere: any = { status: 'OPEN' };
-      if (branchId) {
-        cashWhere.branchId = branchId;
-      } else {
-        cashWhere.branchId = invoiceBranchId;
+    if (data.method === 'CASH') {
+      const targetBranchId = branchId || invoiceBranchId;
+      if (!targetBranchId) {
+        return res.status(400).json({
+          error: {
+            code: 'MISSING_BRANCH_CONTEXT',
+            message: 'No se pudo determinar la sucursal de las facturas para registrar el pago en efectivo',
+          },
+        });
       }
+
+      const cashWhere: any = { status: 'OPEN' };
+      cashWhere.branchId = targetBranchId;
       
       const openCash = await prisma.cashRegister.findFirst({
         where: cashWhere,
@@ -480,7 +1128,9 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           const invoice = invoices.find((inv: any) => inv.id === ip.invoiceId);
           if (!invoice) continue;
 
-          const invoiceBalance = Number(invoice.balance);
+          const invoiceBalance = invoice.receivableFinancingPlan?.status === 'ACTIVE'
+            ? Number(invoice.receivableFinancingPlan.remainingAmount)
+            : Number(invoice.balance);
           const paymentAmount = ip.amount;
           const newBalance = invoiceBalance - paymentAmount;
           
@@ -505,13 +1155,17 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           }
 
           // Update invoice
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              balance: newBalance,
-              status: newStatus,
-            },
-          });
+          if (invoice.receivableFinancingPlan?.status === 'ACTIVE') {
+            await applyFinancingPayment(tx, invoice.receivableFinancingPlan.id, paymentAmount, paymentDate);
+          } else {
+            await tx.invoice.update({
+              where: { id: invoice.id },
+              data: {
+                balance: newBalance,
+                status: newStatus,
+              },
+            });
+          }
 
           // Create payment for this invoice
           const payment = await tx.payment.create({
@@ -535,7 +1189,9 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
         for (const invoice of invoices) {
           if (remainingAmount <= 0) break;
 
-          const invoiceBalance = Number(invoice.balance);
+          const invoiceBalance = invoice.receivableFinancingPlan?.status === 'ACTIVE'
+            ? Number(invoice.receivableFinancingPlan.remainingAmount)
+            : Number(invoice.balance);
           const paymentAmount = Math.min(remainingAmount, invoiceBalance);
 
           const newBalance = invoiceBalance - paymentAmount;
@@ -561,13 +1217,17 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
           }
 
           // Update invoice
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              balance: newBalance,
-              status: newStatus,
-            },
-          });
+          if (invoice.receivableFinancingPlan?.status === 'ACTIVE') {
+            await applyFinancingPayment(tx, invoice.receivableFinancingPlan.id, paymentAmount, paymentDate);
+          } else {
+            await tx.invoice.update({
+              where: { id: invoice.id },
+              data: {
+                balance: newBalance,
+                status: newStatus,
+              },
+            });
+          }
 
           // Create payment for this invoice
           const payment = await tx.payment.create({
@@ -590,12 +1250,13 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
 
       // Create cash movement for cash payments (solo uno para el total)
       if (data.method === 'CASH' && createdPayments.length > 0) {
-        const cashWhere: any = { status: 'OPEN' };
-        if (branchId) {
-          cashWhere.branchId = branchId;
-        } else if (invoiceBranchId) {
-          cashWhere.branchId = invoiceBranchId;
+        const targetBranchId = branchId || invoiceBranchId;
+        if (!targetBranchId) {
+          throw new Error('No se pudo determinar la sucursal para registrar el movimiento de caja');
         }
+
+        const cashWhere: any = { status: 'OPEN' };
+        cashWhere.branchId = targetBranchId;
 
         const openCash = await tx.cashRegister.findFirst({
           where: cashWhere,
@@ -796,76 +1457,78 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     const allInvoices = await prisma.invoice.findMany({
       where: {
         status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE] },
-        balance: { gt: 0 },
         paymentMethod: 'CREDIT',
         ...branchFilter,
       },
-      select: {
-        balance: true,
-        dueDate: true,
-        clientId: true,
-        issueDate: true,
+      include: {
+        receivableFinancingPlan: {
+          include: {
+            installments: {
+              orderBy: { installmentNo: 'asc' },
+            },
+          },
+        },
       },
     });
 
-    const totalReceivable = allInvoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+    const receivableInvoices = allInvoices.filter((invoice: any) => getFinancingDisplayBalance(invoice) > 0);
+    const totalReceivable = roundMoney(receivableInvoices.reduce((sum: number, inv: any) => sum + getFinancingDisplayBalance(inv), 0));
 
-    const overdue = allInvoices.filter((inv: any) => inv.dueDate && inv.dueDate < now);
-    const totalOverdue = overdue.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+    const overdue = receivableInvoices
+      .map((invoice: any) => ({
+        invoice,
+        metrics: getInvoiceOverdueMetrics(invoice, now),
+      }))
+      .filter(({ metrics }) => metrics.overdueAmount > 0);
+    const totalOverdue = roundMoney(overdue.reduce((sum: number, entry: any) => sum + entry.metrics.overdueAmount, 0));
 
     // Group by age (days overdue)
     const byAge = {
       '0-30': overdue
-        .filter((inv: any) => {
-          if (!inv.dueDate) return false;
-          const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        .filter((entry: any) => {
+          const days = entry.metrics.daysOverdue;
           return days >= 0 && days <= 30;
         })
-        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, entry: any) => sum + entry.metrics.overdueAmount, 0),
       '31-60': overdue
-        .filter((inv: any) => {
-          if (!inv.dueDate) return false;
-          const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        .filter((entry: any) => {
+          const days = entry.metrics.daysOverdue;
           return days > 30 && days <= 60;
         })
-        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, entry: any) => sum + entry.metrics.overdueAmount, 0),
       '61-90': overdue
-        .filter((inv: any) => {
-          if (!inv.dueDate) return false;
-          const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        .filter((entry: any) => {
+          const days = entry.metrics.daysOverdue;
           return days > 60 && days <= 90;
         })
-        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, entry: any) => sum + entry.metrics.overdueAmount, 0),
       '90+': overdue
-        .filter((inv: any) => {
-          if (!inv.dueDate) return false;
-          const days = Math.floor((now.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        .filter((entry: any) => {
+          const days = entry.metrics.daysOverdue;
           return days > 90;
         })
-        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
+        .reduce((sum: number, entry: any) => sum + entry.metrics.overdueAmount, 0),
     };
 
     // Count delinquent clients (clients with overdue invoices)
-    const clientIds = new Set(overdue.map((inv) => inv.clientId));
+    const clientIds = new Set(overdue.map((entry: any) => entry.invoice.clientId));
     const delinquentClients = clientIds.size;
 
     // Count total clients with receivables
-    const allClientIds = new Set(allInvoices.map((inv) => inv.clientId));
+    const allClientIds = new Set(receivableInvoices.map((inv: any) => inv.clientId));
     const totalClientsWithReceivables = allClientIds.size;
 
     // Get top 10 clients by receivable amount
     const clientReceivables = new Map<string, { clientId: string; total: number; overdue: number; invoiceCount: number }>();
     
-    allInvoices.forEach((inv: any) => {
+    receivableInvoices.forEach((inv: any) => {
       if (!inv.clientId) return;
+      const { overdueAmount } = getInvoiceOverdueMetrics(inv, now);
       const existing = clientReceivables.get(inv.clientId) || { clientId: inv.clientId, total: 0, overdue: 0, invoiceCount: 0 };
-      existing.total += Number(inv.balance);
+      existing.total += getFinancingDisplayBalance(inv);
       existing.invoiceCount += 1;
       
-      // Check if this invoice is overdue
-      if (inv.dueDate && inv.dueDate < now) {
-        existing.overdue += Number(inv.balance);
-      }
+      existing.overdue += overdueAmount;
       
       clientReceivables.set(inv.clientId, existing);
     });
@@ -926,7 +1589,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       totalClientsWithReceivables,
       byAge,
       overdueCount: overdue.length,
-      totalInvoices: allInvoices.length,
+      totalInvoices: receivableInvoices.length,
       topClients,
       topDebtors,
     });
@@ -940,4 +1603,3 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

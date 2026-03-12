@@ -27,26 +27,26 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
 }) => {
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 ${
-        onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+      className={`rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6 ${
+        onClick ? 'cursor-pointer transition-shadow hover:shadow-md' : ''
       }`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between mb-3 sm:mb-4">
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 ${iconBgColor} rounded-full flex items-center justify-center`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-full sm:h-12 sm:w-12 ${iconBgColor}`}>
           <div className={iconColor}>{icon}</div>
         </div>
       </div>
       <div>
-        <p className="text-xs sm:text-sm text-gray-600 mb-1">{title}</p>
-        <p className="text-2xl sm:text-3xl font-bold text-gray-900">{value}</p>
+        <p className="mb-1 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">{title}</p>
+        <p className="text-2xl font-bold text-slate-950 dark:text-white sm:text-3xl">{value}</p>
         {subtitle && (
-          <div className="flex items-center mt-2 text-sm text-gray-600">
+          <div className="mt-2 flex items-center text-sm text-slate-600 dark:text-slate-400">
             <span>{subtitle}</span>
           </div>
         )}
         {trend && (
-          <div className={`flex items-center mt-2 text-sm ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
+          <div className={`mt-2 flex items-center text-sm ${trend.isPositive ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
             {trend.isPositive ? (
               <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -81,13 +81,13 @@ export const DashboardSection: React.FC<DashboardSectionProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 ${className}`}>
+    <div className={`rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <h2 className="text-base sm:text-lg font-semibold text-gray-900">{title}</h2>
+        <h2 className="text-base font-semibold text-slate-950 dark:text-white sm:text-lg">{title}</h2>
         {action && (
           <button
             onClick={action.onClick}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="text-sm font-medium text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
           >
             {action.label}
           </button>
@@ -108,8 +108,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ title, subtitl
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{title}</h1>
-        {subtitle && <p className="text-sm sm:text-base text-gray-600 mt-1">{subtitle}</p>}
+        <h1 className="text-2xl font-bold text-slate-950 dark:text-white sm:text-3xl">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 sm:text-base">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2 sm:gap-3">{actions}</div>}
     </div>
@@ -130,8 +130,8 @@ export const DashboardButton: React.FC<DashboardButtonProps> = ({
   variant = 'primary',
 }) => {
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-700',
+    primary: 'bg-slate-900 hover:bg-slate-800 text-white',
+    secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200',
   }[variant];
 
   return (

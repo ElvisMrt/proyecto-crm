@@ -21,15 +21,18 @@ router.use(tenantMiddleware);
 router.use(authenticate);
 
 // CRUD de citas
+router.get('/unread/count', getUnreadAppointments);
+router.get('/notifications/unread', getUnreadAppointments);
 router.get('/', getAppointments);
-router.get('/:id', getAppointment);
 router.post('/', createAppointment);
+router.get('/:id', getAppointment);
 router.put('/:id', updateAppointment);
 router.delete('/:id', deleteAppointment);
 
 // Citas no leídas y marcado
-router.get('/unread/count', getUnreadAppointments);
 router.put('/:id/viewed', markAppointmentAsViewed);
+router.put('/:id/view', markAppointmentAsViewed);
 router.put('/:id/notified', markAppointmentAsNotified);
+router.put('/:id/notify', markAppointmentAsNotified);
 
 export default router;

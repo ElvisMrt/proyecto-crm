@@ -54,6 +54,7 @@ const Appointments = () => {
       setLoading(true);
       const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
       
       const data = await appointmentApi.getAppointments({
         startDate: startOfMonth.toISOString(),

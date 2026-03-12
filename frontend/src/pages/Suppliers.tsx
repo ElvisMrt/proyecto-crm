@@ -158,23 +158,24 @@ export default function Suppliers({ onSelectSupplier }: SuppliersProps = {}) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+    <div className="space-y-5 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Proveedores</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestiona tus proveedores y controla tus compras</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Relación</p>
+          <h1 className="text-2xl font-bold text-slate-950">Proveedores</h1>
+          <p className="mt-1 text-sm text-slate-500">Gestiona tus proveedores y controla tus compras</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-500">Total de proveedores</p>
-          <p className="text-sm font-medium text-gray-900">{stats.total}</p>
+          <p className="text-xs text-slate-500">Total de proveedores</p>
+          <p className="text-sm font-medium text-slate-950">{stats.total}</p>
         </div>
       </div>
 
@@ -187,12 +188,12 @@ export default function Suppliers({ onSelectSupplier }: SuppliersProps = {}) {
             placeholder="Buscar proveedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
         </div>
         <button
           onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2.5 text-white transition hover:bg-slate-800"
         >
           <HiPlus className="w-5 h-5" />
           Nuevo Proveedor

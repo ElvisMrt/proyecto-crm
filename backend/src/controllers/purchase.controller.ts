@@ -1,6 +1,107 @@
 import { Response } from 'express';
 import { TenantRequest } from '../middleware/tenant.middleware';
 
+type PurchaseItemInput = {
+  productId?: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  tax?: number;
+  discount?: number;
+};
+
+function normalizePurchaseItems(items: any[]): PurchaseItemInput[] {
+  return items
+    .filter((item) => item && item.description && Number(item.quantity) > 0)
+    .map((item) => ({
+      productId: item.productId || null,
+      description: String(item.description),
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice || 0),
+      tax: Number(item.tax || 0),
+      discount: Number(item.discount || 0),
+    }));
+}
+
+function calculatePurchaseTotals(items: PurchaseItemInput[]) {
+  const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+  const tax = items.reduce((sum, item) => sum + Number(item.tax || 0), 0);
+  const discount = items.reduce((sum, item) => sum + Number(item.discount || 0), 0);
+  const total = subtotal + tax - discount;
+
+  return { subtotal, tax, discount, total };
+}
+
+async function buildSupplierInvoiceFromPurchase(prisma: NonNullable<TenantRequest['tenantPrisma']>, purchaseId: string) {
+  const purchase = await prisma.purchase.findUnique({
+    where: { id: purchaseId },
+    include: {
+      supplier: true,
+    },
+  });
+
+  if (!purchase) {
+    throw Object.assign(new Error('Compra no encontrada'), {
+      statusCode: 404,
+      code: 'PURCHASE_NOT_FOUND',
+    });
+  }
+
+  const existingInvoice = await prisma.supplierInvoice.findFirst({
+    where: { purchaseId },
+  });
+
+  if (existingInvoice) {
+    throw Object.assign(new Error('Esta compra ya tiene una factura asociada'), {
+      statusCode: 400,
+      code: 'INVOICE_EXISTS',
+      data: existingInvoice,
+    });
+  }
+
+  const lastInvoice = await prisma.supplierInvoice.findFirst({
+    orderBy: { createdAt: 'desc' },
+    select: { code: true },
+  });
+
+  let invoiceCode = 'FINV-000001';
+  if (lastInvoice?.code) {
+    const match = lastInvoice.code.match(/FINV-(\d+)/);
+    if (match) {
+      invoiceCode = `FINV-${String(parseInt(match[1], 10) + 1).padStart(6, '0')}`;
+    }
+  }
+
+  const invoiceDate = purchase.purchaseDate;
+  const dueDate = new Date(invoiceDate);
+  dueDate.setDate(dueDate.getDate() + 30);
+
+  const invoice = await prisma.supplierInvoice.create({
+    data: {
+      code: invoiceCode,
+      supplierId: purchase.supplierId,
+      purchaseId: purchase.id,
+      branchId: purchase.branchId,
+      invoiceDate,
+      dueDate,
+      subtotal: purchase.subtotal,
+      tax: purchase.tax,
+      discount: purchase.discount,
+      total: purchase.total,
+      paid: 0,
+      balance: purchase.total,
+      status: 'PENDING',
+      notes: `Factura generada para compra ${purchase.code}`,
+    },
+  });
+
+  return {
+    purchase,
+    invoice,
+    invoiceCode,
+  };
+}
+
 // GET /purchases - Listar compras
 export async function getPurchases(req: TenantRequest, res: Response) {
   try {
@@ -68,8 +169,52 @@ export async function getPurchases(req: TenantRequest, res: Response) {
 // GET /purchases/:id - Obtener compra por ID
 export async function getPurchaseById(req: TenantRequest, res: Response) {
   try {
-    res.status(404).json({
-      error: { code: 'NOT_FOUND', message: 'Compra no encontrada' }
+    const prisma = req.tenantPrisma;
+    if (!prisma) {
+      return res.status(500).json({
+        error: { code: 'PRISMA_NOT_INITIALIZED', message: 'Database connection not available' }
+      });
+    }
+
+    const { id } = req.params;
+    const purchase = await prisma.purchase.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        branch: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                controlsStock: true,
+              },
+            },
+          },
+        },
+        invoice: true,
+        paymentDetails: true,
+      },
+    });
+
+    if (!purchase) {
+      return res.status(404).json({
+        error: { code: 'NOT_FOUND', message: 'Compra no encontrada' }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: purchase,
     });
   } catch (error) {
     console.error('Get purchase by ID error:', error);
@@ -92,7 +237,7 @@ export async function createPurchase(req: TenantRequest, res: Response) {
       });
     }
 
-    const { supplierId, purchaseDate, total, notes, status } = req.body;
+    const { supplierId, purchaseDate, total, notes, status, branchId, items = [] } = req.body;
 
     // Validar campos requeridos
     if (!supplierId) {
@@ -158,8 +303,17 @@ export async function createPurchase(req: TenantRequest, res: Response) {
     }
     console.log('✅ Generated code:', code);
 
-    // Preparar datos para crear la compra
-    const totalValue = parseFloat(String(total || 0));
+    const normalizedItems = normalizePurchaseItems(Array.isArray(items) ? items : []);
+    const calculatedTotals = normalizedItems.length > 0
+      ? calculatePurchaseTotals(normalizedItems)
+      : {
+          subtotal: parseFloat(String(total || 0)),
+          tax: 0,
+          discount: 0,
+          total: parseFloat(String(total || 0)),
+        };
+
+    const totalValue = calculatedTotals.total;
     console.log('📝 Creating purchase with data:', {
       code,
       supplierId,
@@ -187,14 +341,27 @@ export async function createPurchase(req: TenantRequest, res: Response) {
         code,
         supplierId,
         userId,
-        branchId: (req as any).branchId || null,
+        branchId: branchId || (req as any).branchId || null,
         purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-        total: totalValue,
-        subtotal: totalValue,
-        tax: 0,
-        discount: 0,
+        total: calculatedTotals.total,
+        subtotal: calculatedTotals.subtotal,
+        tax: calculatedTotals.tax,
+        discount: calculatedTotals.discount,
+        paid: 0,
+        balance: totalValue,
         notes: notes || null,
-        status: status || 'PENDING'
+        status: status || 'PENDING',
+        items: normalizedItems.length > 0 ? {
+          create: normalizedItems.map((item) => ({
+            productId: item.productId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            tax: item.tax || 0,
+            discount: item.discount || 0,
+            total: (item.quantity * item.unitPrice) + Number(item.tax || 0) - Number(item.discount || 0),
+          }))
+        } : undefined
       },
       include: {
         supplier: {
@@ -203,63 +370,15 @@ export async function createPurchase(req: TenantRequest, res: Response) {
             code: true,
             name: true
           }
-        }
+        },
+        items: true,
       }
     });
 
     console.log('✅ Purchase created:', purchase.id);
 
-    // Generar factura automáticamente
     console.log('📝 Generating invoice for purchase...');
-    
-    // Obtener el último número de factura
-    const lastInvoice = await prisma.supplierInvoice.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { code: true }
-    });
-
-    let invoiceCode = 'FINV-000001';
-    if (lastInvoice && lastInvoice.code) {
-      const match = lastInvoice.code.match(/FINV-(\d+)/);
-      if (match) {
-        const nextNumber = parseInt(match[1]) + 1;
-        invoiceCode = `FINV-${String(nextNumber).padStart(6, '0')}`;
-      }
-    }
-
-    // Calcular fecha de vencimiento (30 días después de la fecha de compra)
-    const invoiceDate = purchaseDate ? new Date(purchaseDate) : new Date();
-    const dueDate = new Date(invoiceDate);
-    dueDate.setDate(dueDate.getDate() + 30);
-
-    console.log('📝 Creating invoice with data:', {
-      code: invoiceCode,
-      supplierId,
-      purchaseId: purchase.id,
-      branchId: (req as any).branchId || null,
-      invoiceDate,
-      dueDate,
-      total: totalValue
-    });
-
-    const invoice = await prisma.supplierInvoice.create({
-      data: {
-        code: invoiceCode,
-        supplierId,
-        purchaseId: purchase.id,
-        branchId: (req as any).branchId || null,
-        invoiceDate,
-        dueDate,
-        subtotal: totalValue,
-        tax: 0,
-        discount: 0,
-        total: totalValue,
-        paid: 0,
-        balance: totalValue,
-        status: 'PENDING',
-        notes: `Factura generada automáticamente para compra ${code}`
-      }
-    });
+    const { invoice, invoiceCode } = await buildSupplierInvoiceFromPurchase(prisma, purchase.id);
 
     console.log('✅ Invoice created:', invoice.code);
 
@@ -308,36 +427,83 @@ export async function updatePurchase(req: TenantRequest, res: Response) {
       });
     }
 
-    const { supplierId, purchaseDate, deliveryDate, subtotal, tax, discount, total, notes, status } = req.body;
+    const { supplierId, purchaseDate, deliveryDate, subtotal, tax, discount, total, notes, status, branchId, items } = req.body;
+    const currentPurchase = await prisma.purchase.findUnique({
+      where: { id },
+      select: { paid: true },
+    });
+
+    if (!currentPurchase) {
+      return res.status(404).json({
+        error: { code: 'NOT_FOUND', message: 'Compra no encontrada' }
+      });
+    }
+
+    const normalizedItems = Array.isArray(items) ? normalizePurchaseItems(items) : null;
+    const itemTotals = normalizedItems && normalizedItems.length > 0 ? calculatePurchaseTotals(normalizedItems) : null;
 
     // Calcular total si se proporcionan los componentes
-    const calculatedTotal = total !== undefined ? total : 
-      (subtotal !== undefined ? Number(subtotal) + Number(tax || 0) - Number(discount || 0) : undefined);
+    const calculatedTotal = itemTotals
+      ? itemTotals.total
+      : total !== undefined ? total :
+        (subtotal !== undefined ? Number(subtotal) + Number(tax || 0) - Number(discount || 0) : undefined);
 
     const updateData: any = {};
     
     if (supplierId !== undefined) updateData.supplierId = supplierId;
+    if (branchId !== undefined) updateData.branchId = branchId || null;
     if (purchaseDate !== undefined) updateData.purchaseDate = new Date(purchaseDate);
     if (deliveryDate !== undefined) updateData.deliveryDate = deliveryDate ? new Date(deliveryDate) : null;
-    if (subtotal !== undefined) updateData.subtotal = Number(subtotal);
-    if (tax !== undefined) updateData.tax = Number(tax);
-    if (discount !== undefined) updateData.discount = Number(discount);
-    if (calculatedTotal !== undefined) updateData.total = Number(calculatedTotal);
+    if (itemTotals) {
+      updateData.subtotal = itemTotals.subtotal;
+      updateData.tax = itemTotals.tax;
+      updateData.discount = itemTotals.discount;
+    } else {
+      if (subtotal !== undefined) updateData.subtotal = Number(subtotal);
+      if (tax !== undefined) updateData.tax = Number(tax);
+      if (discount !== undefined) updateData.discount = Number(discount);
+    }
+    if (calculatedTotal !== undefined) {
+      updateData.total = Number(calculatedTotal);
+      updateData.balance = Math.max(Number(calculatedTotal) - Number(currentPurchase.paid || 0), 0);
+    }
     if (notes !== undefined) updateData.notes = notes;
     if (status !== undefined) updateData.status = status;
 
-    const purchase = await prisma.purchase.update({
-      where: { id },
-      data: updateData,
-      include: {
-        supplier: {
-          select: {
-            id: true,
-            code: true,
-            name: true
-          }
-        }
+    const purchase = await prisma.$transaction(async (tx) => {
+      if (normalizedItems) {
+        await tx.purchaseItem.deleteMany({
+          where: { purchaseId: id }
+        });
       }
+
+      return tx.purchase.update({
+        where: { id },
+        data: {
+          ...updateData,
+          items: normalizedItems ? {
+            create: normalizedItems.map((item) => ({
+              productId: item.productId,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              tax: item.tax || 0,
+              discount: item.discount || 0,
+              total: (item.quantity * item.unitPrice) + Number(item.tax || 0) - Number(item.discount || 0),
+            }))
+          } : undefined
+        },
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              code: true,
+              name: true
+            }
+          },
+          items: true,
+        }
+      });
     });
 
     res.json({
@@ -388,8 +554,143 @@ export async function deletePurchase(req: TenantRequest, res: Response) {
 // POST /purchases/:id/receive - Marcar compra como recibida
 export async function receivePurchase(req: TenantRequest, res: Response) {
   try {
-    res.status(501).json({
-      error: { code: 'NOT_IMPLEMENTED', message: 'Funcionalidad no implementada' }
+    const { id } = req.params;
+    const prisma = req.tenantPrisma;
+
+    if (!prisma) {
+      return res.status(500).json({
+        error: { code: 'PRISMA_NOT_INITIALIZED', message: 'Database connection not available' }
+      });
+    }
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!purchase) {
+      return res.status(404).json({
+        error: { code: 'PURCHASE_NOT_FOUND', message: 'Compra no encontrada' }
+      });
+    }
+
+    if (purchase.status === 'RECEIVED') {
+      return res.json({
+        success: true,
+        data: purchase,
+        stockUpdated: false,
+        message: 'La compra ya estaba recibida',
+      });
+    }
+
+    if (purchase.items.length > 0 && !purchase.branchId) {
+      return res.status(400).json({
+        error: { code: 'BRANCH_REQUIRED', message: 'La compra debe tener sucursal para actualizar inventario' }
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedPurchase = await tx.purchase.update({
+        where: { id },
+        data: {
+          status: 'RECEIVED',
+          deliveryDate: purchase.deliveryDate || new Date(),
+        },
+        include: {
+          items: true,
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      let stockUpdated = 0;
+
+      for (const item of purchase.items) {
+        if (!item.productId || !purchase.branchId) {
+          continue;
+        }
+
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            controlsStock: true,
+            minStock: true,
+          },
+        });
+
+        if (!product || !product.controlsStock) {
+          continue;
+        }
+
+        const quantity = Number(item.quantity);
+        const existingStock = await tx.stock.findUnique({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: purchase.branchId,
+            },
+          },
+        });
+
+        const newQuantity = Number(existingStock?.quantity || 0) + quantity;
+
+        await tx.stock.upsert({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: purchase.branchId,
+            },
+          },
+          update: {
+            quantity: newQuantity,
+          },
+          create: {
+            productId: item.productId,
+            branchId: purchase.branchId,
+            quantity: newQuantity,
+            minStock: Number(product.minStock) || 0,
+          },
+        });
+
+        await tx.inventoryMovement.create({
+          data: {
+            productId: item.productId,
+            branchId: purchase.branchId,
+            type: 'ADJUSTMENT_ENTRY',
+            quantity,
+            balance: newQuantity,
+            documentType: 'PurchaseReceipt',
+            documentId: purchase.id,
+            userId: purchase.userId,
+            observations: `Recepcion de compra ${purchase.code}`,
+          },
+        });
+
+        stockUpdated += 1;
+      }
+
+      return {
+        purchase: updatedPurchase,
+        stockUpdated,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: result.purchase,
+      stockUpdated: result.stockUpdated,
+      message: result.stockUpdated > 0
+        ? 'Compra recibida y stock actualizado'
+        : 'Compra recibida exitosamente',
     });
   } catch (error) {
     console.error('Receive purchase error:', error);
@@ -402,10 +703,33 @@ export async function receivePurchase(req: TenantRequest, res: Response) {
 // POST /purchases/:id/create-invoice - Crear factura desde compra
 export async function createInvoiceFromPurchase(req: TenantRequest, res: Response) {
   try {
-    res.status(501).json({
-      error: { code: 'NOT_IMPLEMENTED', message: 'Funcionalidad no implementada' }
+    const { id } = req.params;
+    const prisma = req.tenantPrisma;
+
+    if (!prisma) {
+      return res.status(500).json({
+        error: { code: 'PRISMA_NOT_INITIALIZED', message: 'Database connection not available' }
+      });
+    }
+
+    const { purchase, invoice, invoiceCode } = await buildSupplierInvoiceFromPurchase(prisma, id);
+
+    res.status(201).json({
+      success: true,
+      data: invoice,
+      message: `Factura ${invoiceCode} generada exitosamente para compra ${purchase.code}`
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({
+        error: {
+          code: error.code || 'BUSINESS_RULE_ERROR',
+          message: error.message,
+        },
+        data: error.data,
+      });
+    }
+
     console.error('Create invoice from purchase error:', error);
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'Error al crear factura' }

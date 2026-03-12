@@ -136,11 +136,11 @@ const InvoicesTab = () => {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
-      DRAFT: { label: 'Borrador', className: 'bg-yellow-100 text-yellow-800' },
-      ISSUED: { label: 'Emitida', className: 'bg-blue-100 text-blue-800' },
-      PAID: { label: 'Pagada', className: 'bg-green-100 text-green-800' },
-      OVERDUE: { label: 'Vencida', className: 'bg-red-100 text-red-800' },
-      CANCELLED: { label: 'Anulada', className: 'bg-gray-100 text-gray-800' },
+      DRAFT: { label: 'Borrador', className: 'border border-amber-200 bg-amber-50 text-amber-700' },
+      ISSUED: { label: 'Emitida', className: 'border border-sky-200 bg-sky-50 text-sky-700' },
+      PAID: { label: 'Pagada', className: 'border border-emerald-200 bg-emerald-50 text-emerald-700' },
+      OVERDUE: { label: 'Vencida', className: 'border border-rose-200 bg-rose-50 text-rose-700' },
+      CANCELLED: { label: 'Anulada', className: 'border border-slate-200 bg-slate-100 text-slate-700' },
     };
     return badges[status] || { label: status, className: 'bg-gray-100 text-gray-800' };
   };
@@ -209,6 +209,15 @@ const InvoicesTab = () => {
     }
   };
 
+  const handleFinanceInvoice = async (invoice: Invoice) => {
+    if (!invoice.client?.id) {
+      showToast('La factura debe tener un cliente para financiarse desde CxC', 'error');
+      return;
+    }
+
+    navigate(`/receivables?tab=status&clientId=${invoice.client.id}`);
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       CASH: 'Efectivo',
@@ -222,24 +231,25 @@ const InvoicesTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header con botón de nueva factura */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">Facturas</h2>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Documentos</p>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">Facturas</h2>
+        </div>
         <button
           onClick={() => navigate('/sales/new-invoice')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           + Nueva Factura
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-medium text-gray-700">Filtros de Búsqueda</h3>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="text-sm text-blue-600 hover:text-blue-700"
+            className="text-sm text-slate-700 hover:text-slate-950"
           >
             {showFilters ? 'Ocultar' : 'Mostrar'} filtros avanzados
           </button>
@@ -253,7 +263,7 @@ const InvoicesTab = () => {
               placeholder="Número, NCF, Cliente..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-2xl border border-slate-200 px-3 py-2 focus:border-slate-400 focus:ring-slate-200"
               onKeyPress={(e) => {
                 if (e.key === 'Enter') fetchInvoices();
               }}
@@ -404,7 +414,7 @@ const InvoicesTab = () => {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)]">
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -478,7 +488,7 @@ const InvoicesTab = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           {invoice.balance > 0 ? (
-                            <span className="text-red-600 font-medium">{formatCurrency(invoice.balance)}</span>
+                            <span className="font-medium text-rose-600">{formatCurrency(invoice.balance)}</span>
                           ) : (
                             <span className="text-gray-500">{formatCurrency(invoice.balance)}</span>
                           )}
@@ -521,7 +531,7 @@ const InvoicesTab = () => {
                                           navigate(`/sales/invoices/${invoice.id}/edit`);
                                           setActionMenuOpen(null);
                                         }}
-                                        className="block w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                                      className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                                       >
                                         {invoice.status === 'DRAFT' ? 'Continuar Edición' : 'Editar'}
                                       </button>
@@ -545,7 +555,7 @@ const InvoicesTab = () => {
                                             { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
                                           );
                                         }}
-                                        className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                        className="block w-full px-4 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
                                       >
                                         Eliminar
                                       </button>
@@ -591,7 +601,7 @@ const InvoicesTab = () => {
                                       <HiChat className="w-4 h-4 mr-2" />
                                       Enviar WhatsApp
                                     </button> */}
-                                    {invoice.status === 'ISSUED' && invoice.balance > 0 && (
+                                    {['ISSUED', 'OVERDUE'].includes(invoice.status) && invoice.balance > 0 && (
                                       <>
                                         {invoice.client ? (
                                           <button
@@ -599,7 +609,7 @@ const InvoicesTab = () => {
                                               navigate(`/receivables?invoiceId=${invoice.id}`);
                                               setActionMenuOpen(null);
                                             }}
-                                            className="block w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+                                            className="block w-full px-4 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50"
                                           >
                                             Registrar Pago
                                           </button>
@@ -617,7 +627,7 @@ const InvoicesTab = () => {
                                               setPaymentModalOpen(true);
                                               setActionMenuOpen(null);
                                             }}
-                                            className="block w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+                                            className="block w-full px-4 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50"
                                           >
                                             Registrar Pago
                                           </button>
@@ -632,6 +642,17 @@ const InvoicesTab = () => {
                                           <HiReceiptTax className="w-4 h-4 mr-2" />
                                           Generar Recibo
                                         </button>
+                                        {invoice.client && invoice.paymentMethod === 'CREDIT' && invoice.balance > 0 && (
+                                          <button
+                                            onClick={() => {
+                                              handleFinanceInvoice(invoice);
+                                              setActionMenuOpen(null);
+                                            }}
+                                            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                          >
+                                            Ir a CxC para Financiar
+                                          </button>
+                                        )}
                                       </>
                                     )}
                                     {invoice.status === 'ISSUED' && invoice.balance === invoice.total && (
@@ -640,7 +661,7 @@ const InvoicesTab = () => {
                                           handleCancelClick(invoice);
                                           setActionMenuOpen(null);
                                         }}
-                                        className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                        className="block w-full px-4 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
                                       >
                                         Anular
                                       </button>
@@ -736,20 +757,26 @@ const InvoicesTab = () => {
             <h2 className="text-xl font-bold mb-4">Registrar Pago</h2>
             <div className="mb-4 p-3 bg-gray-50 rounded">
               <p className="text-sm text-gray-600">Factura: <span className="font-semibold">{selectedInvoice.number}</span></p>
-              <p className="text-sm text-gray-600">Balance: <span className="font-semibold text-red-600">{formatCurrency(selectedInvoice.balance)}</span></p>
+              <p className="text-sm text-gray-600">Balance: <span className="font-semibold text-rose-700">{formatCurrency(selectedInvoice.balance)}</span></p>
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
               try {
+                if (!selectedInvoice.client?.id) {
+                  showToast('La factura debe tener un cliente para registrar un pago en cuentas por cobrar', 'error');
+                  return;
+                }
+
                 await receivablesApi.createPayment({
+                  clientId: selectedInvoice.client.id,
                   invoiceIds: [selectedInvoice.id],
                   invoicePayments: [{ invoiceId: selectedInvoice.id, amount: paymentForm.amount }],
                   amount: paymentForm.amount,
                   method: paymentForm.method,
                   reference: paymentForm.reference,
-                  paymentDate: paymentForm.paymentDate,
+                  paymentDate: paymentForm.paymentDate ? new Date(paymentForm.paymentDate).toISOString() : undefined,
                   observations: paymentForm.observations
-                });
+                }, selectedInvoice.branch?.id ? { branchId: selectedInvoice.branch.id } : undefined);
                 showToast('Pago registrado exitosamente', 'success');
                 setPaymentModalOpen(false);
                 setSelectedInvoice(null);
@@ -829,7 +856,7 @@ const InvoicesTab = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="flex-1 rounded-2xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-800"
                 >
                   Registrar Pago
                 </button>
@@ -843,4 +870,3 @@ const InvoicesTab = () => {
 };
 
 export default InvoicesTab;
-

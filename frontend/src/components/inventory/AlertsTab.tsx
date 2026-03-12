@@ -27,7 +27,7 @@ const AlertsTab = () => {
   };
 
   const handleViewProduct = (productId: string) => {
-    navigate(`/inventory?tab=products&productId=${productId}`);
+    navigate(`/inventory?tab=stock&productId=${productId}`);
   };
 
   const handleCreateTask = async (alert: any) => {
@@ -120,6 +120,5 @@ const AlertsTab = () => {
 };
 
 export default AlertsTab;
-
 
 

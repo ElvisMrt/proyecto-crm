@@ -3,7 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { HiBell, HiLogout, HiX, HiCheckCircle, HiMoon, HiSun, HiMenu } from 'react-icons/hi';
+import { HiBell, HiX, HiCheckCircle, HiMoon, HiSun, HiMenu } from 'react-icons/hi';
 import { crmApi, dashboardApi, inventoryApi } from '../services/api';
 
 interface Notification {
@@ -13,10 +13,10 @@ interface Notification {
   type: 'info' | 'warning' | 'error' | 'success';
   read: boolean;
   createdAt: string;
-  taskId?: string; // ID de la tarea si es una notificación de tarea
-  isTask?: boolean; // Indica si es una notificación de tarea
-  isStockAlert?: boolean; // Indica si es una notificación de stock
-  productId?: string; // ID del producto si es una notificación de stock
+  taskId?: string;
+  isTask?: boolean;
+  isStockAlert?: boolean;
+  productId?: string;
 }
 
 interface HeaderProps {
@@ -32,12 +32,21 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
 
-  // Fetch notifications from API - tasks and alerts
   useEffect(() => {
-    // Deshabilitar temporalmente para evitar loops cuando el backend falla
-    // fetchNotifications();
-    // const interval = setInterval(fetchNotifications, 30000);
-    // return () => clearInterval(interval);
+    let isMounted = true;
+
+    const run = async () => {
+      if (!isMounted) return;
+      await fetchNotifications();
+    };
+
+    run();
+    const interval = window.setInterval(run, 60000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -49,17 +58,16 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
         inventoryApi.getLowStockAlerts().catch(() => ({ data: [] })),
       ]);
 
-      // Tareas vencidas
       const overdueTasks = overdueTasksData.data || overdueTasksData || [];
       const overdueTaskNotifications: Notification[] = overdueTasks.slice(0, 5).map((task: any) => {
-        const daysOverdue = task.dueDate 
+        const daysOverdue = task.dueDate
           ? Math.floor((new Date().getTime() - new Date(task.dueDate).getTime()) / (1000 * 60 * 60 * 24))
           : 0;
         return {
           id: `task-overdue-${task.id}`,
           title: 'Tarea vencida',
           message: `${task.title}${task.client ? ` - ${task.client.name}` : ''}${daysOverdue > 0 ? ` (${daysOverdue} día${daysOverdue > 1 ? 's' : ''} de retraso)` : ''}`,
-          type: 'error' as const,
+          type: 'error',
           read: false,
           createdAt: task.dueDate || task.createdAt,
           taskId: task.id,
@@ -67,7 +75,6 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
         };
       });
 
-      // Tareas pendientes (próximas a vencer)
       const pendingTasks = pendingTasksData.data || pendingTasksData || [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -81,7 +88,6 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
           if (!task.dueDate) return false;
           const dueDate = new Date(task.dueDate);
           dueDate.setHours(0, 0, 0, 0);
-          // Mostrar tareas que vencen hoy o mañana
           return dueDate >= today && dueDate <= dayAfter;
         })
         .slice(0, 5)
@@ -92,7 +98,7 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
             id: `task-pending-${task.id}`,
             title: isToday ? 'Tarea vence hoy' : 'Tarea vence mañana',
             message: `${task.title}${task.client ? ` - ${task.client.name}` : ''}`,
-            type: 'warning' as const,
+            type: 'warning',
             read: false,
             createdAt: task.dueDate || task.createdAt,
             taskId: task.id,
@@ -100,47 +106,43 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
           };
         });
 
-      // Notificaciones de stock bajo
       const lowStockItems = lowStockData.data || lowStockData || [];
       const stockNotifications: Notification[] = lowStockItems.slice(0, 5).map((item: any) => ({
         id: `stock-low-${item.product?.id || Math.random()}-${item.branch?.id || 'default'}`,
         title: 'Stock bajo',
         message: `${item.product?.name || 'Producto'} - Stock: ${item.currentStock || 0} (Mínimo: ${item.minStock || 0})${item.branch ? ` - ${item.branch.name}` : ''}`,
-        type: 'warning' as const,
+        type: 'warning',
         read: false,
         createdAt: new Date().toISOString(),
         isStockAlert: true,
         productId: item.product?.id,
       }));
 
-      // Alertas generales
       const alertNotifications: Notification[] = [];
-      
+
       if (summaryData.alerts?.overdueInvoices > 0) {
         alertNotifications.push({
           id: 'alert-overdue-invoices',
           title: 'Facturas vencidas',
           message: `${summaryData.alerts.overdueInvoices} factura${summaryData.alerts.overdueInvoices > 1 ? 's' : ''} vencida${summaryData.alerts.overdueInvoices > 1 ? 's' : ''}`,
-          type: 'error' as const,
+          type: 'error',
           read: false,
           createdAt: new Date().toISOString(),
         });
       }
 
-      // Si hay más productos con stock bajo que los mostrados, agregar notificación resumen
       if (lowStockItems.length > 5) {
         alertNotifications.push({
           id: 'alert-stock-summary',
           title: 'Múltiples productos con stock bajo',
           message: `${lowStockItems.length} producto${lowStockItems.length > 1 ? 's' : ''} con stock bajo`,
-          type: 'warning' as const,
+          type: 'warning',
           read: false,
           createdAt: new Date().toISOString(),
           isStockAlert: true,
         });
       }
 
-      // Combinar todas las notificaciones, priorizando tareas vencidas
       setNotifications([...overdueTaskNotifications, ...pendingTaskNotifications, ...stockNotifications, ...alertNotifications]);
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -163,34 +165,23 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
     };
   }, [showNotifications]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+    setNotifications(notifications.map((notification) => (
+      notification.id === id ? { ...notification, read: true } : notification
+    )));
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-  };
-
-  const deleteNotification = (id: string) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+    setNotifications(notifications.map((notification) => ({ ...notification, read: true })));
   };
 
   const completeTask = async (taskId: string, notificationId: string) => {
     try {
       await crmApi.completeTask(taskId);
       showToast('Tarea completada exitosamente', 'success');
-      // Remover la notificación de la lista
-      setNotifications(notifications.filter(n => n.id !== notificationId));
-      // Refrescar notificaciones
+      setNotifications(notifications.filter((notification) => notification.id !== notificationId));
       fetchNotifications();
     } catch (error: any) {
       console.error('Error completing task:', error);
@@ -198,7 +189,7 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
     }
   };
 
-  const handleTaskClick = (taskId: string) => {
+  const handleTaskClick = () => {
     navigate('/crm');
     setShowNotifications(false);
   };
@@ -222,116 +213,111 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
-        {/* Mobile Menu Button */}
+    <header className="relative z-[100] isolate shrink-0 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
+      <div className="flex items-center justify-between px-3 py-3 sm:px-6 sm:py-4">
         <button
           onClick={onMobileMenuClick}
-          className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors mr-2"
+          className="mr-2 rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden"
         >
-          <HiMenu className="w-6 h-6" />
+          <HiMenu className="h-6 w-6" />
         </button>
 
-        {/* Search Bar */}
-        <div className="flex-1 max-w-md hidden md:block">
+        <div className="hidden max-w-md flex-1 md:block">
           <div className="relative">
             <input
               type="text"
-              placeholder="Buscar Tarea..."
-              className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Buscar tarea..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 py-2.5 pl-10 pr-10 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-600 dark:focus:bg-slate-950 dark:focus:ring-slate-800"
             />
-            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
               </svg>
             </button>
           </div>
         </div>
-        
-        {/* Right Section */}
-        <div className="flex items-center space-x-2 sm:space-x-4 ml-2 sm:ml-6">
-          {/* Theme Toggle - Hidden on mobile */}
+
+        <div className="ml-2 flex items-center space-x-2 sm:ml-6 sm:space-x-4">
           <button
             onClick={toggleTheme}
-            className="hidden sm:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
             title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            {theme === 'dark' ? (
-              <HiSun className="w-5 h-5" />
-            ) : (
-              <HiMoon className="w-5 h-5" />
-            )}
+            {theme === 'dark' ? <HiSun className="h-5 w-5" /> : <HiMoon className="h-5 w-5" />}
           </button>
 
-          {/* Notifications */}
-          <div className="relative" ref={notificationRef}>
+          <div className="relative z-[220]" ref={notificationRef}>
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              onClick={() => {
+                if (!showNotifications) {
+                  fetchNotifications();
+                }
+                setShowNotifications(!showNotifications);
+              }}
+              className="relative rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
             >
-              <HiBell className="w-5 h-5" />
+              <HiBell className="h-5 w-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center text-[10px]">
+                <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-950 text-[10px] font-bold text-white">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                  <h3 className="font-semibold text-gray-900">Notificaciones</h3>
+              <>
+                <div className="fixed inset-0 z-[240] bg-slate-950/10 backdrop-blur-[1px] sm:hidden" />
+                <div className="fixed left-2 right-2 top-16 z-[250] flex max-h-[75vh] w-auto flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_32px_90px_rgba(15,23,42,0.24)] dark:border-slate-800 dark:bg-slate-950 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:z-[250] sm:mt-3 sm:max-h-96 sm:w-96">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Centro</p>
+                    <h3 className="font-semibold text-slate-950 dark:text-white">Notificaciones</h3>
+                  </div>
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      className="text-xs font-medium text-slate-600 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
                     >
-                      Marcar todas como leídas
+                      Marcar todas
                     </button>
                   )}
                 </div>
-                
-                <div className="overflow-y-auto flex-1">
+
+                <div className="flex-1 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-gray-500">
+                    <div className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
                       <p>No hay notificaciones</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-gray-200">
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
                       {notifications.map((notification) => (
                         <div
                           key={notification.id}
-                          className={`px-4 py-3 hover:bg-gray-50 transition-colors ${
-                            !notification.read ? 'bg-blue-50' : ''
-                          }`}
+                          className={`px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 ${!notification.read ? 'bg-slate-50/70 dark:bg-slate-900/80' : ''}`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div 
-                              className={`flex items-start gap-3 flex-1 min-w-0 ${(notification.isTask || notification.isStockAlert) ? 'cursor-pointer' : ''}`}
+                            <div
+                              className={`flex min-w-0 flex-1 items-start gap-3 ${(notification.isTask || notification.isStockAlert) ? 'cursor-pointer' : ''}`}
                               onClick={
-                                notification.isTask && notification.taskId 
-                                  ? () => handleTaskClick(notification.taskId!)
+                                notification.isTask
+                                  ? handleTaskClick
                                   : notification.isStockAlert
                                     ? handleStockAlertClick
                                     : undefined
                               }
                             >
-                              <span className="text-xl mt-0.5 flex-shrink-0">
-                                {getNotificationIcon(notification.type)}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium ${!notification.read ? 'text-gray-900' : 'text-gray-700'}`}>
+                              <span className="mt-0.5 flex-shrink-0 text-xl">{getNotificationIcon(notification.type)}</span>
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-sm font-medium ${!notification.read ? 'text-slate-950 dark:text-white' : 'text-slate-700 dark:text-slate-200'}`}>
                                   {notification.title}
                                 </p>
-                                <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                  {notification.message}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">
+                                <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-slate-300">{notification.message}</p>
+                                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                                   {new Date(notification.createdAt).toLocaleDateString('es-DO', {
                                     hour: '2-digit',
                                     minute: '2-digit',
@@ -339,29 +325,29 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
+                            <div className="flex flex-shrink-0 items-center gap-1">
                               {notification.isTask && notification.taskId && (
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     completeTask(notification.taskId!, notification.id);
                                   }}
-                                  className="p-1.5 hover:bg-green-100 rounded text-green-600 hover:text-green-700 transition-colors"
+                                  className="rounded-xl p-1.5 text-emerald-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-200"
                                   title="Completar tarea"
                                 >
-                                  <HiCheckCircle className="w-4 h-4" />
+                                  <HiCheckCircle className="h-4 w-4" />
                                 </button>
                               )}
                               {!notification.read && (
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     markAsRead(notification.id);
                                   }}
-                                  className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+                                  className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                                   title="Marcar como leída"
                                 >
-                                  <HiX className="w-4 h-4" />
+                                  <HiX className="h-4 w-4" />
                                 </button>
                               )}
                             </div>
@@ -371,24 +357,25 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
                     </div>
                   )}
                 </div>
+
                 {notifications.length > 0 && (
-                  <div className="px-4 py-2 border-t border-gray-200 text-center bg-gray-50 flex gap-2">
-                    <button 
+                  <div className="flex gap-2 border-t border-slate-200 bg-slate-50/80 px-4 py-2 text-center dark:border-slate-800 dark:bg-slate-900">
+                    <button
                       onClick={() => {
                         navigate('/crm');
                         setShowNotifications(false);
                       }}
-                      className="flex-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      className="flex-1 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       Ver tareas
                     </button>
-                    {notifications.some(n => n.isStockAlert) && (
-                      <button 
+                    {notifications.some((notification) => notification.isStockAlert) && (
+                      <button
                         onClick={() => {
                           navigate('/inventory?tab=alerts');
                           setShowNotifications(false);
                         }}
-                        className="flex-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        className="flex-1 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                       >
                         Ver stock
                       </button>
@@ -396,17 +383,27 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
                   </div>
                 )}
               </div>
+              </>
             )}
           </div>
-          
-          {/* User Profile */}
-          <div className="flex items-center space-x-2 sm:space-x-3 pl-2 sm:pl-4 border-l border-gray-200">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="hidden rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white lg:block"
+          >
+            Salir
+          </button>
+
+          <div className="flex items-center space-x-2 border-l border-slate-200 pl-2 dark:border-slate-800 sm:space-x-3 sm:pl-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white sm:h-10 sm:w-10">
               {user?.name.charAt(0).toUpperCase()}
             </div>
             <div className="hidden lg:block">
-              <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-sm font-medium text-slate-950 dark:text-white">{user?.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
             </div>
           </div>
         </div>
@@ -416,10 +413,3 @@ const Header = ({ onMobileMenuClick }: HeaderProps) => {
 };
 
 export default Header;
-
-
-
-
-
-
-

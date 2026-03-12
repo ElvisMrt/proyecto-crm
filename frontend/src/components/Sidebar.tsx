@@ -1,26 +1,24 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { useState, useEffect } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   HiHome,
   HiShoppingCart,
   HiCurrencyDollar,
+  HiTruck,
   HiCash,
   HiCube,
   HiUsers,
   HiClipboardCheck,
   HiChartBar,
   HiCog,
+  HiLogout,
   HiChevronLeft,
   HiChevronRight,
-  HiLogout,
-  HiTruck,
+  HiCreditCard,
 } from 'react-icons/hi';
 import ManualDownloader from './ManualDownloader';
-import logoSrc from '../utils/Logos.svg';
-import logo2Src from '../utils/Logos 2.svg';
-import logo3Src from '../utils/3.svg';
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: HiHome },
@@ -30,6 +28,7 @@ const menuItems = [
   { path: '/cash', label: 'Caja', icon: HiCash },
   { path: '/inventory', label: 'Inventario', icon: HiCube },
   { path: '/clients', label: 'Clientes', icon: HiUsers },
+  { path: '/loans', label: 'Préstamos', icon: HiCreditCard },
   { path: '/crm', label: 'CRM', icon: HiClipboardCheck },
   { path: '/reports', label: 'Reportes', icon: HiChartBar },
 ];
@@ -50,33 +49,14 @@ const Sidebar = ({ isMobileOpen = false, onMobileClose }: SidebarProps) => {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const sidebarBackground = theme === 'dark' ? '#020617' : '#ffffff';
+  const sidebarBorder = theme === 'dark' ? '#1e293b' : '#e2e8f0';
 
-  // Cerrar sidebar móvil al cambiar de ruta
   useEffect(() => {
     if (isMobileOpen && onMobileClose) {
       onMobileClose();
     }
   }, [location.pathname]);
-  // const [unreadCount, setUnreadCount] = useState(0);
-
-  // Notifications endpoint disabled - not implemented in backend
-  // useEffect(() => {
-  //   fetchUnreadCount();
-  //   const interval = setInterval(fetchUnreadCount, 30000);
-  //   return () => clearInterval(interval);
-  // }, []);
-
-  // const fetchUnreadCount = async () => {
-  //   try {
-  //     const response = await api.get('/appointments/notifications/unread');
-  //     setUnreadCount(response.data.count);
-  //   } catch (error) {
-  //     console.error('Error fetching notifications:', error);
-  //   }
-  // };
-  
-  // Seleccionar logo según el tema cuando está expandido
-  const expandedLogoSrc = theme === 'light' ? logo3Src : logoSrc;
 
   const handleItemClick = (item: any) => {
     if (item.action === 'logout') {
@@ -85,201 +65,173 @@ const Sidebar = ({ isMobileOpen = false, onMobileClose }: SidebarProps) => {
     }
   };
 
+  const tooltip = (label: string) => (
+    <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-xl bg-slate-950 px-3 py-2 text-sm text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100">
+      {label}
+      <span className="absolute left-0 top-1/2 h-2 w-2 -translate-x-1 -translate-y-1/2 rotate-45 bg-slate-950"></span>
+    </span>
+  );
+
   return (
     <>
-      {/* Overlay para móvil */}
       {isMobileOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+        <div
+          className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
           onClick={onMobileClose}
         />
       )}
-      
-      {/* Sidebar */}
-      <aside className={`
-        ${isCollapsed ? 'w-16' : 'w-64'} 
-        bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 
-        flex flex-col transition-all duration-300 relative shadow-sm
-        fixed lg:static inset-y-0 left-0 z-50 shrink-0
-        transform lg:transform-none
-        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-      {/* Logo Section */}
-      <div className={`${isCollapsed ? 'px-3 py-4' : 'px-6 py-4'} border-b border-gray-200 dark:border-gray-700 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-        {!isCollapsed ? (
-          <>
-            <div className="flex items-center space-x-2">
-              <div className="h-10 w-auto overflow-hidden flex items-center justify-center flex-shrink-0">
-                <img 
-                  src={expandedLogoSrc} 
-                  alt="Logo" 
-                  className="w-auto object-contain object-center"
-                  style={{ maxHeight: '40px', height: 'auto' }}
-                />
-              </div>
-            </div>
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-300 flex-shrink-0"
-              title="Colapsar"
-            >
-              <HiChevronLeft className="w-5 h-5" />
-            </button>
-          </>
-        ) : (
-          <div className="w-full flex flex-col items-center space-y-3">
-            <img 
-              src={logo2Src} 
-              alt="Logo" 
-              className="h-10 w-auto"
-            />
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-300 w-full flex justify-center"
-              title="Expandir"
-            >
-              <HiChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-      </div>
-      
-      {/* Menu Section */}
-      <nav className={`flex-1 ${isCollapsed ? 'px-2 py-2' : 'px-3 py-3'} space-y-1 overflow-y-auto overflow-x-hidden`}>
-        {!isCollapsed && (
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3 py-2">Menú</p>
-        )}
-        {menuItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2'} rounded-lg transition-all group relative ${
-                isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-              title={isCollapsed ? item.label : ''}
-            >
-              <div className="relative">
-                <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} />
-                {/* Notifications badge disabled - endpoint not implemented
-                {item.path === '/crm' && unreadCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center text-[10px]">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-                */}
-              </div>
-              {!isCollapsed && <span className="truncate text-sm">{item.label}</span>}
-              {isCollapsed && (
-                <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
-                  {item.label}
-                  {/* {item.path === '/crm' && unreadCount > 0 && ` (${unreadCount} nuevas)`} */}
-                  <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
 
-      {/* General Section */}
-      <div className={`border-t border-gray-200 dark:border-gray-700 ${isCollapsed ? 'px-2 py-2' : 'px-3 py-3'} space-y-1`}>
-        {!isCollapsed && (
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3 py-2">General</p>
-        )}
-        {generalItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          
-          if (item.action === 'logout') {
-            return (
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 shrink-0 flex flex-col shadow-[0_24px_80px_rgba(15,23,42,0.08)] transition-all duration-300
+          lg:static lg:z-auto lg:translate-x-0
+          ${isCollapsed ? 'w-16' : 'w-72 lg:w-64'}
+          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+        style={{
+          backgroundColor: sidebarBackground,
+          borderRight: `1px solid ${sidebarBorder}`,
+        }}
+      >
+        <div className={`${isCollapsed ? 'px-3 py-4' : 'px-6 py-5'} flex items-center border-b border-slate-200 dark:border-slate-800 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!isCollapsed ? (
+            <>
+              <div className="flex items-center space-x-2">
+                <div className="flex flex-col">
+                  <span className="text-xl font-black uppercase tracking-[0.26em] text-slate-950 dark:text-white">
+                    NEYPIER
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+                    OPERATING CRM
+                  </span>
+                </div>
+              </div>
               <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="flex-shrink-0 rounded-xl border border-slate-200 p-1.5 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+                title="Colapsar"
+              >
+                <HiChevronLeft className="h-5 w-5" />
+              </button>
+            </>
+          ) : (
+            <div className="flex w-full flex-col items-center space-y-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm font-black uppercase tracking-[0.22em] text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
+                N
+              </div>
+              <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="flex w-full justify-center rounded-xl border border-slate-200 p-1.5 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+                title="Expandir"
+              >
+                <HiChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <nav className={`flex-1 ${isCollapsed ? 'px-2 py-3' : 'px-3 py-4'} space-y-1 overflow-x-hidden overflow-y-auto`}>
+          {!isCollapsed && (
+            <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">Módulos</p>
+          )}
+          {menuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
                 key={item.path}
-                onClick={() => handleItemClick(item)}
-                className={`flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2'} rounded-lg transition-all group relative w-full text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700`}
+                to={item.path}
+                className={`group relative flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2.5'} rounded-2xl transition-all ${
+                  isActive
+                    ? 'bg-slate-950 text-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
+                }`}
                 title={isCollapsed ? item.label : ''}
               >
-                <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 text-gray-500 dark:text-gray-400`} />
-                {!isCollapsed && <span className="truncate text-sm">{item.label}</span>}
-                {isCollapsed && (
-                  <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
-                    {item.label}
-                    <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
-                  </span>
-                )}
-              </button>
+                <item.icon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'} flex-shrink-0 ${isActive ? 'text-white dark:text-slate-950' : 'text-slate-400 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-200'}`} />
+                {!isCollapsed && <span className="truncate text-sm font-medium">{item.label}</span>}
+                {isCollapsed && tooltip(item.label)}
+              </Link>
             );
-          }
-          
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2'} rounded-lg transition-all group relative w-full ${
-                isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-              title={isCollapsed ? item.label : ''}
-            >
-              <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} />
-              {!isCollapsed && <span className="truncate text-sm">{item.label}</span>}
-              {isCollapsed && (
-                <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
-                  {item.label}
-                  <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
-                </span>
-              )}
-            </Link>
-          );
-        })}
+          })}
+        </nav>
 
-        {/* Manual Download Button */}
+      <div className={`border-t border-slate-200 dark:border-slate-800 ${isCollapsed ? 'px-2 py-3' : 'px-3 py-4'} space-y-1`}>
+          {!isCollapsed && (
+            <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">General</p>
+          )}
+          {generalItems.map((item) => {
+            const isActive = location.pathname === item.path;
+
+            if (item.action === 'logout') {
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => handleItemClick(item)}
+                  className={`group relative flex w-full items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2.5'} rounded-2xl text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`}
+                  title={isCollapsed ? item.label : ''}
+                >
+                  <item.icon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'} flex-shrink-0 text-slate-400 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-200`} />
+                  {!isCollapsed && <span className="truncate text-sm font-medium">{item.label}</span>}
+                  {isCollapsed && tooltip(item.label)}
+                </button>
+              );
+            }
+
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`group relative flex w-full items-center ${isCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-2 px-3 py-2.5'} rounded-2xl transition-all ${
+                  isActive
+                    ? 'bg-slate-950 text-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
+                }`}
+                title={isCollapsed ? item.label : ''}
+              >
+                <item.icon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'} flex-shrink-0 ${isActive ? 'text-white dark:text-slate-950' : 'text-slate-400 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-200'}`} />
+                {!isCollapsed && <span className="truncate text-sm font-medium">{item.label}</span>}
+                {isCollapsed && tooltip(item.label)}
+              </Link>
+            );
+          })}
+
+          {!isCollapsed && (
+            <div className="px-3 py-2">
+              <ManualDownloader variant="menu" />
+            </div>
+          )}
+          {isCollapsed && (
+            <div className="flex justify-center py-2">
+              <ManualDownloader variant="icon" />
+            </div>
+          )}
+        </div>
+
         {!isCollapsed && (
-          <div className="px-3 py-2">
-            <ManualDownloader variant="menu" />
+          <div className="border-t border-slate-200 px-3 py-4 dark:border-slate-800">
+            <div className="flex items-center space-x-2 px-2">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+                {user?.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-slate-950 dark:text-white">{user?.name}</p>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user?.role}</p>
+              </div>
+            </div>
           </div>
         )}
+
         {isCollapsed && (
-          <div className="flex justify-center py-2">
-            <ManualDownloader variant="icon" />
+          <div className="flex justify-center border-t border-slate-200 p-3 dark:border-slate-800">
+            <div className="group relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 font-semibold text-white">
+              {user?.name.charAt(0).toUpperCase()}
+              {tooltip(user?.name || 'Usuario')}
+            </div>
           </div>
         )}
-      </div>
-
-      {/* User Profile Section */}
-      {!isCollapsed && (
-        <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-3">
-          <div className="flex items-center space-x-2 px-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 text-sm">
-              {user?.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{user?.name}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.role}</p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {isCollapsed && (
-        <div className="border-t border-gray-200 dark:border-gray-700 p-3 flex justify-center">
-          <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold group relative">
-            {user?.name.charAt(0).toUpperCase()}
-            <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl transition-opacity duration-200">
-              {user?.name}
-              <span className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45"></span>
-            </span>
-          </div>
-        </div>
-      )}
-
       </aside>
     </>
   );
 };
 
 export default Sidebar;
-

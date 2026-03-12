@@ -43,22 +43,19 @@ const Clients = () => {
   ];
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestión de clientes y contactos</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">Módulo activo</p>
-          <p className="text-sm font-medium text-gray-900">Clientes</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Relación</p>
+          <h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Clientes</h1>
+          <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">Gestión de clientes y contactos</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <nav className="flex space-x-4 sm:space-x-8 px-3 sm:px-6 overflow-x-auto scrollbar-hide">
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <nav className="flex overflow-x-auto border-b border-slate-200 px-2 sm:px-6 scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -73,17 +70,19 @@ const Clients = () => {
                 }
               }}
               className={`
-                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
+                flex-shrink-0 py-3 sm:py-4 px-2 sm:px-0 sm:mr-8 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-slate-950 text-slate-950'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
                 }
               `}
+              title={tab.label}
             >
-              <span className="inline-flex items-center gap-2">
-                <tab.icon className="w-5 h-5" />
-                <span>{tab.label}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <tab.icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden text-[11px]">{tab.label.split(' ')[0]}</span>
               </span>
             </button>
           ))}

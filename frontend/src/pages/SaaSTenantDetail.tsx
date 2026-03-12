@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.host}/api/v1`
-    : 'http://localhost:3001/api/v1');
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  HiArrowLeft,
+  HiExclamationCircle,
+  HiExternalLink,
+  HiOfficeBuilding,
+  HiRefresh,
+  HiShieldCheck,
+} from 'react-icons/hi';
+import { saasApi } from '../services/api';
 
 const CRM_DOMAIN = 'neypier.com';
 
@@ -17,6 +20,51 @@ interface TenantUser {
   isActive: boolean;
   lastLogin: string | null;
   createdAt: string;
+}
+
+interface Subscription {
+  id: string;
+  plan: string;
+  status: string;
+  startDate: string;
+  endDate: string | null;
+  billingCycle: string;
+  createdAt: string;
+}
+
+interface TenantInvoice {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  description: string | null;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+  paidAt: string | null;
+  paymentMethod: string | null;
+}
+
+interface TenantActivity {
+  id: string;
+  action: string;
+  description: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+interface BackupEntry {
+  filename: string;
+  size: number;
+  createdAt: string;
+}
+
+interface NewUserForm {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+  isActive: boolean;
 }
 
 interface Tenant {
@@ -34,54 +82,154 @@ interface Tenant {
   databaseName: string;
   databaseUrl: string;
   billingEmail: string;
-  settings: any;
-  limits: any;
+  settings: Record<string, any>;
+  limits: Record<string, any>;
   createdAt: string;
   updatedAt: string;
   lastActiveAt: string | null;
+  trialEndsAt?: string | null;
   tenantUsers: TenantUser[];
+  subscriptions: Subscription[];
+  invoices: TenantInvoice[];
+  activities: TenantActivity[];
+  _count?: {
+    invoices: number;
+    activities: number;
+    subscriptions: number;
+  };
 }
+
+type TabId = 'overview' | 'subscription' | 'users' | 'backups' | 'audit' | 'technical';
 
 const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATOR: 'Administrador',
-  MANAGER: 'Gerente',
+  SUPERVISOR: 'Supervisor',
   OPERATOR: 'Operador',
   CASHIER: 'Cajero',
+};
+
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('es-DO') : 'Sin actividad';
+
+const formatDateTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString('es-DO') : 'Sin registro';
+
+const formatCurrency = (amount?: number | null, currency = 'DOP') =>
+  new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+  }).format(Number(amount || 0));
+
+const formatBytes = (size?: number | null) => {
+  const bytes = Number(size || 0);
+  if (!bytes) return '0 B';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+};
+
+const getPlanLabel = (plan: string) => {
+  const labels: Record<string, string> = {
+    BASIC: 'Basico',
+    STARTER: 'Starter',
+    PROFESSIONAL: 'Profesional',
+    ENTERPRISE: 'Enterprise',
+  };
+  return labels[plan] || plan;
+};
+
+const getStatusMeta = (tenant: Tenant) => {
+  if (tenant.status === 'PENDING') return { label: 'Provisioning', className: 'bg-amber-50 text-amber-700' };
+  if (tenant.status === 'SUSPENDED') return { label: 'Suspendido', className: 'bg-rose-50 text-rose-700' };
+  if (tenant.status === 'CANCELLED') return { label: 'Cancelado', className: 'bg-slate-100 text-slate-500' };
+  if (tenant.settings?.maintenanceMode) return { label: 'Mantenimiento', className: 'bg-sky-50 text-sky-700' };
+  if (tenant.trialEndsAt && new Date(tenant.trialEndsAt) > new Date()) return { label: 'Trial', className: 'bg-indigo-50 text-indigo-700' };
+  return { label: 'Activo', className: 'bg-emerald-50 text-emerald-700' };
+};
+
+const getInvoiceStatusClass = (status: string) => {
+  switch (status) {
+    case 'PAID':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'OVERDUE':
+      return 'bg-rose-50 text-rose-700';
+    case 'CANCELLED':
+      return 'bg-slate-100 text-slate-500';
+    case 'ISSUED':
+      return 'bg-sky-50 text-sky-700';
+    default:
+      return 'bg-amber-50 text-amber-700';
+  }
+};
+
+const getActivityLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    INVOICE_GENERATED: 'Factura generada',
+    INVOICE_PAID: 'Factura pagada',
+    TENANT_SUSPENDED: 'Tenant suspendido',
+  };
+  return labels[action] || action.replace(/_/g, ' ');
+};
+
+const maskConnectionString = (value?: string | null) => {
+  if (!value) return 'No disponible';
+  return value.replace(/:[^:@]*@/, ':****@');
 };
 
 const SaaSTenantDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'database'>('overview');
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
-  const [togglingMaintenance, setTogglingMaintenance] = useState(false);
   const [editingUser, setEditingUser] = useState<TenantUser | null>(null);
   const [userEditForm, setUserEditForm] = useState<any>({});
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newUserForm, setNewUserForm] = useState<NewUserForm>({
+    name: '',
+    email: '',
+    role: 'OPERATOR',
+    password: '',
+    isActive: true,
+  });
+  const [showReprovisionModal, setShowReprovisionModal] = useState(false);
+  const [reprovisionPassword, setReprovisionPassword] = useState('');
+  const [generatedProvisionPassword, setGeneratedProvisionPassword] = useState('');
+  const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [togglingMaintenance, setTogglingMaintenance] = useState(false);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [creatingBackup, setCreatingBackup] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const getToken = () => localStorage.getItem('saasToken');
+  useEffect(() => {
+    if (id) {
+      fetchTenant();
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab === 'backups' && id) {
+      fetchBackups();
+    }
+  }, [activeTab, id]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+    window.setTimeout(() => setToast(null), 3500);
   };
-
-  useEffect(() => { fetchTenant(); }, [id]);
 
   const fetchTenant = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/saas/tenants/${id}`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      const response = await saasApi.get(`/saas/tenants/${id}`);
       const data = response.data.data;
       setTenant(data);
       setEditForm({
@@ -94,6 +242,7 @@ const SaaSTenantDetail: React.FC = () => {
         status: data.status,
         billingEmail: data.billingEmail || '',
       });
+      setError('');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Error cargando tenant');
     } finally {
@@ -101,22 +250,28 @@ const SaaSTenantDetail: React.FC = () => {
     }
   };
 
+  const fetchBackups = async () => {
+    try {
+      setLoadingBackups(true);
+      const response = await saasApi.get(`/saas/tenants/${id}/backups`);
+      setBackups(response.data.data || []);
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'No fue posible cargar backups', 'error');
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
     try {
-      const res = await axios.put(`${API_BASE_URL}/saas/tenants/${id}`, editForm, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      setSaving(true);
+      await saasApi.put(`/saas/tenants/${id}`, editForm);
       setShowEditModal(false);
-      // Actualizar tenant en estado local con la respuesta del servidor (incluye limits actualizados)
-      if (res.data?.data) {
-        setTenant(prev => prev ? { ...prev, ...res.data.data } : prev);
-      }
-      fetchTenant();
-      showToast('Información actualizada correctamente');
+      await fetchTenant();
+      showToast('Tenant actualizado correctamente');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Error al actualizar', 'error');
+      showToast(err.response?.data?.error?.message || 'Error al actualizar tenant', 'error');
     } finally {
       setSaving(false);
     }
@@ -124,410 +279,742 @@ const SaaSTenantDetail: React.FC = () => {
 
   const handleToggleMaintenance = async () => {
     if (!tenant) return;
-    const newMode = !tenant.settings?.maintenanceMode;
-    setTogglingMaintenance(true);
     try {
-      await axios.put(`${API_BASE_URL}/saas/tenants/${id}`,
-        { maintenanceMode: newMode },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
-      fetchTenant();
-      showToast(newMode ? '⚠️ Modo mantenimiento ACTIVADO' : '✅ Modo mantenimiento desactivado');
+      setTogglingMaintenance(true);
+      await saasApi.put(`/saas/tenants/${id}`, {
+        maintenanceMode: !tenant.settings?.maintenanceMode,
+      });
+      await fetchTenant();
+      showToast(tenant.settings?.maintenanceMode ? 'Mantenimiento desactivado' : 'Mantenimiento activado');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Error al cambiar modo mantenimiento', 'error');
+      showToast(err.response?.data?.error?.message || 'Error al cambiar mantenimiento', 'error');
     } finally {
       setTogglingMaintenance(false);
     }
   };
 
-  const handleDelete = async () => {
+  const handleStatusChange = async (status: Tenant['status']) => {
     try {
-      await axios.delete(`${API_BASE_URL}/saas/tenants/${id}`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      navigate('/tenants');
+      setSaving(true);
+      await saasApi.put(`/saas/tenants/${id}`, { status });
+      await fetchTenant();
+      showToast(status === 'SUSPENDED' ? 'Tenant suspendido' : 'Tenant reactivado');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Error al eliminar', 'error');
+      showToast(err.response?.data?.error?.message || 'No fue posible actualizar el estado', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleEditUser = (user: TenantUser) => {
-    setEditingUser(user);
-    setUserEditForm({ name: user.name, email: user.email, role: user.role, isActive: user.isActive });
+  const handleCreateBackup = async () => {
+    try {
+      setCreatingBackup(true);
+      const response = await saasApi.post(`/saas/tenants/${id}/backup`);
+      await fetchBackups();
+      showToast(response.data.message || 'Backup creado exitosamente');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'No fue posible crear backup', 'error');
+    } finally {
+      setCreatingBackup(false);
+    }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    setSaving(true);
     try {
-      await axios.put(`${API_BASE_URL}/saas/tenants/${id}/users/${editingUser.id}`, userEditForm, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      setSaving(true);
+      await saasApi.put(`/saas/tenants/${id}/users/${editingUser.id}`, userEditForm);
       setEditingUser(null);
-      fetchTenant();
+      await fetchTenant();
       showToast('Usuario actualizado correctamente');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Error al actualizar usuario', 'error');
+      showToast(err.response?.data?.error?.message || 'Error actualizando usuario', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSaving(true);
+      await saasApi.post(`/saas/tenants/${id}/users`, newUserForm);
+      setShowCreateUserModal(false);
+      setNewUserForm({
+        name: '',
+        email: '',
+        role: 'OPERATOR',
+        password: '',
+        isActive: true,
+      });
+      await fetchTenant();
+      showToast('Usuario creado correctamente');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Error creando usuario', 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleResetPassword = async () => {
-    if (!resetPasswordUserId || !newPassword) return;
-    if (newPassword.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres', 'error'); return; }
-    setSaving(true);
+    if (!resetPasswordUserId || newPassword.length < 6) return;
     try {
-      await axios.post(
-        `${API_BASE_URL}/saas/tenants/${id}/users/${resetPasswordUserId}/reset-password`,
-        { newPassword },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
+      setSaving(true);
+      await saasApi.post(`/saas/tenants/${id}/users/${resetPasswordUserId}/reset-password`, { newPassword });
       setResetPasswordUserId(null);
       setNewPassword('');
-      showToast('Contraseña actualizada correctamente');
+      showToast('Contrasena actualizada correctamente');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Error al resetear contraseña', 'error');
+      showToast(err.response?.data?.error?.message || 'Error reseteando contrasena', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACTIVE': return 'bg-green-100 text-green-800';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'SUSPENDED': return 'bg-orange-100 text-orange-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const handleDelete = async () => {
+    try {
+      await saasApi.delete(`/saas/tenants/${id}`);
+      navigate('/tenants');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Error al eliminar tenant', 'error');
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = { ACTIVE: 'Activo', PENDING: 'Pendiente', SUSPENDED: 'Suspendido', CANCELLED: 'Cancelado' };
-    return labels[status] || status;
+  const handleReprovision = async () => {
+    try {
+      setSaving(true);
+      const response = await saasApi.post(`/saas/tenants/${id}/reprovision`, {
+        adminPassword: reprovisionPassword || undefined,
+      });
+      setShowReprovisionModal(false);
+      setGeneratedProvisionPassword(response.data?.data?.temporaryPassword || '');
+      setReprovisionPassword('');
+      await fetchTenant();
+      showToast(response.data?.message || 'Provisioning ejecutado');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Error reprovisionando tenant', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const getPlanLabel = (plan: string) => {
-    const labels: Record<string, string> = { BASIC: 'Básico', STARTER: 'Inicial', PROFESSIONAL: 'Profesional', ENTERPRISE: 'Empresarial' };
-    return labels[plan] || plan;
+  const handleRestoreBackup = async () => {
+    if (!restoreTarget) return;
+    try {
+      setSaving(true);
+      const response = await saasApi.post(`/saas/tenants/${id}/backups/restore`, {
+        filename: restoreTarget.filename,
+      });
+      setRestoreTarget(null);
+      showToast(response.data?.message || 'Backup restaurado');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Error restaurando backup', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-    </div>
-  );
-  if (error) return <div className="p-8 text-red-600 bg-red-50 rounded-lg m-6">{error}</div>;
-  if (!tenant) return <div className="p-8">Tenant no encontrado</div>;
+  const tenantMeta = useMemo(() => (tenant ? getStatusMeta(tenant) : null), [tenant]);
+  const crmUrl = tenant ? `https://${tenant.subdomain}.${CRM_DOMAIN}` : '';
+  const latestSubscription = tenant?.subscriptions?.[0] || null;
+  const backupSummary = backups[0] || null;
 
-  const crmUrl = `https://${tenant.subdomain}.${CRM_DOMAIN}`;
+  if (loading) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-slate-700" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-6 text-rose-700">{error}</div>;
+  }
+
+  if (!tenant || !tenantMeta) {
+    return <div className="rounded-[24px] border border-slate-200 bg-white p-6 text-slate-600">Tenant no encontrado.</div>;
+  }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-
-      {/* Toast */}
+    <div className="space-y-6">
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all
-          ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+        <div
+          className={`fixed right-6 top-6 z-50 rounded-2xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
+            toast.type === 'success' ? 'bg-slate-950' : 'bg-rose-600'
+          }`}
+        >
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <button onClick={() => navigate('/tenants')} className="text-sm text-gray-500 hover:text-gray-700 mb-2 flex items-center gap-1">
-            ← Volver a tenants
-          </button>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-              {tenant.name.charAt(0).toUpperCase()}
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(tenant.status)}`}>
-              {getStatusLabel(tenant.status)}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 ml-13 mt-1">
-            <a href={crmUrl} target="_blank" rel="noopener noreferrer"
-              className="text-blue-600 hover:underline text-sm font-medium flex items-center gap-1">
-              🔗 {crmUrl}
-            </a>
-            <span className="text-gray-400">•</span>
-            <span className="text-gray-500 text-sm">{tenant.tenantUsers?.length || 0} usuarios</span>
-            <span className="text-gray-400">•</span>
-            <span className="text-sm font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-              {getPlanLabel(tenant.plan)}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={handleToggleMaintenance}
-            disabled={togglingMaintenance}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-              tenant.settings?.maintenanceMode
-                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-            }`}>
-            {togglingMaintenance ? '...' : tenant.settings?.maintenanceMode ? '🔧 Mantenimiento ON' : '🔧 Mantenimiento'}
-          </button>
-          <button onClick={() => setShowEditModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
-            ✏️ Editar
-          </button>
-          <button onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium">
-            🗑️ Eliminar
-          </button>
-        </div>
-      </div>
+      <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <button
+          type="button"
+          onClick={() => navigate('/tenants')}
+          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-950"
+        >
+          <HiArrowLeft className="h-4 w-4" />
+          Volver a tenants
+        </button>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <HiOfficeBuilding className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-950">{tenant.name}</h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <span>{tenant.subdomain}.neypier.com</span>
+                  <span>•</span>
+                  <span>{tenant.tenantUsers?.length || 0} usuarios</span>
+                  <span>•</span>
+                  <span>{getPlanLabel(tenant.plan)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className={`rounded-full px-3 py-1 text-xs font-medium ${tenantMeta.className}`}>
+                {tenantMeta.label}
+              </span>
+              <a
+                href={crmUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              >
+                Abrir CRM
+                <HiExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleToggleMaintenance}
+              disabled={togglingMaintenance}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {togglingMaintenance ? 'Procesando...' : tenant.settings?.maintenanceMode ? 'Desactivar mantenimiento' : 'Activar mantenimiento'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStatusChange(tenant.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED')}
+              disabled={saving}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {tenant.status === 'SUSPENDED' ? 'Reactivar tenant' : 'Suspender tenant'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+            >
+              Editar tenant
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {[
+          { label: 'Facturas', value: tenant._count?.invoices ?? tenant.invoices.length, note: 'Historial SaaS' },
+          { label: 'Suscripciones', value: tenant._count?.subscriptions ?? tenant.subscriptions.length, note: latestSubscription ? latestSubscription.status : 'Sin registro' },
+          { label: 'Actividad', value: tenant._count?.activities ?? tenant.activities.length, note: formatDate(tenant.lastActiveAt) },
+          { label: 'Backups', value: backups.length, note: backupSummary ? formatDate(backupSummary.createdAt) : 'Sin backup listado' },
+        ].map((item) => (
+          <div key={item.label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-950">{item.value}</p>
+            <p className="mt-1 text-sm text-slate-500">{item.note}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <nav className="flex overflow-x-auto border-b border-slate-200 px-6">
           {[
-            { id: 'overview', label: '📋 Información General' },
-            { id: 'users', label: `👥 Usuarios (${tenant.tenantUsers?.length || 0})` },
-            { id: 'database', label: '🗄️ Base de Datos' },
+            { id: 'overview' as TabId, label: 'Resumen' },
+            { id: 'subscription' as TabId, label: 'Suscripcion' },
+            { id: 'users' as TabId, label: `Usuarios (${tenant.tenantUsers?.length || 0})` },
+            { id: 'backups' as TabId, label: 'Backups' },
+            { id: 'audit' as TabId, label: 'Auditoria' },
+            { id: 'technical' as TabId, label: 'Avanzado' },
           ].map((tab) => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab.id ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}>
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`mr-8 border-b-2 py-4 text-sm font-medium transition ${
+                activeTab === tab.id
+                  ? 'border-slate-950 text-slate-950'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
+              }`}
+            >
               {tab.label}
             </button>
           ))}
         </nav>
-      </div>
 
-      {/* ─── TAB: GENERAL ─── */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Info empresa */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Información de la Empresa</h3>
-            <dl className="space-y-3">
-              {[
-                { label: 'Email', value: tenant.email },
-                { label: 'Teléfono', value: tenant.phone || '—' },
-                { label: 'Dirección', value: tenant.address || '—' },
-                { label: 'RNC', value: tenant.rnc || '—' },
-                { label: 'Email facturación', value: tenant.billingEmail || '—' },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between items-start">
-                  <dt className="text-sm text-gray-500 w-36 flex-shrink-0">{label}</dt>
-                  <dd className="text-sm text-gray-900 text-right">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          {/* Acceso y plan */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Acceso y Plan</h3>
-            <dl className="space-y-3">
-              {[
-                { label: 'Subdominio', value: tenant.subdomain },
-                { label: 'URL CRM', value: crmUrl, link: true },
-                { label: 'Plan', value: getPlanLabel(tenant.plan) },
-                { label: 'Estado', value: getStatusLabel(tenant.status) },
-                { label: 'Creado', value: new Date(tenant.createdAt).toLocaleDateString('es-DO') },
-                { label: 'Última actividad', value: tenant.lastActiveAt ? new Date(tenant.lastActiveAt).toLocaleDateString('es-DO') : 'Sin actividad' },
-              ].map(({ label, value, link }) => (
-                <div key={label} className="flex justify-between items-start">
-                  <dt className="text-sm text-gray-500 w-36 flex-shrink-0">{label}</dt>
-                  <dd className="text-sm text-gray-900 text-right">
-                    {link ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{value}</a> : value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          {/* Límites y configuración */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 col-span-full">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Límites del Plan</h3>
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: 'Usuarios máx.', value: tenant.limits?.maxUsers ?? '—' },
-                { label: 'Sucursales máx.', value: tenant.limits?.maxBranches ?? '—' },
-                { label: 'Almacenamiento', value: tenant.limits?.maxStorage ?? '—' },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-gray-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">{value}</p>
-                  <p className="text-xs text-gray-500 mt-1">{label}</p>
-                </div>
-              ))}
-            </div>
-            {tenant.settings && (
-              <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-3 text-sm">
-                {[
-                  { label: 'Moneda', value: tenant.settings.currency || 'DOP' },
-                  { label: 'Idioma', value: tenant.settings.language || 'es' },
-                  { label: 'Zona horaria', value: tenant.settings.timezone || 'America/Santo_Domingo' },
-                  { label: 'Tema', value: tenant.settings.theme || 'light' },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-gray-500">{label}:</span>
-                    <span className="font-medium">{value}</span>
-                  </div>
-                ))}
+        <div className="p-6">
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <h3 className="mb-4 text-base font-semibold text-slate-950">Perfil del tenant</h3>
+                <dl className="space-y-3">
+                  {[
+                    ['Email', tenant.email],
+                    ['Telefono', tenant.phone || '—'],
+                    ['Direccion', tenant.address || '—'],
+                    ['RNC', tenant.rnc || '—'],
+                    ['Email facturacion', tenant.billingEmail || '—'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-4">
+                      <dt className="text-sm text-slate-500">{label}</dt>
+                      <dd className="text-right text-sm font-medium text-slate-900">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* ─── TAB: USUARIOS ─── */}
-      {activeTab === 'users' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900">Usuarios del CRM</h3>
-            <span className="text-sm text-gray-500">{tenant.tenantUsers?.length || 0} usuarios registrados</span>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último acceso</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {tenant.tenantUsers?.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
-                        {user.name.charAt(0).toUpperCase()}
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <h3 className="mb-4 text-base font-semibold text-slate-950">Operacion</h3>
+                <dl className="space-y-3">
+                  {[
+                    ['Estado', tenantMeta.label],
+                    ['Plan', getPlanLabel(tenant.plan)],
+                    ['Creado', formatDate(tenant.createdAt)],
+                    ['Ultima actividad', formatDate(tenant.lastActiveAt)],
+                    ['Subdominio', tenant.subdomain],
+                    ['Dominio personalizado', tenant.customDomain || 'No configurado'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-4">
+                      <dt className="text-sm text-slate-500">{label}</dt>
+                      <dd className="text-right text-sm font-medium text-slate-900">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-6 lg:col-span-2">
+                <h3 className="mb-4 text-base font-semibold text-slate-950">Limites del plan</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {[
+                    { label: 'Usuarios max.', value: tenant.limits?.maxUsers ?? '—' },
+                    { label: 'Sucursales max.', value: tenant.limits?.maxBranches ?? '—' },
+                    { label: 'Almacenamiento', value: tenant.limits?.maxStorage ?? '—' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-[22px] border border-slate-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-bold text-slate-950">{item.value}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'subscription' && (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <h3 className="mb-4 text-base font-semibold text-slate-950">Suscripcion y cobros</h3>
+                {latestSubscription ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[
+                        ['Plan', getPlanLabel(latestSubscription.plan)],
+                        ['Estado', latestSubscription.status],
+                        ['Ciclo', latestSubscription.billingCycle],
+                        ['Inicio', formatDate(latestSubscription.startDate)],
+                        ['Fin', formatDate(latestSubscription.endDate)],
+                        ['Trial', formatDate(tenant.trialEndsAt)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-950">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="overflow-hidden rounded-[24px] border border-slate-200">
+                      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                        Facturas recientes
                       </div>
-                      <span className="font-medium text-gray-900">{user.name}</span>
+                      {!tenant.invoices.length ? (
+                        <div className="px-4 py-10 text-sm text-slate-500">No hay facturas registradas para este tenant.</div>
+                      ) : (
+                        <div className="divide-y divide-slate-200">
+                          {tenant.invoices.slice(0, 6).map((invoice) => (
+                            <div key={invoice.id} className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-slate-950">{invoice.description || 'Factura SaaS'}</p>
+                                <p className="text-xs text-slate-500">
+                                  {formatDate(invoice.periodStart)} - {formatDate(invoice.periodEnd)}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-slate-950">{formatCurrency(invoice.amount, invoice.currency)}</p>
+                                <span className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-medium ${getInvoiceStatusClass(invoice.status)}`}>
+                                  {invoice.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                      {ROLE_LABELS[user.role] || user.role}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+                    Todavia no hay suscripcion formal registrada para este tenant. El panel ya permite ver plan, trial e historial de facturas cuando existan.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <h3 className="text-base font-semibold text-slate-950">Lectura rapida</h3>
+                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>Facturas emitidas</span>
+                    <span className="font-semibold text-slate-950">{tenant.invoices.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Facturas pagadas</span>
+                    <span className="font-semibold text-slate-950">
+                      {tenant.invoices.filter((invoice) => invoice.status === 'PAID').length}
                     </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {user.isActive ? 'Activo' : 'Inactivo'}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Facturas vencidas</span>
+                    <span className="font-semibold text-slate-950">
+                      {tenant.invoices.filter((invoice) => invoice.status === 'OVERDUE').length}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('es-DO') : 'Nunca'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => handleEditUser(user)}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-                        Editar
-                      </button>
-                      <button onClick={() => { setResetPasswordUserId(user.id); setNewPassword(''); }}
-                        className="px-3 py-1 text-xs bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium">
-                        Reset Clave
-                      </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReprovisionModal(true)}
+                  className="mt-5 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Reprovisionar tenant
+                </button>
+                {generatedProvisionPassword ? (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Password temporal generado: <span className="font-mono font-semibold">{generatedProvisionPassword}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+                <h3 className="font-semibold text-slate-950">Usuarios del CRM</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-500">{tenant.tenantUsers?.length || 0} registrados</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateUserModal(true)}
+                    className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Crear usuario
+                  </button>
+                </div>
+              </div>
+
+              {!tenant.tenantUsers?.length ? (
+                <div className="px-6 py-14 text-center text-slate-500">No hay usuarios registrados en este tenant.</div>
+              ) : (
+                <table className="min-w-full">
+                  <thead className="bg-white">
+                    <tr className="border-b border-slate-200">
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Usuario</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Rol</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Estado</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Ultimo acceso</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {tenant.tenantUsers.map((user) => (
+                      <tr key={user.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+                              {user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-950">{user.name}</p>
+                              <p className="text-sm text-slate-500">{user.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                            {ROLE_LABELS[user.role] || user.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${user.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                            {user.isActive ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.lastLogin)}</td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingUser(user);
+                                setUserEditForm({ name: user.name, email: user.email, role: user.role, isActive: user.isActive });
+                              }}
+                              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetPasswordUserId(user.id);
+                                setNewPassword('');
+                              }}
+                              className="rounded-xl bg-slate-950 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800"
+                            >
+                              Reset clave
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'backups' && (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+                  <div>
+                    <h3 className="font-semibold text-slate-950">Backups disponibles</h3>
+                    <p className="text-sm text-slate-500">Respaldo operativo de la base de este tenant.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchBackups}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <HiRefresh className="h-4 w-4" />
+                    Actualizar
+                  </button>
+                </div>
+
+                {loadingBackups ? (
+                  <div className="px-6 py-16 text-center text-slate-500">Cargando backups...</div>
+                ) : backups.length === 0 ? (
+                  <div className="px-6 py-16 text-center text-slate-500">No hay backups listados todavia para este tenant.</div>
+                ) : (
+                  <div className="divide-y divide-slate-200">
+                    {backups.map((backup) => (
+                      <div key={backup.filename} className="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-950">{backup.filename}</p>
+                          <p className="text-xs text-slate-500">{formatDateTime(backup.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-slate-700">{formatBytes(backup.size)}</span>
+                          <button
+                            type="button"
+                            onClick={() => setRestoreTarget(backup)}
+                            className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Restaurar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <h3 className="text-base font-semibold text-slate-950">Operacion de backup</h3>
+                <p className="mt-2 text-sm text-slate-500">Crea un respaldo manual antes de cambios delicados o eliminaciones.</p>
+                <button
+                  type="button"
+                  onClick={handleCreateBackup}
+                  disabled={creatingBackup}
+                  className="mt-5 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {creatingBackup ? 'Creando backup...' : 'Crear backup ahora'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'audit' && (
+            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+                <h3 className="font-semibold text-slate-950">Actividad reciente</h3>
+                <p className="text-sm text-slate-500">Timeline administrativo y de facturacion del tenant.</p>
+              </div>
+              {!tenant.activities.length ? (
+                <div className="px-6 py-16 text-center text-slate-500">Todavia no hay actividad registrada para este tenant.</div>
+              ) : (
+                <div className="divide-y divide-slate-200">
+                  {tenant.activities.map((activity) => (
+                    <div key={activity.id} className="px-6 py-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950">{getActivityLabel(activity.action)}</p>
+                          <p className="mt-1 text-sm text-slate-600">{activity.description}</p>
+                        </div>
+                        <p className="text-xs text-slate-500">{formatDateTime(activity.createdAt)}</p>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!tenant.tenantUsers?.length && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-4xl mb-3">👥</p>
-              <p>No hay usuarios registrados en este tenant</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'technical' && (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-6">
+                <div className="flex items-center gap-2">
+                  <HiShieldCheck className="h-5 w-5 text-slate-500" />
+                  <h3 className="text-base font-semibold text-slate-950">Informacion tecnica</h3>
+                </div>
+                <dl className="mt-5 space-y-4">
+                  <div>
+                    <dt className="mb-1 text-sm text-slate-500">Base de datos</dt>
+                    <dd>
+                      <code className="block rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-800">{tenant.databaseName}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="mb-1 text-sm text-slate-500">Conexion</dt>
+                    <dd>
+                      <code className="block break-all rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-800">
+                        {maskConnectionString(tenant.databaseUrl)}
+                      </code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="mb-1 text-sm text-slate-500">Tema / moneda / idioma</dt>
+                    <dd className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                      {tenant.settings?.theme || 'light'} • {tenant.settings?.currency || 'DOP'} • {tenant.settings?.language || 'es'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-6">
+                <div className="flex items-center gap-2 text-rose-700">
+                  <HiExclamationCircle className="h-5 w-5" />
+                  <h3 className="text-base font-semibold">Zona sensible</h3>
+                </div>
+                <p className="mt-3 text-sm text-rose-700/90">
+                  Eliminar un tenant borra la empresa de la base maestra y puede desencadenar operaciones destructivas. Usa esta accion solo cuando ya exista respaldo y validacion previa.
+                </p>
+                <ul className="mt-4 space-y-2 text-sm text-rose-700/90">
+                  <li>• Confirma backups antes de borrar</li>
+                  <li>• Prefiere suspender antes que eliminar</li>
+                  <li>• Esta accion no debe ser la ruta habitual</li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setShowReprovisionModal(true)}
+                  className="mt-5 w-full rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                >
+                  Reprovisionar infraestructura
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(true)}
+                  className="mt-5 w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-rose-700"
+                >
+                  Abrir zona de eliminacion
+                </button>
+              </div>
             </div>
           )}
         </div>
-      )}
+      </section>
 
-      {/* ─── TAB: BASE DE DATOS ─── */}
-      {activeTab === 'database' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">Información de Base de Datos</h3>
-          <dl className="space-y-4">
-            <div>
-              <dt className="text-sm text-gray-500 mb-1">Nombre de la base de datos</dt>
-              <dd><code className="bg-gray-100 px-3 py-2 rounded-lg text-sm block">{tenant.databaseName}</code></dd>
-            </div>
-            <div>
-              <dt className="text-sm text-gray-500 mb-1">URL de conexión (contraseña oculta)</dt>
-              <dd><code className="bg-gray-100 px-3 py-2 rounded-lg text-sm block break-all">
-                {tenant.databaseUrl?.replace(/:[^:@]*@/, ':****@')}
-              </code></dd>
-            </div>
-            <div className="pt-4 border-t border-gray-100">
-              <dt className="text-sm text-gray-500 mb-1">URL del CRM</dt>
-              <dd>
-                <a href={crmUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline font-medium">{crmUrl}</a>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      )}
-
-      {/* ─── MODAL: Editar Tenant ─── */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-lg font-bold">Editar Tenant</h2>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Editar tenant</h2>
             </div>
-            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+            <form onSubmit={handleUpdate} className="space-y-4 px-6 py-6">
               {[
-                { label: 'Nombre de la empresa', key: 'name', type: 'text', required: true },
+                { label: 'Nombre empresa', key: 'name', type: 'text', required: true },
                 { label: 'Email', key: 'email', type: 'email', required: true },
-                { label: 'Email de facturación', key: 'billingEmail', type: 'email' },
-                { label: 'Teléfono', key: 'phone', type: 'text' },
-                { label: 'Dirección', key: 'address', type: 'text' },
+                { label: 'Email facturacion', key: 'billingEmail', type: 'email' },
+                { label: 'Telefono', key: 'phone', type: 'text' },
+                { label: 'Direccion', key: 'address', type: 'text' },
                 { label: 'RNC', key: 'rnc', type: 'text' },
               ].map(({ label, key, type, required }) => (
                 <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                  <input type={type} required={required}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+                  <input
+                    type={type}
+                    required={required}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     value={editForm[key] || ''}
                     onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
                   />
                 </div>
               ))}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  value={editForm.plan || 'BASIC'}
-                  onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}>
-                  <option value="BASIC">Básico</option>
-                  <option value="STARTER">Inicial</option>
-                  <option value="PROFESSIONAL">Profesional</option>
-                  <option value="ENTERPRISE">Empresarial</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  value={editForm.status || 'ACTIVE'}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-                  <option value="ACTIVE">Activo</option>
-                  <option value="SUSPENDED">Suspendido</option>
-                  <option value="PENDING">Pendiente</option>
-                  <option value="CANCELLED">Cancelado</option>
-                </select>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Plan</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={editForm.plan || 'BASIC'}
+                    onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}
+                  >
+                    <option value="BASIC">Basico</option>
+                    <option value="STARTER">Starter</option>
+                    <option value="PROFESSIONAL">Profesional</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Estado</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={editForm.status || 'ACTIVE'}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  >
+                    <option value="ACTIVE">Activo</option>
+                    <option value="SUSPENDED">Suspendido</option>
+                    <option value="PENDING">Pendiente</option>
+                    <option value="CANCELLED">Cancelado</option>
+                  </select>
+                </div>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
                   {saving ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               </div>
@@ -536,54 +1023,68 @@ const SaaSTenantDetail: React.FC = () => {
         </div>
       )}
 
-      {/* ─── MODAL: Editar Usuario ─── */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-lg font-bold">Editar Usuario</h2>
-              <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Editar usuario</h2>
             </div>
-            <form onSubmit={handleSaveUser} className="p-6 space-y-4">
+            <form onSubmit={handleSaveUser} className="space-y-4 px-6 py-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-                <input type="text" required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   value={userEditForm.name || ''}
                   onChange={(e) => setUserEditForm({ ...userEditForm, name: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   value={userEditForm.email || ''}
                   onChange={(e) => setUserEditForm({ ...userEditForm, email: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                <label className="mb-1 block text-sm font-medium text-slate-700">Rol</label>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   value={userEditForm.role || 'OPERATOR'}
-                  onChange={(e) => setUserEditForm({ ...userEditForm, role: e.target.value })}>
+                  onChange={(e) => setUserEditForm({ ...userEditForm, role: e.target.value })}
+                >
                   <option value="ADMINISTRATOR">Administrador</option>
-                  <option value="MANAGER">Gerente</option>
+                  <option value="SUPERVISOR">Supervisor</option>
                   <option value="OPERATOR">Operador</option>
                   <option value="CASHIER">Cajero</option>
                 </select>
               </div>
-              <div className="flex items-center gap-3">
-                <input type="checkbox" id="isActive" checked={userEditForm.isActive ?? true}
+              <label className="flex items-center gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={userEditForm.isActive ?? true}
                   onChange={(e) => setUserEditForm({ ...userEditForm, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
                 />
-                <label htmlFor="isActive" className="text-sm font-medium text-gray-700">Usuario activo</label>
-              </div>
+                Usuario activo
+              </label>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setEditingUser(null)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
                   {saving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
@@ -592,34 +1093,122 @@ const SaaSTenantDetail: React.FC = () => {
         </div>
       )}
 
-      {/* ─── MODAL: Reset Contraseña ─── */}
-      {resetPasswordUserId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-lg font-bold">Resetear Contraseña</h2>
-              <button onClick={() => { setResetPasswordUserId(null); setNewPassword(''); }}
-                className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+      {showCreateUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Crear usuario del tenant</h2>
             </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600">
-                Ingresa la nueva contraseña para el usuario. El cambio será inmediato.
-              </p>
+            <form onSubmit={handleCreateUser} className="space-y-4 px-6 py-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
-                <input type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
-                  placeholder="Mínimo 6 caracteres"
+                <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserForm.name}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={newUserForm.email}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Rol</label>
+                <select
+                  value={newUserForm.role}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="ADMINISTRATOR">Administrador</option>
+                  <option value="SUPERVISOR">Supervisor</option>
+                  <option value="OPERATOR">Operador</option>
+                  <option value="CASHIER">Cajero</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Contrasena temporal</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserForm.password}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <label className="flex items-center gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={newUserForm.isActive}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, isActive: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                />
+                Usuario activo
+              </label>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {saving ? 'Creando...' : 'Crear usuario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {resetPasswordUserId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Resetear contrasena</h2>
+            </div>
+            <div className="space-y-4 px-6 py-6">
+              <p className="text-sm text-slate-500">Ingresa una nueva contrasena para el usuario seleccionado.</p>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Nueva contrasena</label>
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  placeholder="Minimo 6 caracteres"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setResetPasswordUserId(null); setNewPassword(''); }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancelar</button>
-                <button onClick={handleResetPassword} disabled={saving || newPassword.length < 6}
-                  className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-medium disabled:opacity-50">
-                  {saving ? 'Guardando...' : 'Actualizar contraseña'}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetPasswordUserId(null);
+                    setNewPassword('');
+                  }}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={saving || newPassword.length < 6}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {saving ? 'Guardando...' : 'Actualizar'}
                 </button>
               </div>
             </div>
@@ -627,26 +1216,106 @@ const SaaSTenantDetail: React.FC = () => {
         </div>
       )}
 
-      {/* ─── MODAL: Eliminar Tenant ─── */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
-            <h2 className="text-xl font-bold mb-4 text-red-600">🗑️ Eliminar Tenant</h2>
-            <p className="text-gray-600 mb-4">
-              ¿Estás seguro de que deseas eliminar <strong>{tenant.name}</strong>?
+      {showReprovisionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Reprovisionar tenant</h2>
+            </div>
+            <div className="space-y-4 px-6 py-6">
+              <p className="text-sm text-slate-500">
+                Reintenta migraciones, datos iniciales y activacion. Si no indicas contrasena, el sistema generara una temporal.
+              </p>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Contrasena admin opcional</label>
+                <input
+                  type="text"
+                  value={reprovisionPassword}
+                  onChange={(e) => setReprovisionPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  placeholder="Dejar vacio para temporal"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowReprovisionModal(false)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReprovision}
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {saving ? 'Ejecutando...' : 'Reprovisionar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {restoreTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-[28px] border border-amber-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <h2 className="text-lg font-semibold text-slate-950">Restaurar backup</h2>
+            <p className="mt-3 text-sm text-slate-600">
+              Esta accion sobrescribe la base actual del tenant con el respaldo seleccionado.
             </p>
-            <ul className="text-sm text-gray-600 mb-6 space-y-1 bg-red-50 p-4 rounded-lg">
-              <li>• Se eliminará el tenant de la base de datos maestra</li>
-              <li>• Todos los usuarios perderán acceso inmediatamente</li>
-              <li>• La base de datos del tenant se conserva para recuperación</li>
-              <li className="font-semibold text-red-700">• Esta acción no se puede deshacer</li>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <p className="font-medium text-slate-950">{restoreTarget.filename}</p>
+              <p className="mt-1">{formatDateTime(restoreTarget.createdAt)} • {formatBytes(restoreTarget.size)}</p>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setRestoreTarget(null)}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreBackup}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
+              >
+                {saving ? 'Restaurando...' : 'Confirmar restore'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-[28px] border border-rose-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <h2 className="text-xl font-bold text-rose-700">Eliminar tenant</h2>
+            <p className="mt-3 text-sm text-slate-600">
+              Esta accion es destructiva. Antes de continuar, confirma respaldo y valida que no sea suficiente con suspender el tenant.
+            </p>
+            <ul className="mt-4 space-y-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
+              <li>• El tenant se elimina de la base maestra</li>
+              <li>• Los usuarios pierden acceso inmediatamente</li>
+              <li>• Puede desencadenar borrado de la base del tenant</li>
             </ul>
-            <div className="flex gap-3">
-              <button onClick={() => setShowDeleteModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleDelete}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">
-                Eliminar Definitivamente
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-rose-700"
+              >
+                Eliminar definitivamente
               </button>
             </div>
           </div>

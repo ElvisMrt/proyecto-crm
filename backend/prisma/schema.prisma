@@ -9,29 +9,29 @@ datasource db {
 }
 
 model Tenant {
-  id             String         @id @default(uuid())
+  id             String           @id @default(uuid())
   name           String
-  slug           String         @unique
+  slug           String           @unique
   email          String
   phone          String?
   address        String?
-  country        String         @default("DO")
-  status         TenantStatus   @default(ACTIVE)
-  plan           PlanType       @default(BASIC)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  country        String           @default("DO")
+  status         TenantStatus     @default(ACTIVE)
+  plan           PlanType         @default(BASIC)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   rnc            String?
   logo           String?
-  subdomain      String         @unique @default("")
-  customDomain   String?        @unique
-  databaseName   String         @default("")
-  databaseUrl    String         @default("")
+  subdomain      String           @unique @default("")
+  customDomain   String?          @unique
+  databaseName   String           @default("")
+  databaseUrl    String           @default("")
   settings       Json?
   limits         Json?
-  billingEmail   String         @default("")
+  billingEmail   String           @default("")
   subscriptionId String?
-  trialEndsAt    DateTime?      @db.Timestamp(6)
-  lastActiveAt   DateTime?      @db.Timestamp(6)
+  trialEndsAt    DateTime?        @db.Timestamp(6)
+  lastActiveAt   DateTime?        @db.Timestamp(6)
   users          MasterUser[]
   subscriptions  Subscription[]
   invoices       TenantInvoice[]
@@ -100,6 +100,15 @@ model User {
   branch               Branch?               @relation("UserBranch", fields: [branchId], references: [id])
   purchases            Purchase[]
   supplierPayments     SupplierPayment[]
+  requestedLoans       Loan[]                @relation("LoanRequestedBy")
+  approvedLoans        Loan[]                @relation("LoanApprovedBy")
+  rejectedLoans        Loan[]                @relation("LoanRejectedBy")
+  disbursedLoans       Loan[]                @relation("LoanDisbursedBy")
+  cancelledLoans       Loan[]                @relation("LoanCancelledBy")
+  receivableFinancingPlans ReceivableFinancingPlan[]
+  loanPayments         LoanPayment[]
+  reversedLoanPayments LoanPayment[]         @relation("LoanPaymentReversedBy")
+  loanLedgerEntries    LoanLedger[]
 
   @@index([email])
   @@index([role])
@@ -108,21 +117,24 @@ model User {
 }
 
 model Client {
-  id             String    @id @default(uuid())
+  id             String        @id @default(uuid())
   name           String
   identification String
   email          String?
   phone          String?
   address        String?
-  creditLimit    Decimal?  @default(0) @db.Decimal(10, 2)
-  creditDays     Int       @default(30)
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  creditLimit    Decimal?      @default(0) @db.Decimal(10, 2)
+  creditDays     Int           @default(30)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   invoices       Invoice[]
   payments       Payment[]
   quotes         Quote[]
   tasks          Task[]
+  loans          Loan[]
+  loanPayments   LoanPayment[]
+  receivableFinancingPlans ReceivableFinancingPlan[]
 
   @@index([name])
   @@index([identification])
@@ -150,8 +162,11 @@ model Branch {
   users              User[]                @relation("UserBranch")
   appointments       Appointment[]
   purchases          Purchase[]
-  supplierInvoices    SupplierInvoice[]
-  supplierPayments    SupplierPayment[]
+  supplierInvoices   SupplierInvoice[]
+  supplierPayments   SupplierPayment[]
+  loans              Loan[]
+  loanPayments       LoanPayment[]
+  receivableFinancingPlans ReceivableFinancingPlan[]
 
   @@index([code])
   @@index([managerId])
@@ -250,6 +265,8 @@ model Invoice {
   user               User          @relation(fields: [userId], references: [id])
   items              InvoiceItem[]
   payments           Payment[]
+  financedLoans      Loan[]        @relation("FinancedSaleLoan")
+  receivableFinancingPlan ReceivableFinancingPlan?
 
   @@index([number])
   @@index([ncf])
@@ -372,6 +389,65 @@ model Payment {
   @@index([paymentDate])
 }
 
+model ReceivableFinancingPlan {
+  id                String                      @id @default(uuid())
+  invoiceId         String                      @unique
+  clientId          String
+  branchId          String?
+  createdById       String
+  principalAmount   Decimal                     @db.Decimal(12, 2)
+  annualInterestRate Decimal                    @db.Decimal(7, 4)
+  termMonths        Int
+  paymentFrequency  LoanPaymentFrequency        @default(MONTHLY)
+  startDate         DateTime
+  firstDueDate      DateTime
+  endDate           DateTime
+  installmentAmount Decimal                     @db.Decimal(12, 2)
+  totalInterest     Decimal                     @db.Decimal(12, 2)
+  totalFinanced     Decimal                     @db.Decimal(12, 2)
+  paidAmount        Decimal                     @default(0) @db.Decimal(12, 2)
+  remainingAmount   Decimal                     @db.Decimal(12, 2)
+  status            ReceivableFinancingStatus   @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  invoice           Invoice                     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  client            Client                      @relation(fields: [clientId], references: [id])
+  branch            Branch?                     @relation(fields: [branchId], references: [id])
+  createdBy         User                        @relation(fields: [createdById], references: [id])
+  installments      ReceivableInstallment[]
+
+  @@index([clientId])
+  @@index([branchId])
+  @@index([status])
+}
+
+model ReceivableInstallment {
+  id                 String                         @id @default(uuid())
+  financingPlanId    String
+  installmentNo      Int
+  dueDate            DateTime
+  openingBalance     Decimal                        @db.Decimal(12, 2)
+  scheduledPrincipal Decimal                        @db.Decimal(12, 2)
+  scheduledInterest  Decimal                        @db.Decimal(12, 2)
+  scheduledTotal     Decimal                        @db.Decimal(12, 2)
+  paidAmount         Decimal                        @default(0) @db.Decimal(12, 2)
+  paidPrincipal      Decimal                        @default(0) @db.Decimal(12, 2)
+  paidInterest       Decimal                        @default(0) @db.Decimal(12, 2)
+  status             ReceivableInstallmentStatus    @default(PENDING)
+  paidAt             DateTime?
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+
+  financingPlan      ReceivableFinancingPlan        @relation(fields: [financingPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([financingPlanId, installmentNo])
+  @@index([financingPlanId])
+  @@index([dueDate])
+  @@index([status])
+}
+
 model CashRegister {
   id            String         @id @default(uuid())
   branchId      String
@@ -387,6 +463,7 @@ model CashRegister {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   movements     CashMovement[]
+  loanPayments  LoanPayment[]
   branch        Branch         @relation(fields: [branchId], references: [id])
   closedByUser  User?          @relation("ClosedCashRegister", fields: [closedBy], references: [id])
   openedByUser  User           @relation("OpenedCashRegister", fields: [openedBy], references: [id])
@@ -529,23 +606,23 @@ model WhatsAppTemplate {
 }
 
 model Appointment {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   clientName      String
   clientEmail     String?
   clientPhone     String
   appointmentDate DateTime
-  duration        Int      @default(60)
+  duration        Int       @default(60)
   notes           String?
-  status          String   @default("PENDING")
-  source          String   @default("MANUAL")
-  isViewed        Boolean  @default(false)
+  status          String    @default("PENDING")
+  source          String    @default("MANUAL")
+  isViewed        Boolean   @default(false)
   viewedAt        DateTime?
-  isNotified      Boolean  @default(false)
+  isNotified      Boolean   @default(false)
   notifiedAt      DateTime?
   branchId        String?
   userId          String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   branch Branch? @relation(fields: [branchId], references: [id])
   user   User?   @relation(fields: [userId], references: [id])
@@ -554,6 +631,205 @@ model Appointment {
   @@index([branchId])
   @@index([appointmentDate])
   @@index([isViewed])
+}
+
+model Loan {
+  id                 String                 @id @default(uuid())
+  number             String                 @unique
+  clientId           String
+  branchId           String?
+  requestedById      String
+  approvedById       String?
+  rejectedById       String?
+  disbursedById      String?
+  cancelledById      String?
+  amount             Decimal                @db.Decimal(12, 2)
+  interestRate       Decimal                @db.Decimal(5, 2)
+  termMonths         Int
+  paymentFrequency   LoanPaymentFrequency   @default(MONTHLY)
+  productType        LoanProductType        @default(CASH_LOAN)
+  amortizationMethod LoanAmortizationMethod @default(FIXED_PAYMENT)
+  graceDays          Int                    @default(0)
+  lateInterestRate   Decimal                @default(0) @db.Decimal(7, 4)
+  startDate          DateTime
+  applicationDate    DateTime               @default(now())
+  firstPaymentDate   DateTime
+  endDate            DateTime
+  disbursementDate   DateTime?
+  status             LoanStatus             @default(DRAFT)
+  purpose            String
+  collateral         String?
+  guarantee          String?
+  notes              String?
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  disbursedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  installmentAmount  Decimal?               @db.Decimal(12, 2)
+  projectedInterest  Decimal?               @db.Decimal(12, 2)
+  projectedFees      Decimal?               @db.Decimal(12, 2)
+  paidPrincipal      Decimal                @default(0) @db.Decimal(12, 2)
+  paidInterest       Decimal                @default(0) @db.Decimal(12, 2)
+  paidLateFees       Decimal                @default(0) @db.Decimal(12, 2)
+  paidFees           Decimal                @default(0) @db.Decimal(12, 2)
+  overdueBalance     Decimal                @default(0) @db.Decimal(12, 2)
+  paidAmount         Decimal                @default(0) @db.Decimal(12, 2)
+  remainingAmount    Decimal                @default(0) @db.Decimal(12, 2)
+  nextPaymentDate    DateTime?
+  overdueDays        Int                    @default(0)
+  saleInvoiceId      String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  branch             Branch?                @relation(fields: [branchId], references: [id])
+  client             Client                 @relation(fields: [clientId], references: [id])
+  requestedBy        User                   @relation("LoanRequestedBy", fields: [requestedById], references: [id])
+  approvedBy         User?                  @relation("LoanApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy         User?                  @relation("LoanRejectedBy", fields: [rejectedById], references: [id])
+  disbursedBy        User?                  @relation("LoanDisbursedBy", fields: [disbursedById], references: [id])
+  cancelledBy        User?                  @relation("LoanCancelledBy", fields: [cancelledById], references: [id])
+  saleInvoice        Invoice?               @relation("FinancedSaleLoan", fields: [saleInvoiceId], references: [id])
+  installments       LoanInstallment[]
+  payments           LoanPayment[]
+  ledgerEntries      LoanLedger[]
+  documents          LoanDocument[]
+
+  @@index([number])
+  @@index([clientId])
+  @@index([branchId])
+  @@index([status])
+  @@index([productType])
+  @@index([startDate])
+  @@index([nextPaymentDate])
+  @@index([saleInvoiceId])
+}
+
+model LoanInstallment {
+  id              String                  @id @default(uuid())
+  loanId          String
+  installmentNo   Int
+  dueDate         DateTime
+  openingBalance  Decimal                 @db.Decimal(12, 2)
+  principalAmount Decimal                 @db.Decimal(12, 2)
+  interestAmount  Decimal                 @db.Decimal(12, 2)
+  totalAmount     Decimal                 @db.Decimal(12, 2)
+  feeAmount       Decimal                 @default(0) @db.Decimal(12, 2)
+  pendingAmount   Decimal                 @default(0) @db.Decimal(12, 2)
+  paidPrincipal   Decimal                 @default(0) @db.Decimal(12, 2)
+  paidInterest    Decimal                 @default(0) @db.Decimal(12, 2)
+  paidLateFees    Decimal                 @default(0) @db.Decimal(12, 2)
+  paidFees        Decimal                 @default(0) @db.Decimal(12, 2)
+  paidAmount      Decimal                 @default(0) @db.Decimal(12, 2)
+  lateFeeAmount   Decimal                 @default(0) @db.Decimal(12, 2)
+  status          LoanInstallmentStatus   @default(PENDING)
+  paidAt          DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  loan            Loan                    @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  payments        LoanPayment[]
+  allocations     LoanPaymentAllocation[]
+
+  @@unique([loanId, installmentNo])
+  @@index([loanId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model LoanPayment {
+  id              String                  @id @default(uuid())
+  loanId          String
+  clientId        String
+  branchId        String?
+  cashRegisterId  String?
+  installmentId   String
+  amount          Decimal                 @db.Decimal(12, 2)
+  principalAmount Decimal                 @db.Decimal(12, 2)
+  interestAmount  Decimal                 @db.Decimal(12, 2)
+  lateFeeAmount   Decimal                 @default(0) @db.Decimal(12, 2)
+  feeAmount       Decimal                 @default(0) @db.Decimal(12, 2)
+  previousBalance Decimal                 @default(0) @db.Decimal(12, 2)
+  newBalance      Decimal                 @default(0) @db.Decimal(12, 2)
+  receiptNumber   String?                 @unique
+  paymentDate     DateTime                @default(now())
+  method          PaymentMethod
+  reference       String?
+  observations    String?
+  status          LoanPaymentStatus       @default(POSTED)
+  reversedAt      DateTime?
+  reversedById    String?
+  reversalReason  String?
+  userId          String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  installment     LoanInstallment         @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  loan            Loan                    @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  client          Client                  @relation(fields: [clientId], references: [id])
+  branch          Branch?                 @relation(fields: [branchId], references: [id])
+  cashRegister    CashRegister?           @relation(fields: [cashRegisterId], references: [id])
+  user            User                    @relation(fields: [userId], references: [id])
+  reversedBy      User?                   @relation("LoanPaymentReversedBy", fields: [reversedById], references: [id])
+  allocations     LoanPaymentAllocation[]
+  documents       LoanDocument[]
+
+  @@index([loanId])
+  @@index([clientId])
+  @@index([branchId])
+  @@index([cashRegisterId])
+  @@index([installmentId])
+  @@index([paymentDate])
+  @@index([status])
+}
+
+model LoanPaymentAllocation {
+  id                String                @id @default(uuid())
+  loanPaymentId     String
+  loanInstallmentId String
+  concept           LoanAllocationConcept
+  amount            Decimal               @db.Decimal(12, 2)
+  createdAt         DateTime              @default(now())
+  loanPayment       LoanPayment           @relation(fields: [loanPaymentId], references: [id], onDelete: Cascade)
+  loanInstallment   LoanInstallment       @relation(fields: [loanInstallmentId], references: [id], onDelete: Cascade)
+
+  @@index([loanPaymentId])
+  @@index([loanInstallmentId])
+  @@index([concept])
+}
+
+model LoanLedger {
+  id        String        @id @default(uuid())
+  loanId    String
+  eventType LoanEventType
+  eventDate DateTime      @default(now())
+  amount    Decimal?      @db.Decimal(12, 2)
+  notes     String?
+  metadata  Json?
+  userId    String?
+  createdAt DateTime      @default(now())
+  loan      Loan          @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  user      User?         @relation(fields: [userId], references: [id])
+
+  @@index([loanId])
+  @@index([eventType])
+  @@index([eventDate])
+}
+
+model LoanDocument {
+  id             String           @id @default(uuid())
+  loanId         String
+  loanPaymentId  String?
+  type           LoanDocumentType
+  fileName       String
+  fileUrl        String
+  sentEmailAt    DateTime?
+  sentWhatsAppAt DateTime?
+  createdAt      DateTime         @default(now())
+  loan           Loan             @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  loanPayment    LoanPayment?     @relation(fields: [loanPaymentId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([loanPaymentId])
+  @@index([type])
 }
 
 model AuditLog {
@@ -665,6 +941,96 @@ enum AdjustmentType {
   EXIT
 }
 
+enum LoanStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  DISBURSED
+  PENDING
+  ACTIVE
+  DELINQUENT
+  RESTRUCTURED
+  PAID_OFF
+  WRITTEN_OFF
+  CANCELLED
+}
+
+enum LoanPaymentFrequency {
+  MONTHLY
+  BIWEEKLY
+  WEEKLY
+}
+
+enum LoanInstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  RESTRUCTURED
+  CANCELLED
+}
+
+enum LoanProductType {
+  CASH_LOAN
+  FINANCED_SALE
+}
+
+enum LoanAmortizationMethod {
+  FIXED_PAYMENT
+  FIXED_PRINCIPAL
+  INTEREST_ONLY
+}
+
+enum LoanPaymentStatus {
+  POSTED
+  REVERSED
+}
+
+enum LoanAllocationConcept {
+  LATE_FEE
+  FEE
+  INTEREST
+  PRINCIPAL
+}
+
+enum LoanEventType {
+  CREATED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  DISBURSED
+  PAYMENT_POSTED
+  PAYMENT_REVERSED
+  RESTRUCTURED
+  PAID_OFF
+  WRITTEN_OFF
+  CANCELLED
+}
+
+enum LoanDocumentType {
+  CONTRACT
+  DISBURSEMENT_RECEIPT
+  PAYMENT_RECEIPT
+  STATEMENT
+  SUPPORT
+}
+
+enum ReceivableFinancingStatus {
+  ACTIVE
+  PAID_OFF
+  CANCELLED
+}
+
+enum ReceivableInstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
 // ============================================
 // MÓDULO DE PRODUCTOS DEL WEBSITE NEYPIER
 // ============================================
@@ -673,7 +1039,7 @@ model WebsiteProduct {
   name        String
   description String?
   price       Float
-  category    String   // gorras, tshirts, tazas, termos, llaveros, otros
+  category    String // gorras, tshirts, tazas, termos, llaveros, otros
   imageUrl    String?
   colors      String[] // lista de colores disponibles
   tags        String[] // best-seller, new, discount, trending
@@ -689,40 +1055,40 @@ model WebsiteProduct {
 
 // SaaS Models - Invoice for tenant billing
 model TenantInvoice {
-  id              String          @id @default(uuid())
-  tenantId        String
-  amount          Decimal         @default(0)
-  currency        String          @default("DOP")
-  status          InvoiceStatus   @default(DRAFT)
-  description     String?
-  periodStart     DateTime
-  periodEnd       DateTime
-  paidAt          DateTime?
-  paymentMethod   String?
+  id               String        @id @default(uuid())
+  tenantId         String
+  amount           Decimal       @default(0)
+  currency         String        @default("DOP")
+  status           InvoiceStatus @default(DRAFT)
+  description      String?
+  periodStart      DateTime
+  periodEnd        DateTime
+  paidAt           DateTime?
+  paymentMethod    String?
   paymentReference String?
-  metadata        Json?           // {plan, users, storage}
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  metadata         Json? // {plan, users, storage}
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
   // Relations
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
   @@index([tenantId])
   @@index([status])
 }
 
 // SaaS Models - Activity log for tenants
 model TenantActivity {
-  id              String          @id @default(uuid())
-  tenantId        String
-  action          String          // CREATED, UPDATED, LOGIN, LOGOUT, etc.
-  description     String
-  metadata        Json?           // Additional data
-  createdAt       DateTime        @default(now())
-  
+  id          String   @id @default(uuid())
+  tenantId    String
+  action      String // CREATED, UPDATED, LOGIN, LOGOUT, etc.
+  description String
+  metadata    Json? // Additional data
+  createdAt   DateTime @default(now())
+
   // Relations
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
   @@index([tenantId])
   @@index([createdAt])
 }
@@ -733,31 +1099,31 @@ model TenantActivity {
 
 // Proveedor
 model Supplier {
-  id                String              @id @default(uuid())
-  code              String              @unique // Código único del proveedor
-  name              String
-  contactName       String?             // Nombre del contacto
-  email             String?
-  phone             String?
-  mobile            String?
-  address           String?
-  city              String?
-  country           String              @default("DO")
-  taxId             String?             // RNC/Cédula
-  website           String?
-  notes             String?
-  isActive          Boolean             @default(true)
-  creditLimit       Decimal?            @default(0) @db.Decimal(12, 2)
-  creditDays        Int?                @default(0) // Días de crédito otorgados
-  category          String?             // Categoría del proveedor
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id          String   @id @default(uuid())
+  code        String   @unique // Código único del proveedor
+  name        String
+  contactName String? // Nombre del contacto
+  email       String?
+  phone       String?
+  mobile      String?
+  address     String?
+  city        String?
+  country     String   @default("DO")
+  taxId       String? // RNC/Cédula
+  website     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  creditLimit Decimal? @default(0) @db.Decimal(12, 2)
+  creditDays  Int?     @default(0) // Días de crédito otorgados
+  category    String? // Categoría del proveedor
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relations
-  purchases         Purchase[]
-  invoices          SupplierInvoice[]
-  payments          SupplierPayment[]
-  
+  purchases Purchase[]
+  invoices  SupplierInvoice[]
+  payments  SupplierPayment[]
+
   @@index([code])
   @@index([name])
   @@index([isActive])
@@ -765,33 +1131,33 @@ model Supplier {
 
 // Compra/Orden de Compra
 model Purchase {
-  id                String              @id @default(uuid())
-  code              String              @unique // Código de compra
-  supplierId        String
-  branchId          String?
-  userId            String              // Usuario que registra
-  purchaseDate      DateTime            @default(now())
-  deliveryDate      DateTime?
-  status            PurchaseStatus      @default(PENDING)
-  subtotal          Decimal             @default(0) @db.Decimal(12, 2)
-  tax               Decimal             @default(0) @db.Decimal(12, 2)
-  discount          Decimal             @default(0) @db.Decimal(12, 2)
-  total             Decimal             @default(0) @db.Decimal(12, 2)
-  paid              Decimal             @default(0) @db.Decimal(12, 2) // Monto pagado
-  balance           Decimal             @default(0) @db.Decimal(12, 2) // Saldo pendiente
-  notes             String?
-  reference         String?             // Referencia externa
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id           String         @id @default(uuid())
+  code         String         @unique // Código de compra
+  supplierId   String
+  branchId     String?
+  userId       String // Usuario que registra
+  purchaseDate DateTime       @default(now())
+  deliveryDate DateTime?
+  status       PurchaseStatus @default(PENDING)
+  subtotal     Decimal        @default(0) @db.Decimal(12, 2)
+  tax          Decimal        @default(0) @db.Decimal(12, 2)
+  discount     Decimal        @default(0) @db.Decimal(12, 2)
+  total        Decimal        @default(0) @db.Decimal(12, 2)
+  paid         Decimal        @default(0) @db.Decimal(12, 2) // Monto pagado
+  balance      Decimal        @default(0) @db.Decimal(12, 2) // Saldo pendiente
+  notes        String?
+  reference    String? // Referencia externa
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
   // Relations
-  supplier          Supplier            @relation(fields: [supplierId], references: [id])
-  branch            Branch?             @relation(fields: [branchId], references: [id])
-  user              User                @relation(fields: [userId], references: [id])
-  items             PurchaseItem[]
-  invoice           SupplierInvoice?
-  paymentDetails    PurchasePaymentDetail[] // Pagos aplicados a esta compra
-  
+  supplier       Supplier                @relation(fields: [supplierId], references: [id])
+  branch         Branch?                 @relation(fields: [branchId], references: [id])
+  user           User                    @relation(fields: [userId], references: [id])
+  items          PurchaseItem[]
+  invoice        SupplierInvoice?
+  paymentDetails PurchasePaymentDetail[] // Pagos aplicados a esta compra
+
   @@index([code])
   @@index([supplierId])
   @@index([status])
@@ -800,53 +1166,53 @@ model Purchase {
 
 // Items de la compra
 model PurchaseItem {
-  id                String              @id @default(uuid())
-  purchaseId        String
-  productId         String?
-  description       String              // Descripción del producto/servicio
-  quantity          Decimal             @default(1) @db.Decimal(10, 2)
-  unitPrice         Decimal             @default(0) @db.Decimal(12, 2)
-  tax               Decimal             @default(0) @db.Decimal(12, 2)
-  discount          Decimal             @default(0) @db.Decimal(12, 2)
-  total             Decimal             @default(0) @db.Decimal(12, 2)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id          String   @id @default(uuid())
+  purchaseId  String
+  productId   String?
+  description String // Descripción del producto/servicio
+  quantity    Decimal  @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  tax         Decimal  @default(0) @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  total       Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relations
-  purchase          Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  product           Product?            @relation(fields: [productId], references: [id])
-  
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [id])
+
   @@index([purchaseId])
   @@index([productId])
 }
 
 // Factura del Proveedor (Cuenta por Pagar)
 model SupplierInvoice {
-  id                String              @id @default(uuid())
-  code              String              @unique // Número de factura
-  supplierId        String
-  purchaseId        String?             @unique // Opcional: vinculada a una compra
-  branchId          String?
-  invoiceDate       DateTime            @default(now())
-  dueDate           DateTime            // Fecha de vencimiento
-  status            SupplierInvoiceStatus @default(PENDING)
-  subtotal          Decimal             @default(0) @db.Decimal(12, 2)
-  tax               Decimal             @default(0) @db.Decimal(12, 2)
-  discount          Decimal             @default(0) @db.Decimal(12, 2)
-  total             Decimal             @default(0) @db.Decimal(12, 2)
-  paid              Decimal             @default(0) @db.Decimal(12, 2)
-  balance           Decimal             @default(0) @db.Decimal(12, 2)
-  notes             String?
-  reference         String?             // Referencia del proveedor
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id          String                @id @default(uuid())
+  code        String                @unique // Número de factura
+  supplierId  String
+  purchaseId  String?               @unique // Opcional: vinculada a una compra
+  branchId    String?
+  invoiceDate DateTime              @default(now())
+  dueDate     DateTime // Fecha de vencimiento
+  status      SupplierInvoiceStatus @default(PENDING)
+  subtotal    Decimal               @default(0) @db.Decimal(12, 2)
+  tax         Decimal               @default(0) @db.Decimal(12, 2)
+  discount    Decimal               @default(0) @db.Decimal(12, 2)
+  total       Decimal               @default(0) @db.Decimal(12, 2)
+  paid        Decimal               @default(0) @db.Decimal(12, 2)
+  balance     Decimal               @default(0) @db.Decimal(12, 2)
+  notes       String?
+  reference   String? // Referencia del proveedor
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
   // Relations
-  supplier          Supplier            @relation(fields: [supplierId], references: [id])
-  purchase          Purchase?           @relation(fields: [purchaseId], references: [id])
-  branch            Branch?             @relation(fields: [branchId], references: [id])
-  payments          SupplierPaymentDetail[]
-  
+  supplier Supplier                @relation(fields: [supplierId], references: [id])
+  purchase Purchase?               @relation(fields: [purchaseId], references: [id])
+  branch   Branch?                 @relation(fields: [branchId], references: [id])
+  payments SupplierPaymentDetail[]
+
   @@index([code])
   @@index([supplierId])
   @@index([status])
@@ -856,26 +1222,26 @@ model SupplierInvoice {
 
 // Pago a Proveedor
 model SupplierPayment {
-  id                String              @id @default(uuid())
-  code              String              @unique // Código del pago
-  supplierId        String
-  branchId          String?
-  userId            String              // Usuario que registra el pago
-  paymentDate       DateTime            @default(now())
-  amount            Decimal             @default(0) @db.Decimal(12, 2)
-  paymentMethod     PaymentMethod       @default(CASH)
-  reference         String?             // Referencia bancaria, cheque, etc.
-  notes             String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id            String        @id @default(uuid())
+  code          String        @unique // Código del pago
+  supplierId    String
+  branchId      String?
+  userId        String // Usuario que registra el pago
+  paymentDate   DateTime      @default(now())
+  amount        Decimal       @default(0) @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  reference     String? // Referencia bancaria, cheque, etc.
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
   // Relations
-  supplier          Supplier            @relation(fields: [supplierId], references: [id])
-  branch            Branch?             @relation(fields: [branchId], references: [id])
-  user              User                @relation(fields: [userId], references: [id])
-  details           SupplierPaymentDetail[]    // Pagos aplicados a facturas
-  purchaseDetails   PurchasePaymentDetail[]    // Pagos aplicados a compras
-  
+  supplier        Supplier                @relation(fields: [supplierId], references: [id])
+  branch          Branch?                 @relation(fields: [branchId], references: [id])
+  user            User                    @relation(fields: [userId], references: [id])
+  details         SupplierPaymentDetail[] // Pagos aplicados a facturas
+  purchaseDetails PurchasePaymentDetail[] // Pagos aplicados a compras
+
   @@index([code])
   @@index([supplierId])
   @@index([paymentDate])
@@ -883,48 +1249,48 @@ model SupplierPayment {
 
 // Detalle de aplicación de pago (qué facturas se pagaron)
 model SupplierPaymentDetail {
-  id                String              @id @default(uuid())
-  paymentId         String
-  invoiceId         String
-  amount            Decimal             @default(0) @db.Decimal(12, 2)
-  createdAt         DateTime            @default(now())
-  
+  id        String   @id @default(uuid())
+  paymentId String
+  invoiceId String
+  amount    Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
   // Relations
-  payment           SupplierPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  invoice           SupplierInvoice     @relation(fields: [invoiceId], references: [id])
-  
+  payment SupplierPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id])
+
   @@index([paymentId])
   @@index([invoiceId])
 }
 
 // Detalle de aplicación de pago a compras (qué compras se pagaron)
 model PurchasePaymentDetail {
-  id                String              @id @default(uuid())
-  paymentId         String
-  purchaseId        String
-  amount            Decimal             @default(0) @db.Decimal(12, 2)
-  createdAt         DateTime            @default(now())
-  
+  id         String   @id @default(uuid())
+  paymentId  String
+  purchaseId String
+  amount     Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime @default(now())
+
   // Relations
-  payment           SupplierPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  purchase          Purchase            @relation(fields: [purchaseId], references: [id])
-  
+  payment  SupplierPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  purchase Purchase        @relation(fields: [purchaseId], references: [id])
+
   @@index([paymentId])
   @@index([purchaseId])
 }
 
 // Enums para el módulo de proveedores
 enum PurchaseStatus {
-  PENDING           // Pendiente
-  RECEIVED          // Recibida
-  PARTIAL           // Parcialmente recibida
-  CANCELLED         // Cancelada
+  PENDING // Pendiente
+  RECEIVED // Recibida
+  PARTIAL // Parcialmente recibida
+  CANCELLED // Cancelada
 }
 
 enum SupplierInvoiceStatus {
-  PENDING           // Pendiente de pago
-  PARTIAL           // Parcialmente pagada
-  PAID              // Pagada completamente
-  OVERDUE           // Vencida
-  CANCELLED         // Cancelada
+  PENDING // Pendiente de pago
+  PARTIAL // Parcialmente pagada
+  PAID // Pagada completamente
+  OVERDUE // Vencida
+  CANCELLED // Cancelada
 }

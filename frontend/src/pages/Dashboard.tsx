@@ -24,6 +24,11 @@ interface DashboardSummary {
     total: number;
     overdue: number;
   };
+  invoices: {
+    total: number;
+    paid: number;
+    pending: number;
+  };
   payables: {
     total: number;
     overdue: number;
@@ -126,10 +131,10 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando dashboard...</p>
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
+          <p className="mt-4 text-slate-600">Cargando dashboard...</p>
         </div>
       </div>
     );
@@ -193,9 +198,9 @@ const Dashboard = () => {
   // Calcular estadísticas basadas en datos reales de la base de datos
   // Todos los datos vienen de la API, no hay datos ficticios
   // Usar pagination.total si está disponible para el conteo real, sino usar el length
-  const totalInvoicesCount = invoicesPagination?.total || recentInvoices.length;
-  const paidInvoicesCount = recentInvoices.filter(inv => inv.status === 'PAID').length;
-  const pendingInvoicesCount = summary?.receivables?.overdue || 0; // Datos reales del summary de la API
+  const totalInvoicesCount = summary?.invoices?.total || invoicesPagination?.total || recentInvoices.length;
+  const paidInvoicesCount = summary?.invoices?.paid || recentInvoices.filter(inv => inv.status === 'PAID').length;
+  const pendingInvoicesCount = summary?.invoices?.pending || 0;
   
   // Calcular progreso de tareas basado en datos reales del CRM
   // Usar los datos del summary que ahora incluye completedTasks y completionPercentage
@@ -204,97 +209,98 @@ const Dashboard = () => {
   const completedTasksCount = crmSummary?.completedTasks || 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Resumen general del negocio</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Visión general</p>
+          <h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Dashboard</h1>
+          <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">Resumen general del negocio</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">Última actualización</p>
-          <p className="text-sm font-medium text-gray-900">{new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <div className="text-right hidden sm:block">
+          <p className="text-xs text-slate-500">Última actualización</p>
+          <p className="text-xs font-medium text-slate-950 sm:text-sm">{new Date().toLocaleDateString('es-DO', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
         </div>
       </div>
 
       {/* KPI Cards - Diseño moderno */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1 - Ventas del Mes */}
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/sales')}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="bg-[#1D79C4] bg-opacity-10 rounded-lg p-2">
-              <HiShoppingCart className="w-6 h-6 text-[#1D79C4]" />
+        <div className="cursor-pointer rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5" onClick={() => navigate('/sales')}>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="rounded-2xl bg-slate-100 p-1.5 text-slate-700 sm:p-2">
+              <HiShoppingCart className="w-4 h-4 sm:w-6 sm:h-6" />
             </div>
             {summary?.salesToday?.trend && (
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${summary.salesToday.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <span className={`rounded-full px-2 py-1 text-xs font-medium ${summary.salesToday.trend > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                 {summary.salesToday.trend > 0 ? '+' : ''}{summary.salesToday.trend.toFixed(1)}%
               </span>
             )}
           </div>
-          <p className="text-sm font-medium text-[#1f2937]">Ventas del Mes</p>
-          <p className="text-3xl font-bold mt-2 text-[#000000]">{formatCurrency(summary?.salesMonth?.amount || 0)}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Ventas del Mes</p>
+          <p className="mt-1 truncate text-lg font-bold text-slate-950 dark:text-white sm:mt-2 sm:text-3xl">{formatCurrency(summary?.salesMonth?.amount || 0)}</p>
         </div>
 
         {/* Card 2 - Facturas */}
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/sales')}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="bg-green-600 bg-opacity-10 rounded-lg p-2">
-              <HiCheckCircle className="w-6 h-6 text-green-600" />
+        <div className="cursor-pointer rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5" onClick={() => navigate('/sales')}>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="rounded-2xl bg-emerald-50 p-1.5 text-emerald-700 sm:p-2">
+              <HiCheckCircle className="w-4 h-4 sm:w-6 sm:h-6" />
             </div>
           </div>
-          <p className="text-sm font-medium text-[#1f2937]">Facturas</p>
-          <p className="text-3xl font-bold mt-2 text-[#000000]">{totalInvoicesCount}</p>
-          <p className="text-xs text-[#1f2937] mt-1">{paidInvoicesCount} pagadas</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Facturas</p>
+          <p className="mt-1 text-lg font-bold text-slate-950 dark:text-white sm:mt-2 sm:text-3xl">{totalInvoicesCount}</p>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 sm:mt-1">{paidInvoicesCount} pagadas</p>
         </div>
 
         {/* Card 3 - Cuentas por Pagar */}
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/suppliers-dashboard')}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="bg-red-600 bg-opacity-10 rounded-lg p-2">
-              <HiCurrencyDollar className="w-6 h-6 text-red-600" />
+        <div className="cursor-pointer rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5" onClick={() => navigate('/suppliers-dashboard')}>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="rounded-2xl bg-rose-50 p-1.5 text-rose-700 sm:p-2">
+              <HiCurrencyDollar className="w-4 h-4 sm:w-6 sm:h-6" />
             </div>
             {(summary?.payables?.overdue || 0) > 0 && (
-              <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">
+              <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700">
                 {summary?.payables?.overdue || 0} vencidas
               </span>
             )}
           </div>
-          <p className="text-sm font-medium text-[#1f2937]">Por Pagar</p>
-          <p className="text-3xl font-bold mt-2 text-[#000000]">{formatCurrency(summary?.payables?.total || 0)}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Por Pagar</p>
+          <p className="mt-1 truncate text-lg font-bold text-slate-950 dark:text-white sm:mt-2 sm:text-3xl">{formatCurrency(summary?.payables?.total || 0)}</p>
         </div>
 
         {/* Card 4 - Tareas */}
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/crm')}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="bg-purple-600 bg-opacity-10 rounded-lg p-2">
-              <HiClipboardCheck className="w-6 h-6 text-purple-600" />
+        <div className="cursor-pointer rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5" onClick={() => navigate('/crm')}>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="rounded-2xl bg-slate-100 p-1.5 text-slate-700 sm:p-2">
+              <HiClipboardCheck className="w-4 h-4 sm:w-6 sm:h-6" />
             </div>
             {(summary?.tasks?.overdue || 0) > 0 && (
-              <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">
+              <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700">
                 {summary?.tasks?.overdue || 0} vencidas
               </span>
             )}
           </div>
-          <p className="text-sm font-medium text-[#1f2937]">Tareas Pendientes</p>
-          <p className="text-3xl font-bold mt-2 text-[#000000]">{summary?.tasks?.pending || 0}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Tareas Pend.</p>
+          <p className="mt-1 text-lg font-bold text-slate-950 dark:text-white sm:mt-2 sm:text-3xl">{summary?.tasks?.pending || 0}</p>
         </div>
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Left Column - Sales Analytics */}
         <div className="lg:col-span-2 space-y-4">
           {/* Sales Chart */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-base font-bold text-gray-900">Análisis de Ventas</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Últimos {trendDays} días</p>
+                <h2 className="text-sm font-bold text-slate-950 dark:text-white sm:text-base">Análisis de Ventas</h2>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Últimos {trendDays} días</p>
               </div>
               <select
                 value={trendDays}
                 onChange={(e) => setTrendDays(Number(e.target.value))}
-                className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               >
                 <option value={7}>7d</option>
                 <option value={14}>14d</option>
@@ -313,17 +319,17 @@ const Dashboard = () => {
                       <div className="relative w-full flex items-end justify-center flex-1" style={{ minHeight: '100px' }}>
                         <div
                           className={`w-full rounded-t hover:opacity-80 transition-all cursor-pointer relative group ${
-                            isHigh ? 'bg-gradient-to-t from-blue-600 to-blue-400' : 'bg-gradient-to-t from-gray-200 to-gray-100'
+                            isHigh ? 'bg-gradient-to-t from-slate-900 to-slate-500 dark:from-white dark:to-slate-500' : 'bg-gradient-to-t from-slate-300 to-slate-100 dark:from-slate-700 dark:to-slate-800'
                           }`}
                           style={{ height: `${Math.max(height, 5)}%`, minHeight: '4px' }}
                           title={`${formatCurrency(item.amount)} - ${date.toLocaleDateString('es-DO')}`}
                         >
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                          <div className="absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-950 px-2 py-1 text-xs text-white group-hover:block dark:bg-white dark:text-slate-950">
                             {formatCurrency(item.amount)}
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-gray-600 font-medium">
+                      <div className="mt-2 text-xs font-medium text-slate-600 dark:text-slate-400">
                         {dayLabel}
                       </div>
                     </div>
@@ -331,17 +337,17 @@ const Dashboard = () => {
                 })}
               </div>
             ) : (
-              <div className="h-32 flex items-center justify-center text-sm text-gray-400">
+              <div className="flex h-32 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
                 No hay datos
               </div>
             )}
           </div>
 
           {/* Gráficos Circulares */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {/* Facturas por Estado */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">Facturas por Estado</h3>
+            <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+              <h3 className="mb-2 text-xs font-bold text-slate-950 dark:text-white sm:mb-4 sm:text-sm">Facturas por Estado</h3>
               <div className="flex items-center justify-center">
                 <div className="relative w-32 h-32">
                   {/* Donut Chart - Simulado con SVG */}
@@ -371,8 +377,8 @@ const Dashboard = () => {
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-gray-900">{totalInvoicesCount}</p>
-                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-2xl font-bold text-slate-950 dark:text-white">{totalInvoicesCount}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Total</p>
                     </div>
                   </div>
                 </div>
@@ -381,23 +387,23 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <span className="text-gray-600">Pagadas</span>
+                    <span className="text-slate-600 dark:text-slate-300">Pagadas</span>
                   </div>
-                  <span className="font-semibold text-gray-900">{paidInvoicesCount}</span>
+                  <span className="font-semibold text-slate-950 dark:text-white">{paidInvoicesCount}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                    <span className="text-gray-600">Pendientes</span>
+                    <span className="text-slate-600 dark:text-slate-300">Pendientes</span>
                   </div>
-                  <span className="font-semibold text-gray-900">{totalInvoicesCount - paidInvoicesCount}</span>
+                  <span className="font-semibold text-slate-950 dark:text-white">{totalInvoicesCount - paidInvoicesCount}</span>
                 </div>
               </div>
             </div>
 
             {/* Ventas por Categoría */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">Distribución</h3>
+            <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+              <h3 className="mb-2 text-xs font-bold text-slate-950 dark:text-white sm:mb-4 sm:text-sm">Distribución</h3>
               <div className="flex items-center justify-center">
                 <div className="relative w-32 h-32">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -423,7 +429,7 @@ const Dashboard = () => {
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-gray-900">100%</p>
+                      <p className="text-2xl font-bold text-slate-950 dark:text-white">100%</p>
                     </div>
                   </div>
                 </div>
@@ -432,16 +438,16 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span className="text-gray-600">Productos</span>
+                    <span className="text-slate-600 dark:text-slate-300">Productos</span>
                   </div>
-                  <span className="font-semibold text-gray-900">62%</span>
+                  <span className="font-semibold text-slate-950 dark:text-white">62%</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                    <span className="text-gray-600">Servicios</span>
+                    <span className="text-slate-600 dark:text-slate-300">Servicios</span>
                   </div>
-                  <span className="font-semibold text-gray-900">38%</span>
+                  <span className="font-semibold text-slate-950 dark:text-white">38%</span>
                 </div>
               </div>
             </div>
@@ -451,13 +457,13 @@ const Dashboard = () => {
         {/* Right Column */}
         <div className="space-y-4">
           {/* Gráfico de Área - Tendencia */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Tendencia Semanal</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Últimos 7 días</p>
+                <h3 className="text-sm font-bold text-slate-950 dark:text-white">Tendencia Semanal</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Últimos 7 días</p>
               </div>
-              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+12%</span>
+              <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">+12%</span>
             </div>
             <div className="h-24 relative">
               <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
@@ -482,29 +488,29 @@ const Dashboard = () => {
           </div>
 
           {/* Estado de Caja */}
-          <div className={`rounded-xl shadow-sm border p-5 ${
-            summary?.cash?.status === 'OPEN' ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200' : 'bg-white border-gray-100'
+          <div className={`rounded-[24px] shadow-sm border p-4 sm:p-5 ${
+            summary?.cash?.status === 'OPEN' ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
           }`}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-bold text-gray-900">Estado de Caja</h3>
+              <h3 className="text-base font-bold text-slate-950 dark:text-white">Estado de Caja</h3>
               {summary?.cash?.status === 'OPEN' ? (
-                <HiLockOpen className="w-4 h-4 text-green-600" />
+                <HiLockOpen className="w-4 h-4 text-emerald-700 dark:text-emerald-300" />
               ) : (
-                <HiLockClosed className="w-4 h-4 text-gray-400" />
+                <HiLockClosed className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               )}
             </div>
-            <p className="text-xl font-bold text-gray-900 mb-1">
+            <p className="mb-1 text-xl font-bold text-slate-950 dark:text-white">
               {formatCurrency(summary?.cash?.currentBalance || 0)}
             </p>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
               {summary?.cash?.status === 'OPEN' ? 'Caja abierta' : 'Caja cerrada'}
             </p>
             <button
               onClick={() => navigate('/cash')}
-              className={`w-full text-xs font-medium py-2 px-3 rounded transition-colors ${
+              className={`w-full rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
                 summary?.cash?.status === 'OPEN'
-                  ? 'bg-green-600 hover:bg-green-700 text-white'
-                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+                  ? 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950'
+                  : 'bg-slate-200 text-slate-800 hover:bg-slate-300 dark:bg-slate-800 dark:text-white'
               }`}
             >
               {summary?.cash?.status === 'OPEN' ? 'Ir a Caja' : 'Abrir Caja'}
@@ -512,10 +518,10 @@ const Dashboard = () => {
           </div>
 
           {/* Facturas Recientes */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 sm:p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Facturas</h3>
-              <button onClick={() => navigate('/sales')} className="text-xs text-blue-600 hover:text-blue-700">
+              <h3 className="text-sm font-semibold text-slate-950 dark:text-white">Facturas</h3>
+              <button onClick={() => navigate('/sales')} className="text-xs text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
                 Ver todas
               </button>
             </div>
@@ -525,7 +531,7 @@ const Dashboard = () => {
                   <div 
                     key={invoice.id} 
                     onClick={() => navigate(`/sales/invoices/${invoice.id}`)}
-                    className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between rounded-xl p-2 hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
                     <div className="flex items-center space-x-2 flex-1 min-w-0">
                       <div className={`w-1.5 h-1.5 rounded-full ${
@@ -534,15 +540,15 @@ const Dashboard = () => {
                         'bg-red-500'
                       }`}></div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-900 truncate">{invoice.number}</p>
-                        <p className="text-xs text-gray-400 truncate">{invoice.client?.name || 'Cliente'}</p>
+                        <p className="truncate text-xs font-medium text-slate-950 dark:text-white">{invoice.number}</p>
+                        <p className="truncate text-xs text-slate-400 dark:text-slate-500">{invoice.client?.name || 'Cliente'}</p>
                       </div>
                     </div>
-                    <p className="text-xs font-semibold text-gray-900">{formatCurrency(invoice.total || 0)}</p>
+                    <p className="text-xs font-semibold text-slate-950 dark:text-white">{formatCurrency(invoice.total || 0)}</p>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-3 text-xs text-gray-400">
+                <div className="py-3 text-center text-xs text-slate-400 dark:text-slate-500">
                   No hay facturas
                 </div>
               )}

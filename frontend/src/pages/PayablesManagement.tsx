@@ -165,24 +165,25 @@ export default function PayablesManagement() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cuentas por Pagar</h1>
-          <p className="text-sm text-gray-600 mt-1">Gestión de facturas y pagos a proveedores</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Pasivos</p>
+          <h1 className="text-2xl font-bold text-slate-950">Cuentas por Pagar</h1>
+          <p className="mt-1 text-sm text-slate-500">Gestión de facturas y pagos a proveedores</p>
         </div>
         <button
           onClick={handlePaySelected}
           disabled={selectedInvoices.length === 0}
-          className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm hover:shadow"
+          className="flex items-center space-x-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           <HiCash className="w-5 h-5" />
           <span>Registrar Pago {selectedInvoices.length > 0 && `(${selectedInvoices.length})`}</span>
@@ -218,13 +219,13 @@ export default function PayablesManagement() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium text-gray-700">Filtrar por proveedor:</label>
           <select
             value={filterSupplier}
             onChange={(e) => setFilterSupplier(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="">Todos los proveedores</option>
             {suppliers.map((s) => (
@@ -232,7 +233,7 @@ export default function PayablesManagement() {
             ))}
           </select>
           {selectedInvoices.length > 0 && (
-            <span className="text-sm text-blue-600 font-medium">
+            <span className="text-sm font-medium text-slate-700">
               {selectedInvoices.length} factura(s) seleccionada(s)
             </span>
           )}

@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HiUsers, HiOfficeBuilding, HiCurrencyDollar, HiTrendingUp, HiPlus, HiSearch, HiCog } from 'react-icons/hi';
+import { HiArrowRight, HiClock, HiCurrencyDollar, HiExclamationCircle, HiOfficeBuilding } from 'react-icons/hi';
 import { saasApi } from '../services/api';
 
 interface Tenant {
   id: string;
-  slug: string;
   name: string;
   subdomain: string;
-  status: 'ACTIVE' | 'SUSPENDED' | 'PENDING' | 'CANCELLED';
-  plan: 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
   email: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'PENDING' | 'CANCELLED';
+  plan: 'BASIC' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
   createdAt: string;
-  lastActiveAt?: string;
-  databaseName: string;
+  trialEndsAt?: string | null;
+  lastActiveAt?: string | null;
 }
 
 interface Stats {
@@ -23,222 +22,201 @@ interface Stats {
   newThisMonth: number;
 }
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: 'DOP',
+    minimumFractionDigits: 0,
+  }).format(amount || 0);
+
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('es-DO') : 'Sin actividad';
+
+const getOperationalStatus = (tenant: Tenant) => {
+  if (tenant.status === 'SUSPENDED') return 'Suspendido';
+  if (tenant.status === 'CANCELLED') return 'Cancelado';
+  if (tenant.status === 'PENDING') return 'Provisioning';
+  if (tenant.trialEndsAt && new Date(tenant.trialEndsAt) > new Date()) return 'Trial';
+  return 'Activo';
+};
+
 export default function SaaSDashboard() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [stats, setStats] = useState<Stats>({ totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tenantsRes, statsRes] = await Promise.allSettled([
+          saasApi.get('/saas/tenants'),
+          saasApi.get('/saas/stats'),
+        ]);
+
+        if (tenantsRes.status === 'fulfilled') {
+          setTenants(tenantsRes.value.data.data || []);
+        }
+
+        if (statsRes.status === 'fulfilled') {
+          setStats(statsRes.value.data.data || { totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
+        }
+      } catch (error) {
+        console.error('Error fetching SaaS dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      // Intentar obtener tenants
-      try {
-        const tenantsRes = await saasApi.get('/saas/tenants');
-        setTenants(tenantsRes.data.data || []);
-      } catch (err) {
-        console.error('Error fetching tenants:', err);
-        setTenants([]);
-      }
+  const derived = useMemo(() => {
+    const pendingProvisioning = tenants.filter((tenant) => tenant.status === 'PENDING').length;
+    const suspended = tenants.filter((tenant) => tenant.status === 'SUSPENDED').length;
+    const trial = tenants.filter((tenant) => tenant.trialEndsAt && new Date(tenant.trialEndsAt) > new Date()).length;
+    const inactive = tenants.filter((tenant) => !tenant.lastActiveAt).length;
+    const recent = [...tenants]
+      .sort((a, b) => {
+        const left = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0;
+        const right = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0;
+        return right - left;
+      })
+      .slice(0, 6);
 
-      // Intentar obtener stats
-      try {
-        const statsRes = await saasApi.get('/saas/stats');
-        setStats(statsRes.data.data || { totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setStats({ totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredTenants = tenants.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.email.toLowerCase().includes(search.toLowerCase()) ||
-    t.subdomain.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACTIVE': return 'bg-green-100 text-green-800';
-      case 'SUSPENDED': return 'bg-red-100 text-red-800';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'FREE': return 'text-gray-600';
-      case 'STARTER': return 'text-blue-600';
-      case 'PROFESSIONAL': return 'text-purple-600';
-      case 'ENTERPRISE': return 'text-orange-600';
-      default: return 'text-gray-600';
-    }
-  };
+    return { pendingProvisioning, suspended, trial, inactive, recent };
+  }, [tenants]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-slate-700" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Vista general</p>
+          <h1 className="text-2xl font-bold text-slate-950">Panel SaaS</h1>
+          <p className="mt-1 text-sm text-slate-500">Estado operativo de tenants, provisioning y facturación.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/tenants')}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Ver tenants
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/billing')}
+            className="rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            Revisar facturación
+          </button>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Tenants totales', value: stats.totalTenants, note: `${stats.newThisMonth} nuevos este mes`, icon: HiOfficeBuilding },
+          { label: 'Activos', value: stats.activeTenants, note: `${derived.trial} en trial`, icon: HiCurrencyDollar },
+          { label: 'Provisioning', value: derived.pendingProvisioning, note: 'Pendientes de completar', icon: HiClock },
+          { label: 'Suspendidos', value: derived.suspended, note: `${derived.inactive} sin actividad registrada`, icon: HiExclamationCircle },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="rounded-2xl bg-slate-100 p-2 text-slate-700">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className="text-xs font-medium text-slate-500">{item.label}</span>
+              </div>
+              <p className="text-3xl font-bold text-slate-950">{item.value}</p>
+              <p className="mt-1 text-sm text-slate-500">{item.note}</p>
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
+        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Panel SaaS Admin</h1>
-              <p className="text-sm text-gray-600">Gestión de tenants y suscripciones</p>
+              <h2 className="text-lg font-semibold text-slate-950">Actividad reciente</h2>
+              <p className="text-sm text-slate-500">Tenants con movimiento más reciente.</p>
             </div>
             <button
+              type="button"
               onClick={() => navigate('/tenants')}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 transition hover:text-slate-950"
             >
-              <HiPlus className="h-5 w-5 mr-2" />
-              Gestionar Tenants
+              Ver todos
+              <HiArrowRight className="h-4 w-4" />
             </button>
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-                  <HiOfficeBuilding className="h-6 w-6" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm text-gray-600">Total Tenants</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalTenants}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-green-100 text-green-600">
-                  <HiTrendingUp className="h-6 w-6" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm text-gray-600">Activos</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.activeTenants}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-                  <HiCurrencyDollar className="h-6 w-6" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm text-gray-600">Ingresos Mensuales</p>
-                  <p className="text-2xl font-bold text-gray-900">${stats.totalRevenue}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-orange-100 text-orange-600">
-                  <HiUsers className="h-6 w-6" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm text-gray-600">Nuevos (Mes)</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.newThisMonth}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Search */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="p-4 border-b">
-            <div className="relative">
-              <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar tenants..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Tenants Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Creado</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última Actividad</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredTenants.map((tenant) => (
-                  <tr key={tenant.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium text-gray-900">{tenant.name}</p>
-                        <p className="text-sm text-gray-500">{tenant.subdomain}.tusitio.com</p>
-                        <p className="text-xs text-gray-400">{tenant.email}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`font-semibold ${getPlanColor(tenant.plan)}`}>
-                        {tenant.plan}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(tenant.status)}`}>
-                        {tenant.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(tenant.createdAt).toLocaleDateString('es-DO')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {tenant.lastActiveAt
-                        ? new Date(tenant.lastActiveAt).toLocaleString('es-DO')
-                        : 'Nunca'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => navigate(`/tenants/${tenant.id}`)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <HiCog className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="divide-y divide-slate-200">
+            {derived.recent.length === 0 ? (
+              <div className="px-6 py-12 text-center text-slate-500">Todavía no hay actividad registrada.</div>
+            ) : (
+              derived.recent.map((tenant) => (
+                <button
+                  key={tenant.id}
+                  type="button"
+                  onClick={() => navigate(`/tenants/${tenant.id}`)}
+                  className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-slate-50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-950">{tenant.name}</p>
+                    <p className="truncate text-sm text-slate-500">{tenant.subdomain}.neypier.com</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-slate-700">{getOperationalStatus(tenant)}</p>
+                    <p className="text-xs text-slate-500">{formatDate(tenant.lastActiveAt)}</p>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
-      </main>
+
+        <div className="space-y-5">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Cobranza SaaS</h2>
+            <p className="mt-1 text-sm text-slate-500">El backend solo expone métricas básicas. La facturación detallada aún requiere cierre funcional.</p>
+            <div className="mt-5 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Ingresos reportados</span>
+                <span className="font-semibold text-slate-950">{formatCurrency(stats.totalRevenue)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Nuevos tenants</span>
+                <span className="font-semibold text-slate-950">{stats.newThisMonth}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Alertas operativas</h2>
+            <div className="mt-4 space-y-3 text-sm text-slate-700">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="font-medium text-slate-950">{derived.pendingProvisioning} tenant(s) en provisioning</p>
+                <p className="mt-1 text-slate-500">Conviene priorizar reprovisión y validación de acceso.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="font-medium text-slate-950">{derived.suspended} tenant(s) suspendidos</p>
+                <p className="mt-1 text-slate-500">Falta una operación de reactivación y trazabilidad más robusta.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

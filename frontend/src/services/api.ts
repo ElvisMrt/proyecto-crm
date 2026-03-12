@@ -138,6 +138,10 @@ export const salesApi = {
     const response = await api.post(`/sales/invoices/${id}/duplicate`);
     return response.data;
   },
+  financeInvoice: async (id: string, data: any) => {
+    const response = await api.post(`/sales/invoices/${id}/finance`, data);
+    return response.data;
+  },
   cancelInvoice: async (id: string, reason: string) => {
     const response = await api.post(`/sales/invoices/${id}/cancel`, { reason });
     return response.data;
@@ -199,6 +203,14 @@ export const salesApi = {
 export const receivablesApi = {
   getStatus: async (clientId: string, params?: any) => {
     const response = await api.get(`/receivables/status/${clientId}`, { params });
+    return response.data;
+  },
+  createFinancingPlan: async (invoiceId: string, data: any) => {
+    const response = await api.post(`/receivables/financing/${invoiceId}`, data);
+    return response.data;
+  },
+  getFinancingPlan: async (invoiceId: string) => {
+    const response = await api.get(`/receivables/financing/${invoiceId}`);
     return response.data;
   },
   getOverdue: async (params?: any) => {
@@ -450,45 +462,44 @@ export const branchesApi = {
   },
 };
 
-// WhatsApp API disabled - WhatsApp module removed
-// export const whatsappApi = {
-//   getTemplates: async (params?: any) => {
-//     const response = await api.get('/whatsapp/templates', { params });
-//     return response.data;
-//   },
-//   getTemplate: async (id: string) => {
-//     const response = await api.get(`/whatsapp/templates/${id}`);
-//     return response.data;
-//   },
-//   createTemplate: async (data: any) => {
-//     const response = await api.post('/whatsapp/templates', data);
-//     return response.data;
-//   },
-//   updateTemplate: async (id: string, data: any) => {
-//     const response = await api.put(`/whatsapp/templates/${id}`, data);
-//     return response.data;
-//   },
-//   deleteTemplate: async (id: string) => {
-//     const response = await api.delete(`/whatsapp/templates/${id}`);
-//     return response.data;
-//   },
-//   sendMessage: async (data: any) => {
-//     const response = await api.post('/whatsapp/send', data);
-//     return response.data;
-//   },
-//   getInstanceStatus: async () => {
-//     const response = await api.get('/whatsapp/instance/status');
-//     return response.data;
-//   },
-//   createInstance: async () => {
-//     const response = await api.post('/whatsapp/instance/create');
-//     return response.data;
-//   },
-//   getQRCode: async () => {
-//     const response = await api.get('/whatsapp/instance/qrcode');
-//     return response.data;
-//   },
-// };
+export const whatsappApi = {
+  getTemplates: async (params?: any) => {
+    const response = await api.get('/whatsapp/templates', { params });
+    return response.data;
+  },
+  getTemplate: async (id: string) => {
+    const response = await api.get(`/whatsapp/templates/${id}`);
+    return response.data;
+  },
+  createTemplate: async (data: any) => {
+    const response = await api.post('/whatsapp/templates', data);
+    return response.data;
+  },
+  updateTemplate: async (id: string, data: any) => {
+    const response = await api.put(`/whatsapp/templates/${id}`, data);
+    return response.data;
+  },
+  deleteTemplate: async (id: string) => {
+    const response = await api.delete(`/whatsapp/templates/${id}`);
+    return response.data;
+  },
+  sendMessage: async (data: any) => {
+    const response = await api.post('/whatsapp/send', data);
+    return response.data;
+  },
+  getInstanceStatus: async () => {
+    const response = await api.get('/whatsapp/instance/status');
+    return response.data;
+  },
+  createInstance: async (data?: { phone?: string }) => {
+    const response = await api.post('/whatsapp/instance/create', data);
+    return response.data;
+  },
+  getQRCode: async (params?: { number?: string }) => {
+    const response = await api.get('/whatsapp/instance/qrcode', { params });
+    return response.data;
+  },
+};
 
 export const ncfApi = {
   getSequences: async (params?: any) => {
@@ -603,6 +614,109 @@ export const appointmentApi = {
   },
   deleteAppointment: async (id: string) => {
     const response = await api.delete(`/appointments/${id}`);
+    return response.data;
+  },
+  getUnreadAppointments: async () => {
+    const response = await api.get('/appointments/unread/count');
+    return response.data;
+  },
+  markAsViewed: async (id: string) => {
+    const response = await api.put(`/appointments/${id}/viewed`);
+    return response.data;
+  },
+};
+
+// ============================================
+// API para Préstamos
+// ============================================
+export const loansApi = {
+  // Préstamos
+  getLoans: async (params: any = {}) => {
+    const response = await api.get('/loans', { params });
+    return response.data;
+  },
+  getLoan: async (id: string) => {
+    const response = await api.get(`/loans/${id}`);
+    return response.data;
+  },
+  createLoan: async (data: any) => {
+    const response = await api.post('/loans', data);
+    return response.data;
+  },
+  updateLoan: async (id: string, data: any) => {
+    const response = await api.put(`/loans/${id}`, data);
+    return response.data;
+  },
+  deleteLoan: async (id: string) => {
+    const response = await api.delete(`/loans/${id}`);
+    return response.data;
+  },
+  approveLoan: async (id: string) => {
+    const response = await api.post(`/loans/${id}/approve`);
+    return response.data;
+  },
+  disburseLoan: async (id: string, data: any = {}) => {
+    const response = await api.post(`/loans/${id}/disburse`, data);
+    return response.data;
+  },
+  rejectLoan: async (id: string) => {
+    const response = await api.post(`/loans/${id}/reject`);
+    return response.data;
+  },
+  cancelLoan: async (id: string) => {
+    const response = await api.post(`/loans/${id}/cancel`);
+    return response.data;
+  },
+  
+  // Pagos
+  getLoanPayments: async (loanId: string) => {
+    const response = await api.get(`/loans/${loanId}/payments`);
+    return response.data;
+  },
+  createLoanPayment: async (loanId: string, data: any) => {
+    const response = await api.post(`/loans/${loanId}/payments`, data);
+    return response.data;
+  },
+  reverseLoanPayment: async (loanId: string, paymentId: string, data: any) => {
+    const response = await api.post(`/loans/${loanId}/payments/${paymentId}/reverse`, data);
+    return response.data;
+  },
+  sendLoanPaymentReceiptEmail: async (loanId: string, paymentId: string) => {
+    const response = await api.post(`/loans/${loanId}/payments/${paymentId}/send-email`);
+    return response.data;
+  },
+  sendLoanPaymentReceiptWhatsApp: async (loanId: string, paymentId: string) => {
+    const response = await api.post(`/loans/${loanId}/payments/${paymentId}/send-whatsapp`);
+    return response.data;
+  },
+  updateLoanPayment: async (loanId: string, paymentId: string, data: any) => {
+    const response = await api.put(`/loans/${loanId}/payments/${paymentId}`, data);
+    return response.data;
+  },
+  processLoanPayment: async (loanId: string, paymentId: string, data: any) => {
+    const response = await api.post(`/loans/${loanId}/payments/${paymentId}/pay`, data);
+    return response.data;
+  },
+  getPaymentSchedule: async (loanId: string) => {
+    const response = await api.get(`/loans/${loanId}/payment-schedule`);
+    return response.data;
+  },
+  
+  // Reportes
+  getPortfolioReport: async (params: any = {}) => {
+    const response = await api.get('/loans/reports/portfolio', { params });
+    return response.data;
+  },
+  getAgingReport: async (params: any = {}) => {
+    const response = await api.get('/loans/reports/aging', { params });
+    return response.data;
+  },
+  getDelinquencyReport: async (params: any = {}) => {
+    const response = await api.get('/loans/reports/delinquency', { params });
+    return response.data;
+  },
+  getPerformanceReport: async (params: any = {}) => {
+    const response = await api.get('/loans/reports/performance', { params });
     return response.data;
   },
 };

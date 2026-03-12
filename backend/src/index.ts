@@ -13,6 +13,30 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
+const toPublicAssetUrl = (req: express.Request, value?: string | null) => {
+  if (!value) return value;
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.pathname.startsWith('/uploads/')) {
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0] : req.protocol;
+        return `${protocol}://${req.get('host')}${parsed.pathname}`;
+      }
+      return value;
+    } catch {
+      return value;
+    }
+  }
+
+  const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+  if (!normalizedPath.startsWith('/uploads/')) return value;
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0] : req.protocol;
+  return `${protocol}://${req.get('host')}${normalizedPath}`;
+};
+
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {
@@ -99,9 +123,9 @@ import appointmentsRoutes from './routes/appointments.routes';
 import publicRoutes from './routes/public.routes';
 import saasRoutes from './routes/saas.routes';
 import supplierRoutes from './routes/supplier.routes';
+import loansRoutes from './routes/loans.routes';
 import { sendWebsiteContact, sendWebsiteQuote } from './services/email.service';
-// WhatsApp module disabled
-// import whatsappRoutes from './routes/whatsapp.routes';
+import whatsappRoutes from './routes/whatsapp.routes';
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
@@ -118,7 +142,9 @@ app.use('/api/v1/ncf', ncfRoutes);
 app.use('/api/v1/appointments', appointmentsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/v1/saas', saasRoutes);
+app.use('/api/v1/loans', loansRoutes);
 app.use('/api/v1', supplierRoutes);
+app.use('/api/v1/whatsapp', whatsappRoutes);
 
 // Upload imagen para productos del website (solo SaaS admin)
 import { saasAdminMiddleware } from './middleware/tenant.middleware';
@@ -126,14 +152,14 @@ app.post('/api/v1/saas/upload-image', saasAdminMiddleware, upload.single('image'
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió imagen' });
     const url = `/uploads/${req.file.filename}`;
-    res.json({ success: true, url });
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0] : req.protocol;
+    const publicUrl = `${protocol}://${req.get('host')}${url}`;
+    res.json({ success: true, url: publicUrl, path: url });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al subir imagen' });
   }
 });
-// WhatsApp routes disabled
-// app.use('/api/v1/whatsapp', whatsappRoutes);
-
 // Endpoint público: listar productos del website
 app.get('/api/website/products', async (req, res) => {
   try {
@@ -147,7 +173,13 @@ app.get('/api/website/products', async (req, res) => {
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
     await mp.$disconnect();
-    res.json({ success: true, data: products });
+    res.json({
+      success: true,
+      data: products.map((product) => ({
+        ...product,
+        imageUrl: toPublicAssetUrl(req, product.imageUrl),
+      })),
+    });
   } catch (error) {
     console.error('[Website Products] Error:', error);
     res.status(500).json({ success: false, message: 'Error al cargar productos' });
@@ -219,4 +251,3 @@ process.on('SIGTERM', async () => {
 });
 
 export default app;
-

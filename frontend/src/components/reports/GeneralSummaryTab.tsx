@@ -8,6 +8,7 @@ const GeneralSummaryTab = () => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const [dailyProfit, setDailyProfit] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [filters, setFilters] = useState({
     branchId: '',
@@ -42,6 +43,10 @@ const GeneralSummaryTab = () => {
       if (filters.endDate) params.endDate = filters.endDate;
 
       const response = await reportsApi.getGeneralSummary(params);
+      const dailyProfitResponse = await reportsApi.getDailyProfit({
+        branchId: filters.branchId || undefined,
+        date: filters.endDate,
+      });
       console.log('General Summary Response from API:', response);
       
       // Verify data is real (not mock)
@@ -57,16 +62,19 @@ const GeneralSummaryTab = () => {
           hasBestClients: Array.isArray(response.bestClients),
         });
         setData(response);
+        setDailyProfit(dailyProfitResponse);
       } else {
         console.error('Invalid response format:', response);
         showToast('Error: Datos inválidos recibidos del servidor', 'error');
         setData(null);
+        setDailyProfit(null);
       }
     } catch (error: any) {
       console.error('Error fetching summary:', error);
       console.error('Error details:', error?.response?.data);
       showToast(error?.response?.data?.error?.message || 'Error al cargar el resumen general', 'error');
       setData(null);
+      setDailyProfit(null);
     } finally {
       setLoading(false);
     }
@@ -148,13 +156,10 @@ const GeneralSummaryTab = () => {
     return <div className="text-center py-12 text-gray-500">No hay datos</div>;
   }
 
-  // Calculate net profit (sales - estimated costs - estimated expenses)
-  // Using a simplified calculation: assuming 30% margin and 10% expenses
-  const salesAmount = data.salesMonth?.amount || 0;
-  const estimatedCosts = salesAmount * 0.7; // 70% cost
-  const estimatedExpenses = salesAmount * 0.1; // 10% expenses
-  const netProfit = salesAmount - estimatedCosts - estimatedExpenses;
-  const netProfitPercent = salesAmount > 0 ? Math.round((netProfit / salesAmount) * 100) : 0;
+  const netProfit = dailyProfit?.netProfit || 0;
+  const netProfitPercent = dailyProfit?.sales > 0
+    ? Math.round((netProfit / dailyProfit.sales) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -256,7 +261,7 @@ const GeneralSummaryTab = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Ganancia Neta Estimada</p>
+          <p className="text-sm font-medium text-gray-600">Ganancia del Día</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             {formatCurrency(netProfit)}
           </p>
@@ -440,6 +445,5 @@ const GeneralSummaryTab = () => {
 };
 
 export default GeneralSummaryTab;
-
 
 

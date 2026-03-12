@@ -181,7 +181,7 @@ const InvoiceDetail = () => {
           </button> */}
           {invoice.status === 'ISSUED' && invoice.balance > 0 && (
             <button
-              onClick={() => navigate(`/receivables?invoiceId=${invoice.id}&generateReceipt=true`)}
+              onClick={() => navigate(`/receivables?tab=payments&clientId=${invoice.client?.id || ''}&invoiceIds=${invoice.id}`)}
               className="px-4 py-2 border border-green-300 rounded-md text-green-700 hover:bg-green-50 flex items-center"
             >
               <HiReceiptTax className="w-4 h-4 mr-2" />
@@ -190,7 +190,7 @@ const InvoiceDetail = () => {
           )}
           {invoice.status === 'ISSUED' && invoice.balance > 0 && (
             <button
-              onClick={() => navigate(`/receivables?invoiceId=${invoice.id}`)}
+              onClick={() => navigate(`/receivables?tab=payments&clientId=${invoice.client?.id || ''}&invoiceIds=${invoice.id}`)}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
             >
               Registrar Pago
@@ -473,5 +473,4 @@ const InvoiceDetail = () => {
 };
 
 export default InvoiceDetail;
-
 

@@ -31,6 +31,7 @@ import SupplierInvoices from './pages/SupplierInvoices';
 import SupplierPayments from './pages/SupplierPayments';
 import Appointments from './pages/Appointments';
 import PublicAppointments from './pages/PublicAppointments';
+import Loans from './pages/Loans';
 
 // SaaS Admin - COMPLETAMENTE INDEPENDIENTE del CRM
 import SaaSLogin from './pages/SaaSLogin';
@@ -61,8 +62,18 @@ const isSaaSAdminMode = (): boolean => {
 
   // Override por query param (útil en desarrollo)
   const mode = searchParams.get('mode');
-  if (mode === 'saas') return true;
-  if (mode === 'crm') return false;
+  if (mode === 'saas') {
+    localStorage.setItem('app_mode_override', 'saas');
+    return true;
+  }
+  if (mode === 'crm') {
+    localStorage.setItem('app_mode_override', 'crm');
+    return false;
+  }
+
+  const persistedMode = localStorage.getItem('app_mode_override');
+  if (persistedMode === 'saas') return true;
+  if (persistedMode === 'crm') return false;
 
   // IP pura = SaaS Admin (sin subdominio)
   if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return true;
@@ -177,6 +188,7 @@ function CRMRoutes() {
         <Route path="/cash" element={<Cash />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/clients" element={<Clients />} />
+        <Route path="/loans" element={<Loans />} />
         <Route path="/crm" element={<CRM />}>
           <Route path="appointments" element={<Appointments />} />
           <Route path="public-appointments" element={<PublicAppointments />} />

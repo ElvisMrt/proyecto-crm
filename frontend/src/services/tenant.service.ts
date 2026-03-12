@@ -30,6 +30,15 @@ const detectSubdomain = (): string | null => {
 
   // 3. localhost: sin subdomain real
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    const stored = localStorage.getItem('tenant_subdomain');
+    if (stored) return stored;
+
+    const forcedMode = localStorage.getItem('app_mode_override');
+    if (forcedMode === 'crm') {
+      localStorage.setItem('tenant_subdomain', 'demo');
+      return 'demo';
+    }
+
     return null;
   }
 
@@ -63,6 +72,13 @@ export const getTenantSubdomain = (): string | null => {
   if (typeof window !== 'undefined') {
     const stored = localStorage.getItem('tenant_subdomain');
     if (stored) return stored;
+
+    const hostname = window.location.hostname;
+    const forcedMode = localStorage.getItem('app_mode_override');
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && forcedMode === 'crm') {
+      localStorage.setItem('tenant_subdomain', 'demo');
+      return 'demo';
+    }
   }
 
   return null;

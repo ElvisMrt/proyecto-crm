@@ -204,12 +204,24 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 
     const product = await prisma.product.create({
       data: {
-        ...data,
         code: productCode,
+        barcode: data.barcode,
+        name: data.name,
+        description: data.description,
+        brand: data.brand,
+        unit: data.unit,
         salePrice: data.salePrice,
         cost: data.cost,
+        hasTax: data.hasTax,
         taxPercent: data.taxPercent,
+        controlsStock: data.controlsStock,
         minStock: data.minStock,
+        imageUrl: data.imageUrl,
+        category: {
+          connect: {
+            id: data.categoryId,
+          },
+        },
       },
     });
 
@@ -348,12 +360,22 @@ export const getStock = async (req: AuthRequest, res: Response) => {
 
     const where: any = {};
 
+    if (req.query.productId) {
+      where.productId = req.query.productId;
+    }
+
     if (req.query.branchId) {
       where.branchId = req.query.branchId;
     }
 
+    where.product = {
+      ...(where.product || {}),
+      controlsStock: true,
+    };
+
     if (req.query.categoryId) {
       where.product = {
+        ...where.product,
         categoryId: req.query.categoryId,
       };
     }
@@ -441,17 +463,20 @@ export const getStock = async (req: AuthRequest, res: Response) => {
     ]);
     }
 
-    // Filtrar solo productos que controlan stock y evitar mostrar stock negativo
-    const mappedStocks = stocks
-      .filter((stock: any) => stock.product.controlsStock)
-      .map((stock) => ({
+    const mappedStocks = stocks.map((stock) => ({
         id: stock.id,
         product: stock.product,
         branch: stock.branch,
-        quantity: Math.max(0, Number(stock.quantity)), // No mostrar stock negativo
+        quantity: Number(stock.quantity),
         minStock: Number(stock.minStock),
-        status: Number(stock.quantity) <= 0 ? 'OUT' :
-          Number(stock.quantity) <= Number(stock.minStock) ? 'LOW' : 'OK',
+        status:
+          Number(stock.quantity) < 0
+            ? 'NEGATIVE'
+            : Number(stock.quantity) === 0
+              ? 'OUT'
+              : Number(stock.quantity) <= Number(stock.minStock)
+                ? 'LOW'
+                : 'OK',
     }));
 
     res.json({
@@ -459,8 +484,8 @@ export const getStock = async (req: AuthRequest, res: Response) => {
       pagination: {
         page,
         limit,
-        total: mappedStocks.length, // Total de productos que controlan stock
-        totalPages: Math.ceil(mappedStocks.length / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -595,11 +620,17 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
         });
 
         if (!product) {
-          throw new Error(`Product ${item.productId} not found`);
+          throw Object.assign(new Error(`Product ${item.productId} not found`), {
+            statusCode: 404,
+            code: 'PRODUCT_NOT_FOUND',
+          });
         }
 
         if (!product.controlsStock) {
-          throw new Error(`Product ${product.name} (${product.code}) does not control stock. Cannot adjust inventory for products that don't control stock.`);
+          throw Object.assign(new Error(`Product ${product.name} (${product.code}) does not control stock. Cannot adjust inventory for products that don't control stock.`), {
+            statusCode: 400,
+            code: 'PRODUCT_WITHOUT_STOCK_CONTROL',
+          });
         }
 
         // Get current stock
@@ -619,7 +650,10 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
         const newQuantity = previousQuantity + adjustmentQuantity;
 
         if (newQuantity < 0) {
-          throw new Error(`Insufficient stock for product ${product.name} (${product.code}). Cannot have negative stock.`);
+          throw Object.assign(new Error(`Insufficient stock for product ${product.name} (${product.code}). Cannot have negative stock.`), {
+            statusCode: 400,
+            code: 'INSUFFICIENT_STOCK',
+          });
         }
 
         // Create or update stock
@@ -708,6 +742,15 @@ export const createAdjustment = async (req: AuthRequest, res: Response) => {
           code: 'VALIDATION_ERROR',
           message: 'Invalid input',
           details: error.errors,
+        },
+      });
+    }
+
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({
+        error: {
+          code: error.code || 'BUSINESS_RULE_ERROR',
+          message: error.message || 'Error creating adjustment',
         },
       });
     }
@@ -829,7 +872,10 @@ export const createCategory = async (req: AuthRequest, res: Response) => {
     const data = createCategorySchema.parse(req.body);
 
     const category = await prisma.category.create({
-      data,
+      data: {
+        name: data.name,
+        description: data.description,
+      },
     });
 
     res.status(201).json({
@@ -1033,4 +1079,3 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

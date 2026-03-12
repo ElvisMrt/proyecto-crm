@@ -20,9 +20,9 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
       const contentWidth = pageWidth - (margin * 2);
       
       // Colores del tema
-      const primaryColor = '#2563eb'; // blue-600
-      const secondaryColor = '#7c3aed'; // violet-600
-      const accentColor = '#059669'; // emerald-600
+      const primaryColor = '#0f172a'; // slate-900
+      const secondaryColor = '#475569'; // slate-600
+      const accentColor = '#0f766e'; // teal-700
       const textColor = '#1f2937'; // gray-800
       const lightGray = '#f3f4f6'; // gray-100
       
@@ -77,7 +77,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
       // Subtítulo
       doc.setFontSize(14);
       doc.setFont('helvetica', 'normal');
-      doc.text('Sistema CRM + Facturación', margin, 65);
+      doc.text('Sistema CRM, Ventas y Operacion', margin, 65);
       
       yPosition = 100;
       
@@ -95,7 +95,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
       doc.setTextColor(107, 114, 128);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text('Versión 1.0.0 | Febrero 2026', margin, yPosition);
+      doc.text('Versión 1.2.0 | Marzo 2026', margin, yPosition);
       
       yPosition += 20;
       
@@ -103,7 +103,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
       doc.setTextColor(textColor);
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      const description = 'Este manual contiene toda la información necesaria para utilizar eficientemente el Sistema de Gestión Empresarial CRM, diseñado específicamente para MIPYMES en República Dominicana.';
+      const description = 'Este manual contiene los flujos operativos actualizados del sistema: ventas, POS, caja, cuentas por cobrar, financiamiento, préstamos, reportes y vinculación por WhatsApp.';
       const splitDesc = doc.splitTextToSize(description, contentWidth);
       doc.text(splitDesc, margin, yPosition);
       
@@ -130,12 +130,13 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         { num: '6', title: 'Módulo de Ventas', page: '8' },
         { num: '7', title: 'Módulo de Caja', page: '11' },
         { num: '8', title: 'Módulo de Cuentas por Cobrar', page: '13' },
-        { num: '9', title: 'Módulo de Inventario', page: '15' },
-        { num: '10', title: 'Módulo de Clientes', page: '17' },
-        { num: '11', title: 'Módulo CRM', page: '18' },
-        { num: '12', title: 'Configuración', page: '19' },
-        { num: '13', title: 'Solución de Problemas', page: '20' },
-        { num: '14', title: 'Preguntas Frecuentes', page: '21' },
+        { num: '9', title: 'Préstamos y Comprobantes', page: '15' },
+        { num: '10', title: 'WhatsApp y Documentos', page: '17' },
+        { num: '11', title: 'Inventario', page: '18' },
+        { num: '12', title: 'Clientes y CRM', page: '19' },
+        { num: '13', title: 'Configuración', page: '20' },
+        { num: '14', title: 'Solución de Problemas', page: '21' },
+        { num: '15', title: 'Preguntas Frecuentes', page: '22' },
       ];
       
       sections.forEach((section, index) => {
@@ -335,18 +336,31 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '',
         '## Venta a Crédito',
         'Antes de vender a crédito, verifique el límite de crédito del cliente en su ficha. El sistema controla automáticamente los límites.',
+        '',
+        '## Ilustración del Flujo',
+        '| Caja Abierta -> POS -> Factura -> Cobro -> Comprobante -> Cierre de Caja',
+        '',
+        '## Venta Financiada desde CxC',
+        '1. Emitir factura a crédito',
+        '2. Ir a Cuentas por Cobrar > Estado de Cuenta',
+        '3. Seleccionar factura y crear financiamiento',
+        '4. Generar plan de cuotas',
+        '5. Cobrar cuotas desde Registro de Pagos',
       ]);
       
       // Sección 6: Ventas
       addContentSection('6. MÓDULO DE VENTAS', [
         '## Punto de Venta (POS)',
-        'El POS está diseñado para ventas rápidas y atención al cliente.',
+        'El POS está diseñado para ventas rápidas con una interfaz visual limpia, enfoque en lectura clara y menos saturación de color.',
         '',
         'Teclas Rápidas:',
         '- F2: Buscar producto',
-        '- F4: Buscar cliente',
-        '- F9: Cobrar',
+        '- Enter: Cobrar si ya hay productos en carrito',
         '- ESC: Cancelar',
+        '',
+        '## Ilustración de Pantalla',
+        '| Columna izquierda: catálogo y búsqueda',
+        '| Columna derecha: carrito, totales, cliente y cobro',
         '',
         '## Tipos de Factura',
         '- Fiscal (NCF): Ventas formales con DGII',
@@ -383,6 +397,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '- Límite de Crédito: Monto máximo que puede adeudar un cliente',
         '- Balance: Total que debe el cliente actualmente',
         '- Mora: Días de retraso en el pago',
+        '- Financiamiento: Conversión de una factura pendiente en un plan de cuotas',
         '',
         '## Registrar Pago',
         '1. Cuentas por Cobrar > Registrar Pago',
@@ -393,10 +408,58 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '6. Confirmar',
         '',
         'El sistema permite pagos parciales. La factura queda con "Balance Pendiente" hasta saldar completamente.',
+        '',
+        '## Financiar Factura',
+        '1. Estado de Cuenta > seleccionar cliente',
+        '2. Elegir factura pendiente',
+        '3. Crear plan con tasa, plazo y fecha inicial',
+        '4. El sistema calcula las cuotas automáticamente',
+        '5. Los pagos se aplican desde CxC y actualizan el saldo antes y después',
       ]);
+
+      addContentSection('9. PRÉSTAMOS Y COMPROBANTES', [
+        '## Flujo de Préstamos',
+        'Solicitud -> Aprobación -> Desembolso -> Cobro -> Comprobante -> Reportes',
+        '',
+        '## Cobro de Cuotas',
+        '- Los pagos pueden ser parciales o completos',
+        '- El sistema recalcula saldo pendiente y próxima cuota',
+        '- El pago puede impactar caja si es en efectivo',
+        '',
+        '## Comprobante Automático',
+        'Cada pago genera un comprobante con:',
+        '- Cliente',
+        '- Documento',
+        '- Saldo anterior',
+        '- Monto pagado',
+        '- Saldo nuevo',
+        '- Método de pago',
+        '- Fecha y usuario',
+        '',
+        '## Ilustración del Comprobante',
+        '| Antes: balance pendiente',
+        '| Movimiento: pago aplicado',
+        '| Después: nuevo balance',
+      ], '#334155');
+
+      addContentSection('10. WHATSAPP Y DOCUMENTOS', [
+        '## Vinculación de WhatsApp',
+        '1. Configuración > WhatsApp',
+        '2. Escanear el QR desde Dispositivos vinculados',
+        '3. Verificar estado conectado',
+        '',
+        '## Envíos Disponibles',
+        '- Comprobantes de préstamos',
+        '- Reenvío manual de documentos',
+        '- Plantillas de mensajes',
+        '',
+        '## Buenas Prácticas',
+        '- Mantener el teléfono con conexión a internet',
+        '- No cerrar la sesión vinculada del dispositivo principal',
+        '- Si el QR expira, actualizarlo antes de intentar de nuevo',
+      ], '#155e75');
       
-      // Sección 9: Inventario
-      addContentSection('9. MÓDULO DE INVENTARIO', [
+      addContentSection('11. MÓDULO DE INVENTARIO', [
         '## Control de Stock',
         'El sistema actualiza automáticamente el stock con cada venta y anulación.',
         '',
@@ -415,23 +478,13 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '⚠️ Los ajustes quedan registrados en auditoría.',
       ]);
       
-      // Sección 10: Clientes
-      addContentSection('10. MÓDULO DE CLIENTES', [
+      addContentSection('12. CLIENTES Y CRM', [
         '## Ficha del Cliente',
         'Contiene toda la información relevante:',
         '- Datos generales y contacto',
         '- Límite de crédito y balance actual',
         '- Historial de compras y pagos',
         '- Estadísticas de compra',
-        '',
-        '## Tipos de Cliente',
-        '- Contado: Sin crédito, pago inmediato',
-        '- Crédito: Con límite aprobado',
-        '- VIP: Alto volumen de compras',
-      ]);
-      
-      // Sección 11: CRM
-      addContentSection('11. MÓDULO CRM', [
         '## Tareas y Seguimiento',
         'Cree tareas para organizar su trabajo comercial:',
         '',
@@ -451,8 +504,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         'El sistema muestra alertas para tareas vencidas y recordatorios programados.',
       ]);
       
-      // Sección 12: Configuración
-      addContentSection('12. CONFIGURACIÓN DEL SISTEMA', [
+      addContentSection('13. CONFIGURACIÓN DEL SISTEMA', [
         '## NCF (Números de Comprobante Fiscal)',
         '',
         'Tipos de NCF:',
@@ -468,8 +520,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         'Para empresas con múltiples ubicaciones, configure sucursales independientes con sus propias cajas y reportes.',
       ]);
       
-      // Sección 13: Solución de Problemas
-      addContentSection('13. SOLUCIÓN DE PROBLEMAS', [
+      addContentSection('14. SOLUCIÓN DE PROBLEMAS', [
         '## No Puede Iniciar Sesión',
         '- "Usuario no existe": Verifique mayúsculas/minúsculas',
         '- "Contraseña incorrecta": Use recuperación o contacte admin',
@@ -480,14 +531,14 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '- "Stock insuficiente": Verifique inventario',
         '- "Cliente requerido": Factura fiscal necesita cliente',
         '- "NCF agotado": Configure nueva secuencia',
+        '- "WhatsApp desconectado": Regrese a Configuración > WhatsApp y actualice QR',
         '',
         '## Problemas de Caja',
         '- "Diferencia de caja": Revise conteo físico',
         '- "No puede cerrar caja de otro": Contacte supervisor',
       ]);
       
-      // Sección 14: FAQ
-      addContentSection('14. PREGUNTAS FRECUENTES', [
+      addContentSection('15. PREGUNTAS FRECUENTES', [
         '## ¿Puedo usar el sistema desde mi celular?',
         'Sí, el sistema es responsive y funciona en dispositivos móviles.',
         '',
@@ -496,6 +547,9 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
         '',
         '## ¿Puedo anular una factura de ayer?',
         'Sí, pero solo un Administrador puede hacerlo y se requiere motivo.',
+        '',
+        '## ¿Puedo enviar comprobantes por correo o WhatsApp?',
+        'Sí, en préstamos ya existe generación de comprobante y reenvío por correo/WhatsApp.',
         '',
         '## ¿Debo cerrar caja todos los días?',
         'Sí, es recomendable cerrar caja al finalizar el turno.',
@@ -538,7 +592,7 @@ const ManualDownloader = ({ variant = 'button' }: ManualDownloaderProps) => {
       // Info en el footer azul
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(9);
-      doc.text('CRM Sistema de Gestión Empresarial | v1.0.0', margin, pageHeight - 20);
+      doc.text('CRM Sistema de Gestión Empresarial | v1.2.0', margin, pageHeight - 20);
       doc.text('© 2026 Todos los derechos reservados', margin, pageHeight - 12);
       
       // Guardar PDF

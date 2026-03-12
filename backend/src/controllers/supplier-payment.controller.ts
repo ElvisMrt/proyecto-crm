@@ -248,12 +248,125 @@ export async function createSupplierPayment(req: TenantRequest, res: Response) {
 
     // Crear pago con detalles en una transacción
     const payment = await prisma.$transaction(async (tx) => {
+      let resolvedBranchId = branchId || null;
+
+      if (invoicesToProcess && invoicesToProcess.length > 0) {
+        const invoiceIds = invoicesToProcess.map((inv: any) => inv.invoiceId);
+        const selectedInvoices = await tx.supplierInvoice.findMany({
+          where: { id: { in: invoiceIds } },
+          select: {
+            id: true,
+            supplierId: true,
+            branchId: true,
+            balance: true,
+            dueDate: true,
+            paid: true,
+            total: true,
+            status: true,
+          }
+        });
+
+        if (selectedInvoices.length !== invoiceIds.length) {
+          throw new Error('Una o mas facturas no existen');
+        }
+
+        for (const invoice of selectedInvoices) {
+          if (invoice.supplierId !== supplierId) {
+            throw new Error('Todas las facturas deben pertenecer al mismo proveedor');
+          }
+        }
+
+        const invoiceBranches = Array.from(new Set(selectedInvoices.map((invoice) => invoice.branchId).filter(Boolean)));
+        if (!resolvedBranchId && invoiceBranches.length === 1) {
+          resolvedBranchId = invoiceBranches[0] as string;
+        }
+        if (resolvedBranchId && invoiceBranches.some((candidate) => candidate !== resolvedBranchId)) {
+          throw new Error('No se pueden mezclar facturas de sucursales distintas en un mismo pago');
+        }
+
+        for (const invoiceDetail of invoicesToProcess) {
+          const sourceInvoice = selectedInvoices.find((invoice) => invoice.id === invoiceDetail.invoiceId);
+          const requestedAmount = Number(invoiceDetail.amount);
+          if (!sourceInvoice || requestedAmount <= 0) {
+            throw new Error('Monto de factura invalido');
+          }
+          if (requestedAmount - Number(sourceInvoice.balance) > 0.01) {
+            throw new Error(`El monto aplicado excede el saldo de la factura ${sourceInvoice.id}`);
+          }
+        }
+      }
+
+      if (purchases && purchases.length > 0) {
+        const purchaseIds = purchases.map((purchase: any) => purchase.purchaseId);
+        const selectedPurchases = await tx.purchase.findMany({
+          where: { id: { in: purchaseIds } },
+          select: {
+            id: true,
+            supplierId: true,
+            branchId: true,
+            balance: true,
+            total: true,
+            paid: true,
+          }
+        });
+
+        if (selectedPurchases.length !== purchaseIds.length) {
+          throw new Error('Una o mas compras no existen');
+        }
+
+        for (const purchase of selectedPurchases) {
+          if (purchase.supplierId !== supplierId) {
+            throw new Error('Todas las compras deben pertenecer al mismo proveedor');
+          }
+        }
+
+        const purchaseBranches = Array.from(new Set(selectedPurchases.map((purchase) => purchase.branchId).filter(Boolean)));
+        if (!resolvedBranchId && purchaseBranches.length === 1) {
+          resolvedBranchId = purchaseBranches[0] as string;
+        }
+        if (resolvedBranchId && purchaseBranches.some((candidate) => candidate !== resolvedBranchId)) {
+          throw new Error('No se pueden mezclar compras de sucursales distintas en un mismo pago');
+        }
+
+        for (const purchaseDetail of purchases) {
+          const sourcePurchase = selectedPurchases.find((purchase) => purchase.id === purchaseDetail.purchaseId);
+          const requestedAmount = Number(purchaseDetail.amount);
+          if (!sourcePurchase || requestedAmount <= 0) {
+            throw new Error('Monto de compra invalido');
+          }
+          if (requestedAmount - Number(sourcePurchase.balance) > 0.01) {
+            throw new Error(`El monto aplicado excede el saldo de la compra ${sourcePurchase.id}`);
+          }
+        }
+      }
+
+      let cashRegisterId: string | null = null;
+      if (paymentMethod === 'CASH') {
+        if (!resolvedBranchId) {
+          throw new Error('Debe especificar una sucursal valida para pagos en efectivo');
+        }
+
+        const openCash = await tx.cashRegister.findFirst({
+          where: {
+            branchId: resolvedBranchId,
+            status: 'OPEN',
+          },
+          orderBy: { openedAt: 'desc' },
+        });
+
+        if (!openCash) {
+          throw new Error('No hay una caja abierta para registrar este pago en efectivo');
+        }
+
+        cashRegisterId = openCash.id;
+      }
+
       // Crear el pago
       const newPayment = await tx.supplierPayment.create({
         data: {
           code,
           supplierId,
-          branchId: branchId || null,
+          branchId: resolvedBranchId,
           userId,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
           amount: Number(amount),
@@ -295,7 +408,7 @@ export async function createSupplierPayment(req: TenantRequest, res: Response) {
           if (newBalance <= 0) {
             newStatus = 'PAID';
           } else if (newPaid > 0) {
-            newStatus = 'PARTIAL';
+            newStatus = invoice.dueDate < new Date() ? 'OVERDUE' : 'PARTIAL';
           }
 
           // Actualizar factura
@@ -348,6 +461,21 @@ export async function createSupplierPayment(req: TenantRequest, res: Response) {
         }
       }
 
+      if (cashRegisterId) {
+        await tx.cashMovement.create({
+          data: {
+            cashRegisterId,
+            type: 'MANUAL_EXIT',
+            concept: `Pago a proveedor ${code}`,
+            amount: Number(amount),
+            method: paymentMethod,
+            paymentId: newPayment.id,
+            userId,
+            observations: notes || reference || 'Pago a proveedor',
+          }
+        });
+      }
+
       // Retornar pago con relaciones
       return tx.supplierPayment.findUnique({
         where: { id: newPayment.id },
@@ -376,6 +504,24 @@ export async function createSupplierPayment(req: TenantRequest, res: Response) {
     });
   } catch (error) {
     console.error('Create supplier payment error:', error);
+
+    if (error instanceof Error) {
+      const businessErrorMap: Array<{ pattern: RegExp; code: string; status: number }> = [
+        { pattern: /no existen|no encontrada/i, code: 'NOT_FOUND', status: 404 },
+        { pattern: /mismo proveedor|monto .* invalido|excede el saldo|mezclar .* sucursales|sucursal valida|caja abierta/i, code: 'BUSINESS_RULE_ERROR', status: 400 },
+      ];
+
+      const matchedError = businessErrorMap.find((entry) => entry.pattern.test(error.message));
+      if (matchedError) {
+        return res.status(matchedError.status).json({
+          error: {
+            code: matchedError.code,
+            message: error.message,
+          }
+        });
+      }
+    }
+
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'Error al crear pago' }
     });
@@ -398,7 +544,8 @@ export async function deleteSupplierPayment(req: TenantRequest, res: Response) {
     const payment = await prisma.supplierPayment.findUnique({
       where: { id },
       include: {
-        details: true
+        details: true,
+        purchaseDetails: true
       }
     });
 
@@ -443,6 +590,29 @@ export async function deleteSupplierPayment(req: TenantRequest, res: Response) {
           });
         }
       }
+
+      for (const detail of payment.purchaseDetails) {
+        const purchase = await tx.purchase.findUnique({
+          where: { id: detail.purchaseId }
+        });
+
+        if (purchase) {
+          const newPaid = Math.max(Number(purchase.paid) - Number(detail.amount), 0);
+          const newBalance = Math.max(Number(purchase.total) - newPaid, 0);
+
+          await tx.purchase.update({
+            where: { id: detail.purchaseId },
+            data: {
+              paid: newPaid,
+              balance: newBalance
+            }
+          });
+        }
+      }
+
+      await tx.cashMovement.deleteMany({
+        where: { paymentId: id }
+      });
 
       // Eliminar pago (los detalles se eliminan en cascada)
       await tx.supplierPayment.delete({

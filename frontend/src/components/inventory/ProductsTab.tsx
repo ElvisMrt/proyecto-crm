@@ -4,7 +4,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HiDotsVertical, HiPencil, HiTrash } from 'react-icons/hi';
 
-const ProductsTab = () => {
+interface ProductsTabProps {
+  focusedProductId?: string;
+}
+
+const ProductsTab = ({ focusedProductId = '' }: ProductsTabProps) => {
   const { showToast, showConfirm } = useToast();
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
@@ -54,6 +58,27 @@ const ProductsTab = () => {
   useEffect(() => {
     fetchProducts();
   }, [filters.page, filters.categoryId, filters.isActive]);
+
+  useEffect(() => {
+    const loadFocusedProduct = async () => {
+      if (!focusedProductId) {
+        return;
+      }
+
+      try {
+        const product = await inventoryApi.getProduct(focusedProductId);
+        setFilters((prev) => ({
+          ...prev,
+          search: product.code || product.name,
+          page: 1,
+        }));
+      } catch (error) {
+        console.error('Error fetching focused product:', error);
+      }
+    };
+
+    loadFocusedProduct();
+  }, [focusedProductId]);
 
   const fetchCategories = async () => {
     try {
@@ -693,5 +718,4 @@ const ProductsTab = () => {
 };
 
 export default ProductsTab;
-
 

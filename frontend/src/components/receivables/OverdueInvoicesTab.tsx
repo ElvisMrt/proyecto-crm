@@ -198,15 +198,14 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rango de Días</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Rango de días</label>
             <select
               value={filters.days}
               onChange={(e) => setFilters({ ...filters, days: e.target.value, page: 1 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
             >
               <option value="">Todos</option>
               <option value="0-30">0-30 días</option>
@@ -216,7 +215,7 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Buscar</label>
             <input
               type="text"
               placeholder="Cliente, factura, NCF..."
@@ -225,13 +224,13 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
               onKeyPress={(e) => {
                 if (e.key === 'Enter') fetchOverdue();
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
             />
           </div>
           <div className="flex items-end">
             <button
               onClick={fetchOverdue}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+              className="w-full rounded-xl bg-slate-950 px-4 py-2.5 font-medium text-white dark:bg-white dark:text-slate-950"
             >
               Buscar
             </button>
@@ -239,45 +238,44 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Cargando facturas vencidas...</p>
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-slate-700 dark:border-slate-300"></div>
+            <p className="mt-4 text-slate-600 dark:text-slate-400">Cargando facturas vencidas...</p>
           </div>
         ) : invoices.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No hay facturas vencidas</div>
+          <div className="py-12 text-center text-slate-500 dark:text-slate-400">No hay facturas vencidas</div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-900/80">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nro. Factura</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vencimiento</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Días Vencida</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Balance Pendiente</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Cliente</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Factura</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Vencimiento</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Días vencida</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Balance pendiente</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-slate-200 dark:bg-slate-950 dark:divide-slate-800">
                   {invoices.map((item) => (
-                    <tr key={item.invoice.id} className="hover:bg-gray-50">
+                    <tr key={item.invoice.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/60">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{item.client.name}</div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">{item.client.name}</div>
                         {item.client.phone && (
-                          <div className="text-xs text-gray-500">{item.client.phone}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{item.client.phone}</div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{item.invoice.number}</div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">{item.invoice.number}</div>
                         {item.invoice.ncf && (
-                          <div className="text-xs text-gray-500">{item.invoice.ncf}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{item.invoice.ncf}</div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                         {formatDate(item.invoice.dueDate)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -285,26 +283,26 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
                           ⬢ {item.invoice.daysOverdue} día{item.invoice.daysOverdue !== 1 ? 's' : ''}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">
                         {formatCurrency(item.invoice.balance)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                         <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => handleCollect(item.invoice.id, item.client.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-1 px-3 rounded"
+                            className="rounded-lg bg-slate-950 px-3 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-950"
                           >
                             Cobrar
                           </button>
                           <button
                             onClick={() => handleViewAccountStatus(item.client.id)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium py-1 px-3 rounded"
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
                           >
                             Ver Estado
                           </button>
                           <button
                             onClick={() => handleCreateTask(item.client.id, item.invoice.id)}
-                            className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium py-1 px-3 rounded"
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
                           >
                             Tarea
                           </button>
@@ -313,7 +311,7 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
                               href={`https://wa.me/${item.client.phone.replace(/\D/g, '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-1 px-3 rounded inline-flex items-center"
+                              className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
                             >
                               📞
                             </a>
@@ -328,8 +326,8 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
 
             {/* Paginación */}
             {pagination.totalPages > 1 && (
-              <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
-                <div className="text-sm text-gray-700">
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/70">
+                <div className="text-sm text-slate-700 dark:text-slate-300">
                   Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{' '}
                   {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
                   {pagination.total} facturas vencidas
@@ -338,14 +336,14 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
                   <button
                     onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
                     disabled={filters.page === 1}
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   >
                     Anterior
                   </button>
                   <button
                     onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
                     disabled={filters.page >= pagination.totalPages}
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   >
                     Siguiente
                   </button>
@@ -360,4 +358,3 @@ const OverdueInvoicesTab = ({ branchId, onNavigateToPayment, onNavigateToStatus 
 };
 
 export default OverdueInvoicesTab;
-

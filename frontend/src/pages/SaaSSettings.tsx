@@ -1,214 +1,146 @@
-import { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { HiExclamationCircle, HiShieldCheck } from 'react-icons/hi';
+import { saasApi } from '../services/api';
 
-const SaaSSettings = () => {
-  const [settings, setSettings] = useState({
-    companyName: 'Neypier SaaS',
-    supportEmail: 'soporte@neypier.com',
-    maxTenantsPerPlan: {
-      basic: 100,
-      pro: 500,
-      enterprise: 1000,
-    },
-    maintenanceMode: false,
-    allowNewSignups: true,
+interface Stats {
+  totalTenants: number;
+  activeTenants: number;
+  totalRevenue: number;
+  newThisMonth: number;
+}
+
+const environmentLabel = import.meta.env.MODE === 'production' ? 'Produccion' : 'Desarrollo';
+
+const SaaSSettings: React.FC = () => {
+  const [stats, setStats] = useState<Stats>({
+    totalTenants: 0,
+    activeTenants: 0,
+    totalRevenue: 0,
+    newThisMonth: 0,
   });
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    console.log('Guardando configuración:', settings);
-    // TODO: Implementar guardado en backend
-  };
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await saasApi.get('/saas/stats');
+        setStats(response.data.data || { totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
+      } catch {
+        setStats({ totalTenants: 0, activeTenants: 0, totalRevenue: 0, newThisMonth: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  const systemCards = useMemo(
+    () => [
+      { label: 'Entorno', value: environmentLabel, note: 'Lectura local del frontend' },
+      { label: 'API base', value: import.meta.env.VITE_API_URL || 'Proxy local /api/v1', note: 'Fuente actual del panel' },
+      { label: 'Tenants', value: stats.totalTenants, note: `${stats.activeTenants} activos` },
+      { label: 'Nuevos este mes', value: stats.newThisMonth, note: 'Alta reciente en master DB' },
+    ],
+    [stats]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-slate-700" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Configuración del Sistema</h1>
-        <p className="text-gray-600 mt-1">Configuración general del panel SaaS Admin</p>
-      </div>
+    <div className="space-y-6">
+      <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Configuracion</p>
+        <h1 className="mt-1 text-2xl font-bold text-slate-950">Estado del panel SaaS</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">
+          Esta pantalla ya no simula un formulario persistente. Hoy funciona como un panel de lectura para entorno,
+          alcance actual y decisiones pendientes del panel maestro.
+        </p>
+      </section>
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-6">
-        {/* Información General */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Información General</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nombre de la Empresa
-              </label>
-              <input
-                type="text"
-                value={settings.companyName}
-                onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {systemCards.map((item) => (
+          <div key={item.label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="mt-3 text-2xl font-bold text-slate-950">{item.value}</p>
+            <p className="mt-1 text-sm text-slate-500">{item.note}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <HiShieldCheck className="h-5 w-5 text-slate-500" />
+            <h2 className="text-lg font-semibold text-slate-950">Alcance real del modulo</h2>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-950">Lo que ya opera</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>• autenticacion de super admin</li>
+                <li>• dashboard SaaS y bandeja de tenants</li>
+                <li>• detalle de tenant con usuarios, billing, backups y auditoria</li>
+                <li>• facturacion SaaS con generacion y registro de pago</li>
+                <li>• productos del website</li>
+              </ul>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email de Soporte
-              </label>
-              <input
-                type="email"
-                value={settings.supportEmail}
-                onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-950">Lo que aun falta cerrar</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>• restaurar backup desde UI</li>
+                <li>• reprovisionar tenant fallido</li>
+                <li>• crear usuario del tenant desde SaaS</li>
+                <li>• lifecycle mas rico: trial, mora, archivado</li>
+                <li>• ajustes SaaS persistentes si realmente se necesitan</li>
+              </ul>
             </div>
           </div>
         </div>
 
-        {/* Límites por Plan */}
-        <div className="border-t pt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Límites por Plan</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Plan Básico
-              </label>
-              <input
-                type="number"
-                value={settings.maxTenantsPerPlan.basic}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    maxTenantsPerPlan: {
-                      ...settings.maxTenantsPerPlan,
-                      basic: parseInt(e.target.value),
-                    },
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        <div className="space-y-5">
+          <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-6">
+            <div className="flex items-center gap-2 text-amber-800">
+              <HiExclamationCircle className="h-5 w-5" />
+              <h2 className="text-base font-semibold">Decision de producto</h2>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Plan Pro
-              </label>
-              <input
-                type="number"
-                value={settings.maxTenantsPerPlan.pro}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    maxTenantsPerPlan: {
-                      ...settings.maxTenantsPerPlan,
-                      pro: parseInt(e.target.value),
-                    },
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Plan Enterprise
-              </label>
-              <input
-                type="number"
-                value={settings.maxTenantsPerPlan.enterprise}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    maxTenantsPerPlan: {
-                      ...settings.maxTenantsPerPlan,
-                      enterprise: parseInt(e.target.value),
-                    },
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            <p className="mt-4 text-sm text-amber-800/90">
+              Si quieres una configuracion SaaS editable, hay que modelarla y persistirla en backend. Mantener un formulario
+              local sin guardar solo introduce ruido y expectativas falsas.
+            </p>
           </div>
-        </div>
 
-        {/* Opciones del Sistema */}
-        <div className="border-t pt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Opciones del Sistema</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Modo Mantenimiento</label>
-                <p className="text-sm text-gray-500">
-                  Deshabilita el acceso de todos los tenants temporalmente
-                </p>
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Sistema</h2>
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <div className="flex items-center justify-between">
+                <span>Frontend</span>
+                <span className="font-medium text-slate-950">React + Vite</span>
               </div>
-              <button
-                onClick={() =>
-                  setSettings({ ...settings, maintenanceMode: !settings.maintenanceMode })
-                }
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.maintenanceMode ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    settings.maintenanceMode ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Permitir Nuevos Registros</label>
-                <p className="text-sm text-gray-500">
-                  Permite que nuevos tenants se registren en el sistema
-                </p>
+              <div className="flex items-center justify-between">
+                <span>Backend</span>
+                <span className="font-medium text-slate-950">Express + Prisma</span>
               </div>
-              <button
-                onClick={() =>
-                  setSettings({ ...settings, allowNewSignups: !settings.allowNewSignups })
-                }
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.allowNewSignups ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    settings.allowNewSignups ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <div className="flex items-center justify-between">
+                <span>Base de datos</span>
+                <span className="font-medium text-slate-950">PostgreSQL</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Fecha</span>
+                <span className="font-medium text-slate-950">12 de marzo de 2026</span>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Botones de Acción */}
-        <div className="border-t pt-6 flex justify-end space-x-3">
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Guardar Cambios
-          </button>
-        </div>
-      </div>
-
-      {/* Información del Sistema */}
-      <div className="mt-6 bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Información del Sistema</h2>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-gray-600">Versión:</span>
-            <span className="ml-2 font-medium">1.0.0</span>
-          </div>
-          <div>
-            <span className="text-gray-600">Entorno:</span>
-            <span className="ml-2 font-medium">Desarrollo</span>
-          </div>
-          <div>
-            <span className="text-gray-600">Base de Datos:</span>
-            <span className="ml-2 font-medium">PostgreSQL</span>
-          </div>
-          <div>
-            <span className="text-gray-600">Última Actualización:</span>
-            <span className="ml-2 font-medium">Febrero 2026</span>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

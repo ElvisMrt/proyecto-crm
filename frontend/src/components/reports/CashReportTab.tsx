@@ -141,20 +141,20 @@ const CashReportTab = () => {
   }
 
   if (!data) {
-    return <div className="text-center py-12 text-gray-500">No hay datos disponibles</div>;
+    return <div className="py-12 text-center text-slate-500 dark:text-slate-400">No hay datos disponibles</div>;
   }
 
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
+          <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-100">Filtros</h3>
           <div className="flex space-x-2">
             <button
               onClick={handleExportExcel}
               disabled={!data?.data || data.data.length === 0}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-md flex items-center space-x-2"
+              className="flex items-center space-x-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200 dark:disabled:bg-slate-700"
             >
               <HiDownload className="w-4 h-4" />
               <span>Excel</span>
@@ -162,7 +162,7 @@ const CashReportTab = () => {
             <button
               onClick={handleExportPDF}
               disabled={!data?.data || data.data.length === 0}
-              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-md flex items-center space-x-2"
+              className="flex items-center space-x-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:border-slate-800 dark:disabled:bg-slate-900 dark:disabled:text-slate-600"
             >
               <HiDocumentDownload className="w-4 h-4" />
               <span>PDF</span>
@@ -171,11 +171,11 @@ const CashReportTab = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Sucursal</label>
             <select
               value={filters.branchId}
               onChange={(e) => setFilters({ ...filters, branchId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800"
             >
               <option value="">Todas</option>
               {branches.map((branch) => (
@@ -186,21 +186,21 @@ const CashReportTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Desde</label>
             <input
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Hasta</label>
             <input
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800"
             />
           </div>
         </div>
@@ -213,7 +213,7 @@ const CashReportTab = () => {
                 endDate: new Date().toISOString().split('T')[0],
               });
             }}
-            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center space-x-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <HiXCircle className="w-4 h-4" />
             <span>Limpiar Filtros</span>
@@ -224,21 +224,21 @@ const CashReportTab = () => {
       {/* Summary */}
       {data?.summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm font-medium text-gray-600">Total Ingresos</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+          <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Ingresos</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-slate-100">
               {formatCurrency(data.summary.totalIncome)}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm font-medium text-gray-600">Total Egresos</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+          <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Egresos</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-slate-100">
               {formatCurrency(data.summary.totalExpenses)}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm font-medium text-gray-600">Total Diferencias</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+          <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Diferencias</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-slate-100">
               {formatCurrency(data.summary.totalDifference)}
             </p>
           </div>
@@ -246,42 +246,42 @@ const CashReportTab = () => {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
         {data?.data && data.data.length > 0 ? (
           <>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-100/70 dark:bg-slate-900/80">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Apertura</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Abierto por</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cerrado por</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ingresos</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Egresos</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Diferencia</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Fecha Apertura</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Abierto por</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Cerrado por</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Ingresos</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Egresos</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Diferencia</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Estado</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-950/50">
                   {currentData.map((cash: any) => (
-                    <tr key={cash.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <tr key={cash.id} className="hover:bg-slate-100/70 dark:hover:bg-slate-900/70">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {formatDate(cash.openedAt)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {cash.openedBy}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {cash.closedBy || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-green-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       {formatCurrency(cash.income)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-red-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-rose-600 dark:text-rose-400">
                       {formatCurrency(cash.expenses)}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
-                      cash.difference >= 0 ? 'text-green-600' : 'text-red-600'
+                      cash.difference >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                     }`}>
                       {formatCurrency(cash.difference)}
                     </td>
@@ -289,8 +289,8 @@ const CashReportTab = () => {
                       <span
                         className={`px-2 py-1 text-xs font-semibold rounded-full ${
                           cash.status === 'OPEN'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                            : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
                         }`}
                       >
                         {cash.status === 'OPEN' ? 'Abierta' : 'Cerrada'}
@@ -303,26 +303,26 @@ const CashReportTab = () => {
           </div>
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+              <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950/40 sm:px-6">
                 <div className="flex-1 flex justify-between sm:hidden">
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="relative inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     Anterior
                   </button>
                   <button
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="ml-3 relative inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     Siguiente
                   </button>
                 </div>
                 <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
                       Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
                       <span className="font-medium">{Math.min(endIndex, totalItems)}</span> de{' '}
                       <span className="font-medium">{totalItems}</span> resultados
@@ -333,7 +333,7 @@ const CashReportTab = () => {
                       <button
                         onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                         disabled={currentPage === 1}
-                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="relative inline-flex items-center rounded-l-2xl border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
                         Anterior
                       </button>
@@ -349,7 +349,7 @@ const CashReportTab = () => {
                           return (
                             <div key={page} className="flex items-center">
                               {showEllipsisBefore && (
-                                <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                <span className="relative inline-flex items-center border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                                   ...
                                 </span>
                               )}
@@ -357,8 +357,8 @@ const CashReportTab = () => {
                                 onClick={() => setCurrentPage(page)}
                                 className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                                   currentPage === page
-                                    ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                                    ? 'z-10 border-slate-900 bg-slate-900 text-white'
+                                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                                 }`}
                               >
                                 {page}
@@ -369,7 +369,7 @@ const CashReportTab = () => {
                       <button
                         onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                         disabled={currentPage === totalPages}
-                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="relative inline-flex items-center rounded-r-2xl border border-slate-200 bg-white px-2 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
                         Siguiente
                       </button>
@@ -380,7 +380,7 @@ const CashReportTab = () => {
             )}
           </>
         ) : (
-          <div className="text-center py-12 text-gray-500">No hay datos</div>
+          <div className="py-12 text-center text-slate-500 dark:text-slate-400">No hay datos</div>
         )}
       </div>
     </div>
@@ -388,5 +388,3 @@ const CashReportTab = () => {
 };
 
 export default CashReportTab;
-
-

@@ -40,7 +40,7 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
 
   const fetchProducts = async () => {
     try {
-      const response = await inventoryApi.getProducts({ limit: 100, isActive: 'true' });
+      const response = await inventoryApi.getProducts({ limit: 100, isActive: 'true', controlsStock: 'true' });
       setProducts(response.data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -260,5 +260,4 @@ const AdjustmentsTab = ({ onAdjustmentCreated }: AdjustmentsTabProps) => {
 };
 
 export default AdjustmentsTab;
-
 

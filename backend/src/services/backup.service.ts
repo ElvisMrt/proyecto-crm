@@ -12,9 +12,11 @@ const execAsync = promisify(exec);
  */
 export class BackupService {
   private backupDir: string;
+  private postgresBinDir: string | null;
 
   constructor() {
     this.backupDir = process.env.BACKUP_DIR || '/app/backups';
+    this.postgresBinDir = process.env.POSTGRES_BIN_DIR || this.detectPostgresBinDir();
     this.ensureBackupDir();
   }
 
@@ -43,17 +45,28 @@ export class BackupService {
     try {
       console.log(`[Backup] Iniciando backup de ${databaseName}...`);
 
-      // Obtener URL base de conexión
       const baseDatabaseUrl = process.env.DATABASE_URL || '';
-      const baseUrl = baseDatabaseUrl.replace(/\/[^/]*$/, '/postgres');
+      if (!baseDatabaseUrl) {
+        return { success: false, error: 'DATABASE_URL no configurada' };
+      }
+
+      const pgDumpCommand = this.resolveCommand('pg_dump');
+      const pgDumpAvailable = await this.commandExists(pgDumpCommand);
+      if (!pgDumpAvailable) {
+        return { success: false, error: 'pg_dump no está instalado en este entorno' };
+      }
 
       // Crear backup usando pg_dump
-      const dumpCommand = `pg_dump "${baseDatabaseUrl.replace(/\/[^/]*$/, `/${databaseName}`)}" | gzip > "${filepath}"`;
+      const dumpCommand = `set -o pipefail; "${pgDumpCommand}" "${baseDatabaseUrl.replace(/\/[^/]*$/, `/${databaseName}`)}" | gzip > "${filepath}"`;
       
-      await execAsync(dumpCommand, { timeout: 300000 });
+      await execAsync(`bash -lc '${dumpCommand.replace(/'/g, `'\\''`)}'`, { timeout: 300000 });
 
       // Obtener tamaño del archivo
       const stats = fs.statSync(filepath);
+      if (stats.size < 64) {
+        fs.unlinkSync(filepath);
+        return { success: false, error: 'El backup generado es inválido o está vacío' };
+      }
       const sizeMB = Math.round(stats.size / 1024 / 1024 * 100) / 100;
 
       console.log(`[Backup] ✅ Backup creado: ${filename} (${sizeMB} MB)`);
@@ -125,11 +138,20 @@ export class BackupService {
       console.log(`[Backup] Iniciando restauración de ${filename} a ${targetDatabaseName}...`);
 
       const baseDatabaseUrl = process.env.DATABASE_URL || '';
+      if (!baseDatabaseUrl) {
+        return { success: false, error: 'DATABASE_URL no configurada' };
+      }
+
+      const psqlCommand = this.resolveCommand('psql');
+      const psqlAvailable = await this.commandExists(psqlCommand);
+      if (!psqlAvailable) {
+        return { success: false, error: 'psql no está instalado en este entorno' };
+      }
 
       // Restaurar usando gunzip y psql
-      const restoreCommand = `gunzip -c "${filepath}" | psql "${baseDatabaseUrl.replace(/\/[^/]*$/, `/${targetDatabaseName}`)}"`;
+      const restoreCommand = `set -o pipefail; gunzip -c "${filepath}" | "${psqlCommand}" "${baseDatabaseUrl.replace(/\/[^/]*$/, `/${targetDatabaseName}`)}"`;
 
-      await execAsync(restoreCommand, { timeout: 300000 });
+      await execAsync(`bash -lc '${restoreCommand.replace(/'/g, `'\\''`)}'`, { timeout: 300000 });
 
       console.log(`[Backup] ✅ Restauración completada`);
 
@@ -251,6 +273,39 @@ export class BackupService {
       console.error('[Backup] Error limpiando backups antiguos:', error);
       return { deleted, errors };
     }
+  }
+
+  private async commandExists(command: string): Promise<boolean> {
+    try {
+      await execAsync(`test -x "${command}" || command -v "${command}"`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private resolveCommand(binaryName: string): string {
+    if (this.postgresBinDir) {
+      return path.join(this.postgresBinDir, binaryName);
+    }
+    return binaryName;
+  }
+
+  private detectPostgresBinDir(): string | null {
+    const candidates = [
+      '/Library/PostgreSQL/18/bin',
+      '/Library/PostgreSQL/17/bin',
+      '/Library/PostgreSQL/16/bin',
+      '/Applications/Postgres.app/Contents/Versions/latest/bin',
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
   }
 }
 

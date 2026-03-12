@@ -65,12 +65,10 @@ const SupplierInvoices = () => {
       setInvoices(data);
       
       const totalInvoices = data.length;
-      const pending = data.filter((inv: SupplierInvoice) => inv.status === 'PENDING').length;
-      const overdue = data.filter((inv: SupplierInvoice) => {
-        return inv.status === 'PENDING' && new Date(inv.dueDate) < new Date();
-      }).length;
+      const pending = data.filter((inv: SupplierInvoice) => inv.status === 'PENDING' || inv.status === 'PARTIAL').length;
+      const overdue = data.filter((inv: SupplierInvoice) => inv.status === 'OVERDUE').length;
       const totalDebt = data
-        .filter((inv: SupplierInvoice) => inv.status === 'PENDING')
+        .filter((inv: SupplierInvoice) => inv.status !== 'PAID' && inv.status !== 'CANCELLED')
         .reduce((sum: number, inv: SupplierInvoice) => sum + (inv.balance || 0), 0);
       
       setStats({
@@ -176,35 +174,43 @@ const SupplierInvoices = () => {
 
   const getStatusBadge = (invoice: SupplierInvoice) => {
     if (invoice.status === 'PAID') {
-      return <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Pagada</span>;
+      return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Pagada</span>;
     }
-    
-    const isOverdue = new Date(invoice.dueDate) < new Date();
-    if (isOverdue) {
-      return <span className="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-800">Vencida</span>;
+
+    if (invoice.status === 'CANCELLED') {
+      return <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-800">Cancelada</span>;
     }
-    
-    return <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">Pendiente</span>;
+
+    if (invoice.status === 'OVERDUE') {
+      return <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700">Vencida</span>;
+    }
+
+    if (invoice.status === 'PARTIAL') {
+      return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">Parcial</span>;
+    }
+
+    return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">Pendiente</span>;
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-slate-900"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5 p-4 md:p-6">
+      <div className="flex items-center justify-between rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Facturas de Proveedores</h1>
-          <p className="text-sm text-gray-500">Cuentas por pagar a proveedores</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Pasivos</p>
+          <h1 className="text-xl font-bold text-slate-950">Facturas de Proveedores</h1>
+          <p className="text-sm text-slate-500">Cuentas por pagar a proveedores</p>
         </div>
         <button 
           onClick={handleCreate}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center space-x-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           <HiPlus className="w-4 h-4" />
           <span>Nueva Factura</span>

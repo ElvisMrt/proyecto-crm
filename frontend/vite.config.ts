@@ -8,14 +8,13 @@ export default defineConfig({
     port: 5174,
     host: '0.0.0.0',
     allowedHosts: true,
-    hmr: {
-      clientPort: 443,
-      protocol: 'wss',
-    },
+    https: false, // Forzar HTTP
+    hmr: false, // Desactivar HMR temporalmente
     proxy: {
       '/api': {
-        target: 'http://backend:3000',
+        target: 'http://localhost:3001', // Backend local
         changeOrigin: true,
+        secure: false,
       },
     },
   },

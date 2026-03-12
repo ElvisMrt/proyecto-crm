@@ -3,6 +3,7 @@ import { whatsappApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { HiPlus, HiPencil, HiTrash, HiChat, HiSearch, HiDocumentDownload, HiXCircle, HiRefresh, HiCheckCircle, HiX } from 'react-icons/hi';
 import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import QRCode from 'qrcode';
 
 interface WhatsAppTemplate {
   id: string;
@@ -34,6 +35,9 @@ const WhatsAppTab = () => {
   // Estado de conexión WhatsApp
   const [instanceStatus, setInstanceStatus] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [qrText, setQrText] = useState<string | null>(null);
+  const [pairingPhone, setPairingPhone] = useState('');
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingQR, setLoadingQR] = useState(false);
   const fetchingQRRef = useRef(false);
@@ -162,9 +166,47 @@ const WhatsAppTab = () => {
 
   // fetchInstanceStatus ya está definido arriba con useCallback
 
-  const fetchQRCode = async () => {
+  const normalizeQrCode = (rawQrCode: string) => {
+    if (rawQrCode.startsWith('data:image/')) {
+      return rawQrCode;
+    }
+
+    return `data:image/png;base64,${rawQrCode}`;
+  };
+
+  useEffect(() => {
+    if (!qrText) {
+      return;
+    }
+
+    let cancelled = false;
+
+    QRCode.toDataURL(qrText, {
+      margin: 2,
+      width: 640,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setQrCode(dataUrl);
+        }
+      })
+      .catch((error) => {
+        console.error('Error generating local QR image:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [qrText]);
+
+  const fetchQRCode = async (force = false, phone?: string) => {
     // Prevenir múltiples llamadas simultáneas
-    if (loadingQR || fetchingQRRef.current || qrCode) {
+    if (loadingQR || fetchingQRRef.current || (!force && qrCode)) {
       return;
     }
     
@@ -178,23 +220,31 @@ const WhatsAppTab = () => {
       );
       
       const response = await Promise.race([
-        whatsappApi.getQRCode(),
+        whatsappApi.getQRCode(phone ? { number: phone } : undefined),
         timeoutPromise
       ]) as any;
       
       console.log('Get QR code response:', response);
+      setQrText(response?.qrText || null);
       if (response.qrCode) {
-        // Limpiar el QR code si ya tiene el prefijo data: duplicado
-        let cleanQR = response.qrCode;
-        if (cleanQR.includes('data:image/png;base64,data:')) {
-          cleanQR = cleanQR.replace('data:image/png;base64,data:', 'data:image/png;base64,');
+        if (!response?.qrText) {
+          setQrCode(normalizeQrCode(response.qrCode));
         }
-        setQrCode(cleanQR);
+        setPairingCode(response.pairingCode || null);
+      } else if (response.pairingCode) {
+        setPairingCode(response.pairingCode);
+        setQrCode(null);
       } else {
         console.warn('No QR code in response:', response);
+        if (force) {
+          setQrCode(null);
+          setPairingCode(null);
+        }
       }
+      return response;
     } catch (error: any) {
       console.error('Error fetching QR code:', error);
+      return null;
     } finally {
       setLoadingQR(false);
       fetchingQRRef.current = false;
@@ -204,16 +254,19 @@ const WhatsAppTab = () => {
   const handleCreateInstance = async () => {
     try {
       setLoadingQR(true);
-      const response = await whatsappApi.createInstance();
+      const response = await whatsappApi.createInstance(pairingPhone.trim() ? { phone: pairingPhone.trim() } : undefined);
       console.log('Create instance response:', response);
+      setQrText(response?.qrText || null);
       if (response.qrCode) {
-        // Limpiar el QR code si ya tiene el prefijo data: duplicado
-        let cleanQR = response.qrCode;
-        if (cleanQR.includes('data:image/png;base64,data:')) {
-          cleanQR = cleanQR.replace('data:image/png;base64,data:', 'data:image/png;base64,');
+        if (!response?.qrText) {
+          setQrCode(normalizeQrCode(response.qrCode));
         }
-        setQrCode(cleanQR);
+        setPairingCode(response.pairingCode || null);
         showToast('Instancia creada exitosamente. QR code generado.', 'success');
+      } else if (response.pairingCode) {
+        setPairingCode(response.pairingCode);
+        setQrCode(null);
+        showToast('Codigo de vinculacion generado.', 'success');
       } else {
         console.warn('No QR code in response:', response);
         showToast(response.message || 'Instancia creada pero no se pudo obtener el QR. Intenta actualizar.', 'warning');
@@ -228,9 +281,45 @@ const WhatsAppTab = () => {
   };
 
   const handleRefreshQR = async () => {
-    await fetchQRCode();
+    setQrCode(null);
+    setQrText(null);
+    setPairingCode(null);
+    await fetchQRCode(true, pairingPhone.trim() || undefined);
     showToast('QR code actualizado', 'success');
   };
+
+  const handleGeneratePairingCode = async () => {
+    if (!pairingPhone.trim()) {
+      showToast('Ingrese el numero de WhatsApp con codigo de pais', 'warning');
+      return;
+    }
+
+    setQrCode(null);
+    setQrText(null);
+    setPairingCode(null);
+    const response = await fetchQRCode(true, pairingPhone.trim());
+
+    if (response?.pairingCode) {
+      showToast('Codigo de vinculacion actualizado', 'success');
+    } else if (response?.qrCode) {
+      showToast('QR actualizado. Si el codigo no aparece, use el QR.', 'success');
+    } else {
+      showToast('No se pudo generar el codigo de vinculacion', 'warning');
+    }
+  };
+
+  useEffect(() => {
+    if (!instanceStatus?.exists || instanceStatus?.connected || instanceStatus?.status !== 'connecting') {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchQRCode(true, pairingPhone.trim() || undefined);
+      fetchInstanceStatus();
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchInstanceStatus, instanceStatus?.connected, instanceStatus?.exists, instanceStatus?.status, pairingPhone]);
 
   // fetchTemplates ya está definido arriba con useCallback
 
@@ -435,18 +524,51 @@ const WhatsAppTab = () => {
                   <button
                     onClick={handleCreateInstance}
                     disabled={loadingQR}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50"
+                    className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     {loadingQR ? 'Creando instancia...' : 'Crear Instancia y Generar QR'}
                   </button>
                 ) : (
                   <div className="space-y-4">
+                    <div className="space-y-3 rounded-[24px] bg-slate-50 p-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Vincular por numero
+                        </label>
+                        <input
+                          type="tel"
+                          value={pairingPhone}
+                          onChange={(e) => setPairingPhone(e.target.value)}
+                          placeholder="18091234567"
+                          className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Escribe el numero del WhatsApp con codigo de pais, sin espacios.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleGeneratePairingCode}
+                        disabled={loadingQR}
+                        className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {loadingQR ? 'Generando codigo...' : 'Generar Codigo de Vinculacion'}
+                      </button>
+                      {pairingCode && (
+                        <div className="rounded-[24px] border border-slate-200 bg-white p-4 text-center">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Codigo de vinculacion</p>
+                          <p className="mt-2 text-3xl font-bold tracking-[0.35em] text-slate-950">{pairingCode}</p>
+                          <p className="mt-2 text-xs text-slate-600">
+                            En WhatsApp, elige vincular con codigo e introduce este valor.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-gray-700">Código QR para conectar</p>
                       <button
                         onClick={handleRefreshQR}
                         disabled={loadingQR}
-                        className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
+                        className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-950 disabled:opacity-50"
                       >
                         <HiRefresh className={`w-4 h-4 ${loadingQR ? 'animate-spin' : ''}`} />
                         Actualizar QR
@@ -454,28 +576,32 @@ const WhatsAppTab = () => {
                     </div>
                     {loadingQR ? (
                       <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className="mt-2 text-gray-600">Generando QR...</p>
+                        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-slate-900"></div>
+                        <p className="mt-2 text-slate-600">Generando QR...</p>
                       </div>
                     ) : qrCode ? (
-                      <div className="flex flex-col items-center bg-gray-50 p-6 rounded-lg">
+                      <div className="flex flex-col items-center rounded-[24px] bg-slate-50 p-6">
                         <img
-                          src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                          src={qrCode}
                           alt="QR Code WhatsApp"
-                          className="max-w-xs w-full border-4 border-white rounded-lg shadow-lg"
+                          className="h-80 w-80 rounded-[24px] border-4 border-white bg-white shadow-lg"
+                          style={{ imageRendering: 'pixelated' }}
                         />
-                        <p className="mt-4 text-sm text-gray-600 text-center">
+                        <p className="mt-4 text-center text-sm text-slate-600">
                           1. Abre WhatsApp en tu teléfono<br />
                           2. Ve a Configuración → Dispositivos vinculados → Vincular un dispositivo<br />
                           3. Escanea este código QR
                         </p>
+                        <p className="mt-2 text-center text-xs text-slate-500">
+                          Si no escanea, pulsa "Actualizar QR" para regenerarlo y vuelve a intentar.
+                        </p>
                       </div>
                     ) : (
-                      <div className="text-center py-8 bg-gray-50 rounded-lg">
-                        <p className="text-gray-600">No hay QR code disponible. Intenta actualizar o crear la instancia.</p>
+                      <div className="rounded-[24px] bg-slate-50 py-8 text-center">
+                        <p className="text-slate-600">No hay QR code disponible. Intenta actualizar o crear la instancia.</p>
                         <button
                           onClick={handleCreateInstance}
-                          className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+                          className="mt-4 rounded-2xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-800"
                         >
                           Recrear Instancia
                         </button>
@@ -487,7 +613,7 @@ const WhatsAppTab = () => {
             )}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
+          <div className="py-8 text-center text-slate-500">
             No se pudo obtener el estado de la conexión
           </div>
         )}

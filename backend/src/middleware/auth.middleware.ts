@@ -3,6 +3,13 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
 const defaultPrisma = new PrismaClient();
+const localDemoPrisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: 'postgresql://postgres:CrmPostgres2024!@localhost:5432/crm_demo'
+    }
+  }
+});
 
 export interface AuthRequest extends Request {
   user?: {
@@ -66,8 +73,7 @@ export const authenticate = async (
       throw jwtError;
     }
 
-    // Usar prisma del tenant si está disponible, sino el default
-    const prisma = req.tenantPrisma || defaultPrisma;
+    const prisma = req.tenantPrisma || localDemoPrisma || defaultPrisma;
 
     // Buscar usuario en la BD correspondiente
     const user = await prisma.user.findUnique({
@@ -130,6 +136,5 @@ export const requireRole = (...roles: string[]) => {
     next();
   };
 };
-
 
 

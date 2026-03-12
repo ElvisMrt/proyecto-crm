@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { HiOutlinePhotograph, HiPlus, HiSearch } from 'react-icons/hi';
+import { saasApi } from '../services/api';
 
 const API_BASE = (() => {
   const url = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.host}/api/v1`;
   return url.replace('/api/v1', '');
 })();
 
-const SAAS_API = `${API_BASE}/api/v1/saas/website-products`;
 const UPLOAD_API = `${API_BASE}/api/v1/saas/upload-image`;
 
 const CATEGORIES = [
@@ -18,13 +19,13 @@ const CATEGORIES = [
 ];
 
 const TAGS = [
-  { id: 'best-seller', name: 'Más Vendido' },
+  { id: 'best-seller', name: 'Mas vendido' },
   { id: 'new', name: 'Nuevo' },
   { id: 'discount', name: 'Oferta' },
   { id: 'trending', name: 'Tendencia' },
 ];
 
-const COLORS_PRESET = ['Blanco', 'Negro', 'Rojo', 'Azul', 'Verde', 'Amarillo', 'Gris', 'Marrón', 'Cyan', 'Rosa', 'Naranja', 'Morado'];
+const COLORS_PRESET = ['Blanco', 'Negro', 'Rojo', 'Azul', 'Verde', 'Amarillo', 'Gris', 'Marron', 'Cyan', 'Rosa', 'Naranja', 'Morado'];
 
 interface Product {
   id: string;
@@ -54,6 +55,39 @@ const emptyForm = {
   note: '',
 };
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: 'DOP',
+    minimumFractionDigits: 0,
+  }).format(Number(amount || 0));
+
+const resolveProductImageUrl = (value?: string) => {
+  if (!value) return '';
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.pathname.startsWith('/uploads/')) {
+        return `${API_BASE}${parsed.pathname}`;
+      }
+      return value;
+    } catch {
+      return value;
+    }
+  }
+
+  if (value.startsWith('/uploads/')) {
+    return `${API_BASE}${value}`;
+  }
+
+  if (value.startsWith('uploads/')) {
+    return `${API_BASE}/${value}`;
+  }
+
+  return value;
+};
+
 export default function SaaSProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,48 +102,55 @@ export default function SaaSProducts() {
   const [colorInput, setColorInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const token = localStorage.getItem('saasToken');
+  const showError = (message: string) => setError(message);
 
   const uploadImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setError('Solo se permiten imágenes (JPG, PNG, SVG, WebP)');
+      showError('Solo se permiten imagenes');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('La imagen no puede superar 5MB');
+      showError('La imagen no puede superar 5MB');
       return;
     }
+
     setUploading(true);
     setError('');
     try {
       const fd = new FormData();
       fd.append('image', file);
+      const token = localStorage.getItem('saasToken');
       const res = await fetch(UPLOAD_API, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: fd,
       });
       const data = await res.json();
       if (data.success) {
-        setForm(f => ({ ...f, imageUrl: data.url }));
+        setBrokenImages((current) => ({ ...current, preview: false }));
+        setForm((current) => ({ ...current, imageUrl: data.url || data.path || '' }));
       } else {
-        setError(data.message || 'Error al subir imagen');
+        showError(data.message || 'Error al subir imagen');
       }
     } catch {
-      setError('Error de conexión al subir imagen');
+      showError('Error de conexion al subir imagen');
     } finally {
       setUploading(false);
     }
-  }, [token]);
+  }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadImage(file);
-  }, [uploadImage]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file) uploadImage(file);
+    },
+    [uploadImage]
+  );
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,60 +158,61 @@ export default function SaaSProducts() {
     e.target.value = '';
   };
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
-
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(SAAS_API, { headers });
-      const data = await res.json();
-      if (data.success) setProducts(data.data);
-    } catch {
-      setError('Error al cargar productos');
+      const response = await saasApi.get('/saas/website-products');
+      setProducts(response.data.data || []);
+      setBrokenImages({});
+      setError('');
+    } catch (err: any) {
+      showError(err.response?.data?.error?.message || 'Error al cargar productos');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchProducts(); }, []);
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   const openCreate = () => {
     setEditingProduct(null);
     setForm(emptyForm);
     setColorInput('');
+    setError('');
     setShowModal(true);
   };
 
-  const openEdit = (p: Product) => {
-    setEditingProduct(p);
+  const openEdit = (product: Product) => {
+    setEditingProduct(product);
     setForm({
-      name: p.name,
-      description: p.description || '',
-      price: String(p.price),
-      category: p.category,
-      imageUrl: p.imageUrl || '',
-      colors: p.colors,
-      tags: p.tags,
-      isActive: p.isActive,
-      sortOrder: String(p.sortOrder),
-      note: p.note || '',
+      name: product.name,
+      description: product.description || '',
+      price: String(product.price),
+      category: product.category,
+      imageUrl: product.imageUrl || '',
+      colors: product.colors,
+      tags: product.tags,
+      isActive: product.isActive,
+      sortOrder: String(product.sortOrder),
+      note: product.note || '',
     });
     setColorInput('');
+    setError('');
     setShowModal(true);
   };
 
   const handleSave = async () => {
     if (!form.name || !form.price || !form.category) {
-      setError('Nombre, precio y categoría son requeridos');
+      showError('Nombre, precio y categoria son requeridos');
       return;
     }
+
     setSaving(true);
     setError('');
     try {
-      const body = JSON.stringify({
+      const payload = {
         name: form.name,
         description: form.description || undefined,
         price: parseFloat(form.price),
@@ -179,226 +221,251 @@ export default function SaaSProducts() {
         colors: form.colors,
         tags: form.tags,
         isActive: form.isActive,
-        sortOrder: parseInt(form.sortOrder) || 0,
+        sortOrder: parseInt(form.sortOrder, 10) || 0,
         note: form.note || undefined,
-      });
+      };
 
-      const url = editingProduct ? `${SAAS_API}/${editingProduct.id}` : SAAS_API;
-      const method = editingProduct ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers, body });
-      const data = await res.json();
-      if (data.success) {
-        setShowModal(false);
-        fetchProducts();
+      if (editingProduct) {
+        await saasApi.put(`/saas/website-products/${editingProduct.id}`, payload);
       } else {
-        setError(data.error?.message || 'Error al guardar');
+        await saasApi.post('/saas/website-products', payload);
       }
-    } catch {
-      setError('Error de conexión');
+
+      setShowModal(false);
+      await fetchProducts();
+    } catch (err: any) {
+      showError(err.response?.data?.error?.message || 'Error al guardar producto');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este producto?')) return;
+    if (!window.confirm('¿Eliminar este producto del website?')) return;
+
     setDeleting(id);
     try {
-      const res = await fetch(`${SAAS_API}/${id}`, { method: 'DELETE', headers });
-      const data = await res.json();
-      if (data.success) fetchProducts();
-    } catch {
-      setError('Error al eliminar');
+      await saasApi.delete(`/saas/website-products/${id}`);
+      await fetchProducts();
+    } catch (err: any) {
+      showError(err.response?.data?.error?.message || 'Error al eliminar producto');
     } finally {
       setDeleting(null);
     }
   };
 
   const toggleTag = (tag: string) => {
-    setForm(f => ({
-      ...f,
-      tags: f.tags.includes(tag) ? f.tags.filter(t => t !== tag) : [...f.tags, tag],
+    setForm((current) => ({
+      ...current,
+      tags: current.tags.includes(tag) ? current.tags.filter((item) => item !== tag) : [...current.tags, tag],
     }));
   };
 
   const toggleColor = (color: string) => {
-    setForm(f => ({
-      ...f,
-      colors: f.colors.includes(color) ? f.colors.filter(c => c !== color) : [...f.colors, color],
+    setForm((current) => ({
+      ...current,
+      colors: current.colors.includes(color)
+        ? current.colors.filter((item) => item !== color)
+        : [...current.colors, color],
     }));
   };
 
   const addCustomColor = () => {
-    const c = colorInput.trim();
-    if (c && !form.colors.includes(c)) {
-      setForm(f => ({ ...f, colors: [...f.colors, c] }));
+    const value = colorInput.trim();
+    if (value && !form.colors.includes(value)) {
+      setForm((current) => ({ ...current, colors: [...current.colors, value] }));
     }
     setColorInput('');
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchCat = filterCategory === 'all' || p.category === filterCategory;
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
+      const matchesSearch =
+        !search ||
+        product.name.toLowerCase().includes(search.toLowerCase()) ||
+        (product.description || '').toLowerCase().includes(search.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [products, filterCategory, search]);
 
-  const categoryName = (id: string) => CATEGORIES.find(c => c.id === id)?.name || id;
+  const stats = useMemo(() => {
+    return {
+      total: products.length,
+      active: products.filter((product) => product.isActive).length,
+      hidden: products.filter((product) => !product.isActive).length,
+      withImage: products.filter((product) => Boolean(product.imageUrl)).length,
+    };
+  }, [products]);
+
+  const categoryName = (id: string) => CATEGORIES.find((category) => category.id === id)?.name || id;
 
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Productos del Website</h1>
-          <p className="text-gray-500 text-sm mt-1">Gestiona los productos que se muestran en neypier.com</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Website</p>
+          <h1 className="text-2xl font-bold text-slate-950">Catalogo publico</h1>
+          <p className="mt-1 text-sm text-slate-500">Gestiona el contenido que aparece en la tienda publica de la marca.</p>
         </div>
         <button
+          type="button"
           onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nuevo Producto
+          <HiPlus className="h-4 w-4" />
+          Nuevo producto
         </button>
-      </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {[
+          { label: 'Productos', value: stats.total },
+          { label: 'Activos', value: stats.active },
+          { label: 'Ocultos', value: stats.hidden },
+          { label: 'Con imagen', value: stats.withImage },
+        ].map((item) => (
+          <div key={item.label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-950">{item.value}</p>
+          </div>
+        ))}
+      </section>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {error}
-          <button onClick={() => setError('')} className="ml-2 font-bold">×</button>
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <select
-            value={filterCategory}
-            onChange={e => setFilterCategory(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">Todas las categorías</option>
-            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+      <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Bandeja de productos</h2>
+              <p className="text-sm text-slate-500">Filtra por categoria o busca por nombre para mantener el website ordenado.</p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative min-w-[240px]">
+                <HiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar producto"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              >
+                <option value="all">Todas las categorias</option>
+                {CATEGORIES.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Stats por categoría */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 mb-6">
-        {[{ id: 'all', name: 'Todos' }, ...CATEGORIES].map(cat => {
-          const count = cat.id === 'all' ? products.length : products.filter(p => p.category === cat.id).length;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setFilterCategory(cat.id)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors text-center ${
-                filterCategory === cat.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <div className="font-bold text-lg">{count}</div>
-              <div>{cat.name}</div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-slate-700" />
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-40"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-            <p className="font-medium">No hay productos</p>
-            <p className="text-sm mt-1">Crea el primer producto con el botón "Nuevo Producto"</p>
+          <div className="px-6 py-16 text-center text-slate-500">
+            No hay productos que coincidan con el filtro actual.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+            <table className="min-w-full">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Producto</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Categoría</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Precio</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Colores</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tags</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Acciones</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Producto</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Categoria</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Precio</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Colores</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Tags</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Estado</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredProducts.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
+              <tbody className="divide-y divide-slate-200">
+                {filteredProducts.map((product) => (
+                  <tr key={product.id} className="hover:bg-slate-50">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-contain bg-gray-100 border border-gray-200" />
+                        {product.imageUrl && !brokenImages[product.id] ? (
+                          <img
+                            src={resolveProductImageUrl(product.imageUrl)}
+                            alt={product.name}
+                            className="h-12 w-12 rounded-2xl border border-slate-200 bg-slate-50 object-contain p-1"
+                            onError={() => setBrokenImages((current) => ({ ...current, [product.id]: true }))}
+                          />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+                            <HiOutlinePhotograph className="h-5 w-5" />
                           </div>
                         )}
                         <div>
-                          <div className="font-medium text-gray-900">{p.name}</div>
-                          {p.note && <div className="text-xs text-amber-600">{p.note}</div>}
-                          {p.description && <div className="text-xs text-gray-400 truncate max-w-xs">{p.description}</div>}
+                          <p className="font-medium text-slate-950">{product.name}</p>
+                          {product.note ? <p className="text-xs text-slate-500">{product.note}</p> : null}
+                          {product.description ? <p className="max-w-xs truncate text-xs text-slate-400">{product.description}</p> : null}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                        {categoryName(p.category)}
+                    <td className="px-6 py-4">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                        {categoryName(product.category)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">
-                      ${p.price.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-4 text-sm font-medium text-slate-950">{formatCurrency(product.price)}</td>
+                    <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
-                        {p.colors.slice(0, 4).map(c => (
-                          <span key={c} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{c}</span>
+                        {product.colors.slice(0, 4).map((color) => (
+                          <span key={color} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                            {color}
+                          </span>
                         ))}
-                        {p.colors.length > 4 && <span className="text-xs text-gray-400">+{p.colors.length - 4}</span>}
-                        {p.colors.length === 0 && <span className="text-xs text-gray-300">—</span>}
+                        {product.colors.length > 4 ? <span className="text-xs text-slate-400">+{product.colors.length - 4}</span> : null}
+                        {product.colors.length === 0 ? <span className="text-xs text-slate-300">—</span> : null}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
-                        {p.tags.map(t => (
-                          <span key={t} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs">{TAGS.find(tg => tg.id === t)?.name || t}</span>
+                        {product.tags.map((tag) => (
+                          <span key={tag} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                            {TAGS.find((item) => item.id === tag)?.name || tag}
+                          </span>
                         ))}
-                        {p.tags.length === 0 && <span className="text-xs text-gray-300">—</span>}
+                        {product.tags.length === 0 ? <span className="text-xs text-slate-300">—</span> : null}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {p.isActive ? 'Activo' : 'Inactivo'}
+                    <td className="px-6 py-4">
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${product.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {product.isActive ? 'Activo' : 'Oculto'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => openEdit(p)}
-                          className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                          type="button"
+                          onClick={() => openEdit(product)}
+                          className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                         >
                           Editar
                         </button>
                         <button
-                          onClick={() => handleDelete(p.id)}
-                          disabled={deleting === p.id}
-                          className="px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                          type="button"
+                          onClick={() => handleDelete(product.id)}
+                          disabled={deleting === product.id}
+                          className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                         >
-                          {deleting === p.id ? '...' : 'Eliminar'}
+                          {deleting === product.id ? '...' : 'Eliminar'}
                         </button>
                       </div>
                     </td>
@@ -408,277 +475,251 @@ export default function SaaSProducts() {
             </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Modal Crear/Editar */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">{editingProduct ? 'Editar producto' : 'Nuevo producto'}</h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                ×
               </button>
             </div>
-            <div className="p-6 space-y-4">
+
+            <div className="space-y-5 px-6 py-6">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
               )}
 
-              {/* Nombre */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Nombre *</label>
                 <input
                   type="text"
                   value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   placeholder="Ej: Gorras Ojo de Angel"
                 />
               </div>
 
-              {/* Descripción */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Descripcion</label>
                 <textarea
                   value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  placeholder="Descripción del producto..."
+                  onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  placeholder="Descripcion del producto"
                 />
               </div>
 
-              {/* Precio y Categoría */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio (RD$) *</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Precio (RD$) *</label>
                   <input
                     type="number"
                     step="0.01"
                     value={form.price}
-                    onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(e) => setForm((current) => ({ ...current, price: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Categoria *</label>
                   <select
                     value={form.category}
-                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setForm((current) => ({ ...current, category: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
-                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {CATEGORIES.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {/* Imagen: Drag & Drop */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Imagen del producto</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Imagen</label>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
 
-                {/* Input file oculto */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileInput}
-                />
-
-                {form.imageUrl ? (
-                  /* Preview con imagen ya cargada */
-                  <div className="relative inline-flex group">
+                {form.imageUrl && !brokenImages.preview ? (
+                  <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <img
-                      src={form.imageUrl.startsWith('/uploads/')
-                        ? `${API_BASE}${form.imageUrl}`
-                        : form.imageUrl}
+                      src={resolveProductImageUrl(form.imageUrl)}
                       alt="preview"
-                      className="h-28 w-28 object-contain rounded-xl border-2 border-blue-200 bg-gray-50 p-1 shadow-sm"
+                      className="h-24 w-24 rounded-2xl border border-slate-200 bg-white object-contain p-1"
+                      onError={() => setBrokenImages((current) => ({ ...current, preview: true }))}
                     />
-                    <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-1.5 bg-white rounded-lg text-gray-700 hover:bg-blue-50"
-                        title="Cambiar imagen"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-white"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Cambiar
                       </button>
                       <button
                         type="button"
-                        onClick={() => setForm(f => ({ ...f, imageUrl: '' }))}
-                        className="p-1.5 bg-white rounded-lg text-red-500 hover:bg-red-50"
-                        title="Quitar imagen"
+                        onClick={() => setForm((current) => ({ ...current, imageUrl: '' }))}
+                        className="rounded-xl border border-rose-200 px-3 py-2 text-sm text-rose-700 transition hover:bg-rose-50"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        Quitar
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
                     onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={() => !uploading && fileInputRef.current?.click()}
-                    className={`
-                      relative flex flex-col items-center justify-center gap-2 w-full h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all
-                      ${dragOver
-                        ? 'border-blue-500 bg-blue-50 scale-[1.01]'
-                        : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50'}
-                      ${uploading ? 'pointer-events-none opacity-60' : ''}
-                    `}
+                  onDrop={handleDrop}
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                    className={`flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed transition ${
+                      dragOver
+                        ? 'border-slate-400 bg-slate-100'
+                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
+                    } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
                   >
                     {uploading ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="animate-spin rounded-full h-7 w-7 border-2 border-blue-600 border-t-transparent"></div>
-                        <span className="text-xs text-blue-600 font-medium">Subiendo imagen...</span>
-                      </div>
+                      <>
+                        <div className="h-7 w-7 animate-spin rounded-full border-b-2 border-slate-700" />
+                        <span className="text-xs text-slate-500">Subiendo imagen...</span>
+                      </>
                     ) : (
                       <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={dragOver ? 'text-blue-500' : 'text-gray-400'}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        <div className="text-center">
-                          <p className="text-sm font-medium text-gray-700">
-                            {dragOver ? 'Suelta la imagen aquí' : 'Arrastra una imagen o haz clic'}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, SVG, WebP · máx 5MB</p>
-                        </div>
+                        <HiOutlinePhotograph className="h-7 w-7 text-slate-400" />
+                        <p className="text-sm font-medium text-slate-700">
+                          {dragOver ? 'Suelta la imagen aqui' : 'Arrastra una imagen o haz clic'}
+                        </p>
+                        <p className="text-xs text-slate-400">JPG, PNG, SVG, WebP · max 5MB</p>
                       </>
                     )}
                   </div>
                 )}
 
-                {/* URL manual como alternativa */}
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    value={form.imageUrl}
-                    onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 focus:ring-1 focus:ring-blue-400 focus:border-transparent"
-                    placeholder="O pega una URL: /imagenes/producto.svg o https://..."
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={form.imageUrl}
+                  onChange={(e) => setForm((current) => ({ ...current, imageUrl: e.target.value }))}
+                  className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  placeholder="O pega una URL manual"
+                />
               </div>
 
-              {/* Colores */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Colores disponibles</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {COLORS_PRESET.map(c => (
+                <label className="mb-2 block text-sm font-medium text-slate-700">Colores</label>
+                <div className="flex flex-wrap gap-2">
+                  {COLORS_PRESET.map((color) => (
                     <button
-                      key={c}
+                      key={color}
                       type="button"
-                      onClick={() => toggleColor(c)}
-                      className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                        form.colors.includes(c)
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                      onClick={() => toggleColor(color)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        form.colors.includes(color)
+                          ? 'border-slate-950 bg-slate-950 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {c}
+                      {color}
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="mt-3 flex gap-2">
                   <input
                     type="text"
                     value={colorInput}
-                    onChange={e => setColorInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomColor())}
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Agregar color personalizado..."
+                    onChange={(e) => setColorInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomColor())}
+                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    placeholder="Agregar color personalizado"
                   />
-                  <button type="button" onClick={addCustomColor} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200">
+                  <button
+                    type="button"
+                    onClick={addCustomColor}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
                     Agregar
                   </button>
                 </div>
-                {form.colors.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {form.colors.map(c => (
-                      <span key={c} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
-                        {c}
-                        <button type="button" onClick={() => toggleColor(c)} className="text-blue-400 hover:text-blue-700">×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
 
-              {/* Tags */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Segmentos / Tags</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Tags</label>
                 <div className="flex flex-wrap gap-2">
-                  {TAGS.map(t => (
+                  {TAGS.map((tag) => (
                     <button
-                      key={t.id}
+                      key={tag.id}
                       type="button"
-                      onClick={() => toggleTag(t.id)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors font-medium ${
-                        form.tags.includes(t.id)
-                          ? 'bg-purple-600 text-white border-purple-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+                      onClick={() => toggleTag(tag.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        form.tags.includes(tag.id)
+                          ? 'border-slate-950 bg-slate-950 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {t.name}
+                      {tag.name}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Nota y Orden */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nota visible</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nota visible</label>
                   <input
                     type="text"
                     value={form.note}
-                    onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Ej: NUEVO, OFERTA..."
+                    onChange={(e) => setForm((current) => ({ ...current, note: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    placeholder="Ej: NUEVO"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Orden de aparición</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Orden de aparicion</label>
                   <input
                     type="number"
                     value={form.sortOrder}
-                    onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(e) => setForm((current) => ({ ...current, sortOrder: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     placeholder="0"
                   />
                 </div>
               </div>
 
-              {/* Activo */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, isActive: !f.isActive }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.isActive ? 'bg-blue-600' : 'bg-gray-300'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-                <span className="text-sm text-gray-700">
-                  {form.isActive ? 'Visible en el website' : 'Oculto en el website'}
-                </span>
-              </div>
+              <label className="flex items-center gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) => setForm((current) => ({ ...current, isActive: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                />
+                Visible en el website
+              </label>
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
               <button
+                type="button"
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-white"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
               >
                 {saving ? 'Guardando...' : editingProduct ? 'Guardar cambios' : 'Crear producto'}
               </button>

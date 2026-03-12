@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { getTenantPrisma, TenantRequest } from '../middleware/tenant.middleware';
+import { TenantRequest, getTenantPrisma, masterPrisma } from '../middleware/tenant.middleware';
 import { z } from 'zod';
 import { sendPasswordResetEmail } from '../services/email.service';
 
@@ -16,12 +16,38 @@ const loginSchema = z.object({
   password: z.string().min(6),
 });
 
-export const login = async (req: TenantRequest, res: Response) => {
+const getAuthPrisma = async (req: Partial<TenantRequest>) => {
+  if (req.tenantPrisma) return req.tenantPrisma;
+
+  const tenantSubdomain = (req.headers?.['x-tenant-subdomain'] as string | undefined)?.trim();
+  if (tenantSubdomain) {
+    const tenant = await masterPrisma.tenant.findFirst({
+      where: { subdomain: tenantSubdomain, status: 'ACTIVE' },
+      select: { databaseUrl: true },
+    });
+
+    if (tenant?.databaseUrl) {
+      return getTenantPrisma(tenant.databaseUrl);
+    }
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    return new PrismaClient({
+      datasources: {
+        db: {
+          url: process.env.LOCAL_TENANT_DATABASE_URL || 'postgresql://postgres:CrmPostgres2024!@localhost:5432/crm_demo',
+        },
+      },
+    });
+  }
+
+  return defaultPrisma;
+};
+
+export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
-
-    // Usar el Prisma del tenant si está disponible, sino el default
-    const prisma = req.tenantPrisma || defaultPrisma;
+    const prisma = await getAuthPrisma(req as TenantRequest);
 
     // Find user - solo seleccionar campos necesarios (incluyendo password para verificación)
     const user = await prisma.user.findUnique({
@@ -172,17 +198,14 @@ export const me = async (req: AuthRequest, res: Response) => {
 };
 
 // POST /auth/forgot-password
-export const forgotPassword = async (req: TenantRequest, res: Response) => {
+export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email requerido' } });
     }
 
-    const prisma = req.tenantPrisma;
-    if (!prisma || !req.tenant) {
-      return res.status(400).json({ error: { code: 'TENANT_REQUIRED', message: 'Tenant no identificado' } });
-    }
+    const prisma = await getAuthPrisma(req as TenantRequest);
 
     // Buscar usuario (respuesta genérica para no revelar si existe)
     const user = await prisma.user.findUnique({
@@ -214,7 +237,7 @@ export const forgotPassword = async (req: TenantRequest, res: Response) => {
       to: user.email,
       name: user.name,
       resetToken,
-      tenantSlug: req.tenant.subdomain,
+      tenantSlug: 'demo'
     });
 
     res.json({ success: true, message: 'Si el email existe, recibirás instrucciones en breve.' });
@@ -225,7 +248,7 @@ export const forgotPassword = async (req: TenantRequest, res: Response) => {
 };
 
 // POST /auth/reset-password
-export const resetPassword = async (req: TenantRequest, res: Response) => {
+export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body;
     if (!token || !password || password.length < 6) {
@@ -234,10 +257,7 @@ export const resetPassword = async (req: TenantRequest, res: Response) => {
       });
     }
 
-    const prisma = req.tenantPrisma;
-    if (!prisma) {
-      return res.status(400).json({ error: { code: 'TENANT_REQUIRED', message: 'Tenant no identificado' } });
-    }
+    const prisma = await getAuthPrisma(req as TenantRequest);
 
     // Hash del token recibido para comparar con el almacenado
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -275,6 +295,5 @@ export const resetPassword = async (req: TenantRequest, res: Response) => {
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al restablecer contraseña' } });
   }
 };
-
 
 

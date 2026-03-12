@@ -2,13 +2,42 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { getTenantPrisma } from '../middleware/tenant.middleware';
 
+const parseCsvParam = (value: unknown): string[] => {
+  if (!value || typeof value !== 'string') {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const parseDateParam = (value: unknown, fallback?: Date) => {
+  if (typeof value !== 'string' || !value) {
+    return fallback ? new Date(fallback) : new Date();
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) {
+    return fallback ? new Date(fallback) : new Date();
+  }
+
+  return parsed;
+};
+
 
 export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
-    let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    let startDate = parseDateParam(req.query.startDate, new Date());
+    let endDate = parseDateParam(req.query.endDate, new Date());
     
     // If dates are invalid, use current month
     if (isNaN(startDate.getTime())) {
@@ -96,7 +125,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 
     if (currentCash) {
       const income = currentCash.movements
-        .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+        .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
         .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
       const expenses = currentCash.movements
         .filter((m: any) => m.type === 'MANUAL_EXIT')
@@ -145,7 +174,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
         dayEnd.setHours(23, 59, 59, 999);
 
         const incomeWhere: any = {
-          type: { in: ['SALE', 'PAYMENT', 'MANUAL_ENTRY', 'OPENING'] },
+          type: { in: ['SALE', 'PAYMENT', 'MANUAL_ENTRY'] },
           movementDate: { gte: dayStart, lte: dayEnd },
         };
         if (branchId) {
@@ -304,7 +333,7 @@ export const getGeneralSummary = async (req: AuthRequest, res: Response) => {
 export const getDailyProfit = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const date = req.query.date ? new Date(req.query.date as string) : new Date();
+    const date = parseDateParam(req.query.date, new Date());
     const branchId = req.query.branchId as string | undefined;
 
     date.setHours(0, 0, 0, 0);
@@ -384,10 +413,13 @@ export const getDailyProfit = async (req: AuthRequest, res: Response) => {
 export const getSalesReport = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    let startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    let endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    let startDate = parseDateParam(req.query.startDate, new Date());
+    let endDate = parseDateParam(req.query.endDate, new Date());
     const branchId = req.query.branchId as string | undefined;
     const clientId = req.query.clientId as string | undefined;
+    const clientIds = parseCsvParam(req.query.clientIds);
+    const productIds = parseCsvParam(req.query.productIds);
+    const categoryIds = parseCsvParam(req.query.categoryIds);
     const status = req.query.status as string | undefined;
 
     // If dates are invalid, use current month
@@ -408,8 +440,25 @@ export const getSalesReport = async (req: AuthRequest, res: Response) => {
 
     if (branchId) where.branchId = branchId;
     if (clientId) where.clientId = clientId;
+    if (clientIds.length > 0) {
+      where.clientId = { in: clientIds };
+    }
     if (status) where.status = status;
     else where.status = { not: 'CANCELLED' };
+    if (productIds.length > 0 || categoryIds.length > 0) {
+      where.items = {
+        some: {
+          ...(productIds.length > 0 ? { productId: { in: productIds } } : {}),
+          ...(categoryIds.length > 0
+            ? {
+                product: {
+                  categoryId: { in: categoryIds },
+                },
+              }
+            : {}),
+        },
+      };
+    }
 
     const invoices = await prisma.invoice.findMany({
       where,
@@ -546,8 +595,8 @@ export const getReceivablesReport = async (req: AuthRequest, res: Response) => {
 export const getCashReport = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    const startDate = parseDateParam(req.query.startDate, new Date());
+    const endDate = parseDateParam(req.query.endDate, new Date());
     const branchId = req.query.branchId as string | undefined;
 
     startDate.setHours(0, 0, 0, 0);
@@ -585,7 +634,7 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     const summary = cashRegisters.reduce(
       (acc, cash) => {
         const income = cash.movements
-          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
           .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
         const expenses = cash.movements
           .filter((m: any) => m.type === 'MANUAL_EXIT')
@@ -602,7 +651,7 @@ export const getCashReport = async (req: AuthRequest, res: Response) => {
     res.json({
       data: cashRegisters.map((cash) => {
         const income = cash.movements
-          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY' || m.type === 'OPENING')
+          .filter((m: any) => m.type === 'SALE' || m.type === 'PAYMENT' || m.type === 'MANUAL_ENTRY')
           .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
         const expenses = cash.movements
           .filter((m: any) => m.type === 'MANUAL_EXIT')
@@ -639,10 +688,19 @@ export const getInventoryReport = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branchId = req.query.branchId as string | undefined;
-    const branchFilter = branchId ? { branchId } : {};
+    const categoryIds = parseCsvParam(req.query.categoryIds);
 
     const stocks = await prisma.stock.findMany({
-      where: branchFilter,
+      where: {
+        ...(branchId ? { branchId } : {}),
+        ...(categoryIds.length > 0
+          ? {
+              product: {
+                categoryId: { in: categoryIds },
+              },
+            }
+          : {}),
+      },
       include: {
         product: {
           select: {
@@ -720,6 +778,9 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
       const totalPurchased = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0);
       const totalPaid = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.paid), 0);
       const totalBalance = supplier.invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
+      const overdueBalance = supplier.invoices
+        .filter((inv) => Number(inv.balance) > 0 && inv.dueDate && inv.dueDate < now)
+        .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
       const overdueInvoices = supplier.invoices.filter(
         (inv) => Number(inv.balance) > 0 && inv.dueDate && inv.dueDate < now
       ).length;
@@ -731,6 +792,7 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
         totalPurchased,
         totalPaid,
         totalBalance,
+        overdueBalance,
         invoicesCount: supplier.invoices.length,
         overdueInvoices,
         isActive: supplier.isActive,
@@ -741,9 +803,7 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
       totalSuppliers: suppliers.length,
       activeSuppliers: suppliers.filter((s: any) => s.isActive).length,
       totalDebt: suppliersWithFinancials.reduce((sum: number, s: any) => sum + s.totalBalance, 0),
-      totalOverdue: suppliersWithFinancials
-        .filter((s: any) => s.overdueInvoices > 0)
-        .reduce((sum: number, s: any) => sum + s.totalBalance, 0),
+      totalOverdue: suppliersWithFinancials.reduce((sum: number, s: any) => sum + s.overdueBalance, 0),
     };
 
     res.json({
@@ -764,8 +824,8 @@ export const getSuppliersReport = async (req: AuthRequest, res: Response) => {
 export const getPurchasesReport = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
-    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
-    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+    const startDate = parseDateParam(req.query.startDate, new Date());
+    const endDate = parseDateParam(req.query.endDate, new Date());
     const status = req.query.status as string | undefined;
 
     startDate.setHours(0, 0, 0, 0);
@@ -783,6 +843,7 @@ export const getPurchasesReport = async (req: AuthRequest, res: Response) => {
       where,
       include: {
         supplier: { select: { name: true } },
+        invoice: { select: { id: true } },
       },
       orderBy: { purchaseDate: 'desc' },
     });
@@ -802,7 +863,7 @@ export const getPurchasesReport = async (req: AuthRequest, res: Response) => {
         purchaseDate: p.purchaseDate.toISOString(),
         status: p.status,
         total: Number(p.total),
-        hasInvoice: false, // Se puede mejorar con una query adicional si es necesario
+        hasInvoice: Boolean(p.invoice),
       })),
       summary,
     });
@@ -891,4 +952,3 @@ export const getPayablesReport = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

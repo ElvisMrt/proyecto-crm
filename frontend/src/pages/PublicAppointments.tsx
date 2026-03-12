@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { HiBell, HiCheck, HiCalendar, HiUser, HiPhone, HiMail, HiLocationMarker } from 'react-icons/hi';
-import api from '../services/api';
+import { appointmentApi } from '../services/api';
 
 interface Appointment {
   id: string;
@@ -20,7 +19,6 @@ interface Appointment {
 }
 
 export default function PublicAppointments() {
-  const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -32,12 +30,9 @@ export default function PublicAppointments() {
 
   const fetchAppointments = async () => {
     try {
-      const response = await api.get('/appointments');
-      // Filtrar solo citas del formulario web
-      const webAppointments = response.data.data.filter(
-        (app: Appointment) => !app.isViewed
-      );
-      setAppointments(webAppointments);
+      const response = await appointmentApi.getUnreadAppointments();
+      setAppointments(response.data || []);
+      setUnreadCount(response.count || 0);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching appointments:', error);
@@ -47,8 +42,8 @@ export default function PublicAppointments() {
 
   const fetchUnreadCount = async () => {
     try {
-      const response = await api.get('/appointments/notifications/unread');
-      setUnreadCount(response.data.count);
+      const response = await appointmentApi.getUnreadAppointments();
+      setUnreadCount(response.count || 0);
     } catch (error) {
       console.error('Error fetching unread count:', error);
     }
@@ -56,7 +51,7 @@ export default function PublicAppointments() {
 
   const markAsViewed = async (id: string) => {
     try {
-      await api.put(`/appointments/${id}/view`);
+      await appointmentApi.markAsViewed(id);
       setAppointments(prev => prev.filter(app => app.id !== id));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {

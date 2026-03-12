@@ -28,6 +28,127 @@ const createInvoiceSchema = z.object({
   includeTax: z.boolean().optional(), // ITBIS opcional (si no se proporciona, usa type === 'FISCAL' como default)
 });
 
+const financeInvoiceSchema = z.object({
+  interestRate: z.number().min(0),
+  termMonths: z.number().int().positive(),
+  paymentFrequency: z.enum(['MONTHLY', 'BIWEEKLY', 'WEEKLY']).default('MONTHLY'),
+  startDate: z.string().optional(),
+  purpose: z.string().min(1).optional(),
+  collateral: z.string().optional().nullable(),
+  guarantee: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+const SALES_FINANCING_LOAN_PREFIX = 'PRESTAMO-';
+const toMoneyNumber = (value: any) => Number(value || 0);
+const roundMoney = (value: number) => Math.round(value * 100) / 100;
+
+const getFinancePeriods = (termMonths: number, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY') => {
+  switch (frequency) {
+    case 'BIWEEKLY':
+      return termMonths * 2;
+    case 'WEEKLY':
+      return termMonths * 4;
+    default:
+      return termMonths;
+  }
+};
+
+const getFinancePeriodicRate = (annualRate: number, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY') => {
+  switch (frequency) {
+    case 'BIWEEKLY':
+      return annualRate / 26 / 100;
+    case 'WEEKLY':
+      return annualRate / 52 / 100;
+    default:
+      return annualRate / 12 / 100;
+  }
+};
+
+const addFinancePeriod = (date: Date, frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY', periods = 1) => {
+  const nextDate = new Date(date);
+
+  if (frequency === 'MONTHLY') {
+    nextDate.setMonth(nextDate.getMonth() + periods);
+  } else if (frequency === 'BIWEEKLY') {
+    nextDate.setDate(nextDate.getDate() + (14 * periods));
+  } else {
+    nextDate.setDate(nextDate.getDate() + (7 * periods));
+  }
+
+  return nextDate;
+};
+
+const calculateFinanceInstallmentAmount = (
+  principal: number,
+  periodicRate: number,
+  totalPeriods: number
+) => {
+  if (periodicRate === 0) {
+    return principal / totalPeriods;
+  }
+
+  const factor = Math.pow(1 + periodicRate, totalPeriods);
+  return principal * ((periodicRate * factor) / (factor - 1));
+};
+
+const buildFinancingSchedule = (
+  amount: number,
+  interestRate: number,
+  termMonths: number,
+  frequency: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY',
+  startDate: Date
+) => {
+  const periods = getFinancePeriods(termMonths, frequency);
+  const periodicRate = getFinancePeriodicRate(interestRate, frequency);
+  const installmentAmount = calculateFinanceInstallmentAmount(amount, periodicRate, periods);
+  const schedule: Array<{
+    installmentNo: number;
+    dueDate: Date;
+    openingBalance: number;
+    principalAmount: number;
+    interestAmount: number;
+    totalAmount: number;
+  }> = [];
+
+  let balance = amount;
+
+  for (let i = 1; i <= periods; i++) {
+    const openingBalance = balance;
+    const interestAmount = periodicRate === 0 ? 0 : openingBalance * periodicRate;
+    const principalAmount = i === periods
+      ? openingBalance
+      : Math.min(openingBalance, installmentAmount - interestAmount);
+    const totalAmount = principalAmount + interestAmount;
+
+    schedule.push({
+      installmentNo: i,
+      dueDate: addFinancePeriod(startDate, frequency, i - 1),
+      openingBalance: roundMoney(openingBalance),
+      principalAmount: roundMoney(principalAmount),
+      interestAmount: roundMoney(interestAmount),
+      totalAmount: roundMoney(totalAmount),
+    });
+
+    balance = Math.max(0, balance - principalAmount);
+  }
+
+  return schedule;
+};
+
+const getNextSalesFinancingLoanNumber = async (prisma: any) => {
+  const latestLoan = await prisma.loan.findFirst({
+    orderBy: { createdAt: 'desc' },
+    select: { number: true },
+  });
+
+  const latestNumber = latestLoan?.number?.startsWith(SALES_FINANCING_LOAN_PREFIX)
+    ? parseInt(latestLoan.number.replace(SALES_FINANCING_LOAN_PREFIX, ''), 10)
+    : 0;
+
+  return `${SALES_FINANCING_LOAN_PREFIX}${String((latestNumber || 0) + 1).padStart(6, '0')}`;
+};
+
 export const getInvoices = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
@@ -124,9 +245,12 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
         // Calculate dynamic status based on current balance and due date
         let calculatedStatus = invoice.status;
         const balance = Number(invoice.balance);
-        
+
+        if (invoice.status === InvoiceStatus.CANCELLED) {
+          calculatedStatus = InvoiceStatus.CANCELLED;
+        }
         // If fully paid (balance = 0), always mark as PAID regardless of stored status
-        if (balance === 0) {
+        else if (balance === 0) {
           calculatedStatus = InvoiceStatus.PAID;
         }
         // If has balance and due date passed, mark as OVERDUE (only if currently ISSUED)
@@ -146,7 +270,6 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
             calculatedStatus = InvoiceStatus.ISSUED;
           }
         }
-        
         return {
         id: invoice.id,
         number: invoice.number,
@@ -272,9 +395,12 @@ export const getInvoice = async (req: AuthRequest, res: Response) => {
     const now = new Date();
     let calculatedStatus = invoice.status;
     const balance = Number(invoice.balance);
-    
+
+    if (invoice.status === InvoiceStatus.CANCELLED) {
+      calculatedStatus = InvoiceStatus.CANCELLED;
+    }
     // If fully paid (balance = 0), always mark as PAID regardless of stored status
-    if (balance === 0) {
+    else if (balance === 0) {
       calculatedStatus = InvoiceStatus.PAID;
     }
     // If has balance and due date passed, mark as OVERDUE (only if currently ISSUED)
@@ -1410,6 +1536,7 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
         where: { id },
         data: {
           status: InvoiceStatus.CANCELLED,
+          balance: 0,
           cancelledAt: new Date(),
           cancellationReason: reason,
           cancelledBy: req.user!.id,
@@ -1474,6 +1601,31 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
           }
         }
       }
+
+      if (invoice.paymentMethod === PaymentMethod.CASH && branchId) {
+        const openCash = await tx.cashRegister.findFirst({
+          where: {
+            status: 'OPEN',
+            branchId,
+          },
+        });
+
+        if (openCash) {
+          await tx.cashMovement.create({
+            data: {
+              cashRegisterId: openCash.id,
+              type: 'MANUAL_EXIT',
+              concept: `Reverso por anulacion factura ${invoice.number}`,
+              amount: Number(invoice.total),
+              method: PaymentMethod.CASH,
+              invoiceId: invoice.id,
+              userId: req.user!.id,
+              movementDate: new Date(),
+              observations: `Anulacion de factura: ${reason}`,
+            },
+          });
+        }
+      }
     });
 
     res.json({
@@ -1492,6 +1644,15 @@ export const cancelInvoice = async (req: AuthRequest, res: Response) => {
       },
     });
   }
+};
+
+export const financeInvoice = async (req: AuthRequest, res: Response) => {
+  return res.status(400).json({
+    error: {
+      code: 'FINANCING_MOVED_TO_RECEIVABLES',
+      message: 'El financiamiento de facturas ahora se gestiona desde Cuentas por Cobrar, no desde Prestamos.',
+    },
+  });
 };
 
 export const deleteInvoice = async (req: AuthRequest, res: Response) => {
@@ -2593,13 +2754,28 @@ export const createCreditNote = async (req: AuthRequest, res: Response) => {
         },
       });
 
-      // Update invoice balance
+      const currentBalance = Number(invoice.balance);
+      const nextBalance = invoice.paymentMethod === PaymentMethod.CREDIT
+        ? Math.max(0, currentBalance - total)
+        : currentBalance;
+
+      let nextStatus = invoice.status;
+      if (invoice.status !== InvoiceStatus.CANCELLED) {
+        if (nextBalance === 0) {
+          nextStatus = InvoiceStatus.PAID;
+        } else if (invoice.dueDate && invoice.dueDate < new Date()) {
+          nextStatus = InvoiceStatus.OVERDUE;
+        } else {
+          nextStatus = InvoiceStatus.ISSUED;
+        }
+      }
+
+      // Update invoice balance/status
       await tx.invoice.update({
         where: { id: data.invoiceId },
         data: {
-          balance: {
-            decrement: total,
-          },
+          balance: nextBalance,
+          status: nextStatus,
         },
       });
 
@@ -2812,4 +2988,3 @@ export const getCancelledInvoices = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

@@ -161,9 +161,37 @@ export async function getSupplierInvoices(req: TenantRequest, res: Response) {
       total = 0;
     }
 
+    const now = new Date();
+
     res.json({
       success: true,
-      data: invoices,
+      data: invoices.map((invoice: any) => {
+        const balance = Number(invoice.balance);
+        let calculatedStatus = invoice.status;
+
+        if (invoice.status === 'CANCELLED') {
+          calculatedStatus = 'CANCELLED';
+        } else if (balance <= 0) {
+          calculatedStatus = 'PAID';
+        } else if (Number(invoice.paid) > 0) {
+          calculatedStatus = invoice.dueDate < now ? 'OVERDUE' : 'PARTIAL';
+        } else if (invoice.dueDate < now) {
+          calculatedStatus = 'OVERDUE';
+        } else {
+          calculatedStatus = 'PENDING';
+        }
+
+        return {
+          ...invoice,
+          subtotal: Number(invoice.subtotal),
+          tax: Number(invoice.tax),
+          discount: Number(invoice.discount),
+          total: Number(invoice.total),
+          paid: Number(invoice.paid),
+          balance,
+          status: calculatedStatus,
+        };
+      }),
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -275,6 +303,17 @@ export async function createSupplierInvoice(req: TenantRequest, res: Response) {
       });
     }
 
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { id: true }
+    });
+
+    if (!supplier) {
+      return res.status(400).json({
+        error: { code: 'SUPPLIER_NOT_FOUND', message: 'Proveedor no encontrado' }
+      });
+    }
+
     // Si hay purchaseId, verificar que no tenga factura
     if (purchaseId) {
       const existingInvoice = await prisma.supplierInvoice.findFirst({
@@ -350,6 +389,16 @@ export async function updateSupplierInvoice(req: TenantRequest, res: Response) {
       });
     }
 
+    const currentInvoice = await prisma.supplierInvoice.findUnique({
+      where: { id }
+    });
+
+    if (!currentInvoice) {
+      return res.status(404).json({
+        error: { code: 'NOT_FOUND', message: 'Factura no encontrada' }
+      });
+    }
+
     const {
       invoiceDate,
       dueDate,
@@ -362,16 +411,46 @@ export async function updateSupplierInvoice(req: TenantRequest, res: Response) {
       reference
     } = req.body;
 
+    const nextSubtotal = subtotal !== undefined ? Number(subtotal) : Number(currentInvoice.subtotal);
+    const nextTax = tax !== undefined ? Number(tax) : Number(currentInvoice.tax);
+    const nextDiscount = discount !== undefined ? Number(discount) : Number(currentInvoice.discount);
+    const nextTotal = total !== undefined ? Number(total) : nextSubtotal + nextTax - nextDiscount;
+    const currentPaid = Number(currentInvoice.paid);
+
+    if (nextTotal < currentPaid) {
+      return res.status(400).json({
+        error: { code: 'TOTAL_BELOW_PAID', message: 'El total no puede ser menor al monto ya pagado' }
+      });
+    }
+
+    const nextBalance = Math.max(nextTotal - currentPaid, 0);
+    const nextDueDate = dueDate ? new Date(dueDate) : currentInvoice.dueDate;
+    const now = new Date();
+
+    let calculatedStatus = status || currentInvoice.status;
+    if (calculatedStatus !== 'CANCELLED') {
+      if (nextBalance <= 0) {
+        calculatedStatus = 'PAID';
+      } else if (currentPaid > 0) {
+        calculatedStatus = nextDueDate < now ? 'OVERDUE' : 'PARTIAL';
+      } else if (nextDueDate < now) {
+        calculatedStatus = 'OVERDUE';
+      } else {
+        calculatedStatus = 'PENDING';
+      }
+    }
+
     const invoice = await prisma.supplierInvoice.update({
       where: { id },
       data: {
         invoiceDate: invoiceDate ? new Date(invoiceDate) : undefined,
         dueDate: dueDate ? new Date(dueDate) : undefined,
-        status: status || undefined,
-        subtotal: subtotal ? Number(subtotal) : undefined,
-        tax: tax ? Number(tax) : undefined,
-        discount: discount ? Number(discount) : undefined,
-        total: total ? Number(total) : undefined,
+        status: calculatedStatus,
+        subtotal: subtotal !== undefined ? nextSubtotal : undefined,
+        tax: tax !== undefined ? nextTax : undefined,
+        discount: discount !== undefined ? nextDiscount : undefined,
+        total: nextTotal,
+        balance: nextBalance,
         notes,
         reference
       },

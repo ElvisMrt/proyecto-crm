@@ -34,6 +34,8 @@ const POSTab = () => {
   
   // Check if user can edit prices (Administrator or Supervisor)
   const canEditPrice = user?.role === 'ADMINISTRATOR' || user?.role === 'SUPERVISOR';
+  // Check if user can delete sales (Administrator only)
+  const canDeleteSale = user?.role === 'ADMINISTRATOR';
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -47,7 +49,6 @@ const POSTab = () => {
   const [amountReceived, setAmountReceived] = useState<number>(0);
   const [generalDiscount, setGeneralDiscount] = useState<number>(0);
   const [saleResult, setSaleResult] = useState<any>(null); // Store sale result for success screen
-  const [nfcEnabled, setNfcEnabled] = useState(true);
 
   // NFC Support for product search
   const { isSupported: nfcSupported, isReading: nfcReading } = useNFCSearch(
@@ -60,7 +61,7 @@ const POSTab = () => {
         showToast(`Producto agregado: ${product.name}`, 'success');
       }
     },
-    nfcEnabled
+    true
   );
 
   // Debounce search input
@@ -238,17 +239,7 @@ const POSTab = () => {
     );
   }, [cart]);
 
-  const updatePrice = useCallback((productId: string, price: number) => {
-    if (!canEditPrice) return;
-    setCart(
-      cart.map((item) =>
-        item.productId === productId
-          ? { ...item, price: Math.max(0, price), subtotal: item.quantity * Math.max(0, price) - item.discount }
-          : item
-      )
-    );
-  }, [cart, canEditPrice]);
-
+  
   const calculateTotal = useCallback(() => {
     const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
     return Math.max(0, subtotal - generalDiscount);
@@ -271,7 +262,6 @@ const POSTab = () => {
   }, [calculateTotal, calculateTax]);
 
   // Memoize calculated values for performance
-  const total = useMemo(() => calculateTotal(), [calculateTotal]);
   const totalDiscount = useMemo(() => calculateTotalDiscount(), [calculateTotalDiscount]);
   const tax = useMemo(() => calculateTax(), [calculateTax]);
   const finalTotal = useMemo(() => calculateFinalTotal(), [calculateFinalTotal]);
@@ -390,6 +380,106 @@ const POSTab = () => {
     checkCashStatus();
   };
 
+  const handleVoidSale = async () => {
+    if (!saleResult?.invoice) return;
+
+    // Confirmación antes de anular
+    const confirmVoid = window.confirm(
+      `¿Estás seguro que quieres anular esta venta?\n\n` +
+      `Factura: ${saleResult.invoice.number}\n` +
+      `Monto: RD$ ${Number(saleResult.invoice.total).toLocaleString()}\n\n` +
+      `Esta acción:\n` +
+      `• Generará una nota de crédito\n` +
+      `• Devolverá los productos al inventario\n` +
+      `• Anulará el NCF correspondiente\n\n` +
+      `¿Continuar?`
+    );
+
+    if (!confirmVoid) return;
+
+    try {
+      setLoading(true);
+      
+      // Crear nota de crédito para anular la venta
+      const creditNoteData = {
+        invoiceId: saleResult.invoice.id,
+        reason: 'Venta anulada por error',
+        items: saleResult.invoice.items.map((item: any) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price,
+          reason: 'Devolución por anulación'
+        }))
+      };
+
+      await salesApi.createCreditNote(creditNoteData);
+      
+      showToast('Venta anulada correctamente. Se ha generado una nota de crédito.', 'success');
+      
+      // Reiniciar para nueva venta
+      handleNewSale();
+      
+    } catch (error: any) {
+      console.error('Error voiding sale:', error);
+      showToast(error.response?.data?.error?.message || 'Error al anular la venta', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    if (!saleResult?.invoice) return;
+
+    // Confirmación de eliminación (solo admin)
+    const confirmDelete = window.confirm(
+      `⚠️ ADVERTENCIA: Eliminación permanente\n\n` +
+      `¿Estás seguro que quieres ELIMINAR permanentemente esta venta?\n\n` +
+      `Factura: ${saleResult.invoice.number}\n` +
+      `Monto: RD$ ${Number(saleResult.invoice.total).toLocaleString()}\n` +
+      `NCF: ${saleResult.invoice.ncf || 'N/A'}\n\n` +
+      `Esta acción:\n` +
+      `❌ ELIMINARÁ la venta permanentemente\n` +
+      `❌ NO genera nota de crédito\n` +
+      `❌ NO devuelve inventario automáticamente\n` +
+      `❌ NO anula NCF (debe hacerse manualmente)\n` +
+      `❌ NO deja registro auditado\n\n` +
+      `Esta acción es IRREVERSIBLE y solo para emergencias.\n\n` +
+      `¿Continuar con la eliminación?`
+    );
+
+    if (!confirmDelete) return;
+
+    // Confirmación adicional
+    const finalConfirm = window.confirm(
+      `ÚLTIMA ADVERTENCIA:\n\n` +
+      `Estás a punto de eliminar permanentemente:\n` +
+      `• Factura ${saleResult.invoice.number}\n` +
+      `• Monto: RD$ ${Number(saleResult.invoice.total).toLocaleString()}\n\n` +
+      `Esta acción no se puede deshacer.\n\n` +
+      `Escribe "ELIMINAR" para confirmar:`
+    );
+
+    if (!finalConfirm) return;
+
+    try {
+      setLoading(true);
+      
+      // Eliminar la venta directamente (solo admin)
+      await salesApi.deleteInvoice(saleResult.invoice.id);
+      
+      showToast('Venta eliminada permanentemente. Nota: Debe ajustar inventario y NCF manualmente.', 'warning');
+      
+      // Reiniciar para nueva venta
+      handleNewSale();
+      
+    } catch (error: any) {
+      console.error('Error deleting sale:', error);
+      showToast(error.response?.data?.error?.message || 'Error al eliminar la venta', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePrint = (type: 'invoice' | 'thermal') => {
     if (saleResult?.invoice) {
       if (type === 'thermal') {
@@ -424,10 +514,10 @@ const POSTab = () => {
     const amountReceived = saleResult.amountReceived || invoice.total;
 
     return (
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+      <div className="mx-auto max-w-2xl rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-900">
+            <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -436,7 +526,7 @@ const POSTab = () => {
           {invoice.ncf && <p className="text-[#1f2937]">NCF: {invoice.ncf}</p>}
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-6 mb-6">
+        <div className="mb-6 rounded-[24px] border border-slate-200 bg-slate-50 p-6">
           <div className="space-y-3">
             <div className="flex justify-between text-lg">
               <span className="font-medium text-[#1f2937]">Total:</span>
@@ -455,7 +545,7 @@ const POSTab = () => {
                 {change > 0 && (
                   <div className="flex justify-between text-xl border-t pt-3 mt-3">
                     <span className="font-bold text-[#000000]">Vuelto:</span>
-                    <span className="font-bold text-green-600">
+                    <span className="font-bold text-emerald-700">
                       RD$ {change.toLocaleString()}
                     </span>
                   </div>
@@ -468,7 +558,7 @@ const POSTab = () => {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={() => handlePrint('invoice')}
-            className="px-6 py-3 bg-[#1D79C4] text-white rounded-lg hover:bg-[#1565b0] font-medium flex items-center justify-center gap-2 text-sm"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -477,7 +567,7 @@ const POSTab = () => {
           </button>
           <button
             onClick={() => handlePrint('thermal')}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2 text-sm"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -497,8 +587,30 @@ const POSTab = () => {
             </button>
           )} */}
           <button
+            onClick={handleVoidSale}
+            className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-6 py-3 text-sm font-medium text-white transition hover:bg-rose-700"
+            title="Anular esta venta (genera nota de crédito)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Anular Venta
+          </button>
+          {canDeleteSale && (
+            <button
+              onClick={handleDeleteSale}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-slate-700 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+              title="Eliminar venta permanentemente (solo administrador)"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Eliminar Venta
+            </button>
+          )}
+          <button
             onClick={handleNewSale}
-            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium flex items-center justify-center gap-2 text-sm"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-slate-200 px-6 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-300"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -512,19 +624,16 @@ const POSTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* Atajos de teclado y NFC - Info */}
+      {/* NFC - Info */}
       <div className="flex gap-2">
-        <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          <strong>Atajos de teclado:</strong> F1 (Nueva venta) | F2 (Buscar) | Enter (Cobrar) | Esc (Cancelar)
-        </div>
         {nfcSupported && (
-          <div className={`px-4 py-3 rounded-lg border text-xs font-semibold flex items-center gap-2 ${
+          <div className={`px-4 py-3 rounded-2xl border text-xs font-semibold flex items-center gap-2 ${
             nfcReading 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-gray-50 border-gray-200 text-gray-600'
+              ? 'bg-slate-900 border-slate-900 text-white' 
+              : 'bg-white border-slate-200 text-slate-500'
           }`}>
             <span className={`w-2 h-2 rounded-full ${
-              nfcReading ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+              nfcReading ? 'bg-emerald-300 animate-pulse' : 'bg-slate-300'
             }`}></span>
             NFC {nfcReading ? 'Activo' : 'Inactivo'}
           </div>
@@ -533,14 +642,14 @@ const POSTab = () => {
 
       {/* Estado de Caja */}
       {paymentMethod === 'CASH' && (
-        <div className={`rounded-xl shadow-sm p-4 ${cashStatus ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+        <div className={`rounded-[24px] border p-5 shadow-sm ${cashStatus ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50/80'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-[#000000]">
+              <p className="font-semibold text-slate-950">
                 Estado de Caja: {cashStatus ? 'Abierta' : 'Cerrada'}
               </p>
               {cashStatus && (
-                <p className="text-xs text-[#1f2937] mt-1">
+                <p className="mt-1 text-xs text-slate-500">
                   Sucursal: {cashStatus.branch?.name || '-'} | 
                   Inicial: {new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(Number(cashStatus.initialAmount || 0))}
                 </p>
@@ -549,7 +658,7 @@ const POSTab = () => {
             {!cashStatus && (
               <button
                 onClick={() => window.location.href = '/cash'}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
               >
                 Abrir Caja
               </button>
@@ -560,8 +669,14 @@ const POSTab = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Productos */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-[#000000] mb-4">Productos</h2>
+        <div className="lg:col-span-2 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.35)]">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Catálogo</p>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-950">Productos</h2>
+            </div>
+            <p className="hidden text-xs text-slate-400 md:block">Búsqueda rápida por código o nombre</p>
+          </div>
           <div className="relative">
             <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -569,7 +684,7 @@ const POSTab = () => {
               placeholder="Buscar producto por código o nombre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg mb-4 text-sm focus:ring-1 focus:ring-[#1D79C4] focus:border-[#1D79C4]"
+              className="mb-4 w-full rounded-2xl border border-slate-200 bg-slate-50/70 py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-0"
               autoFocus
             />
           </div>
@@ -578,26 +693,27 @@ const POSTab = () => {
             // Determinar color según disponibilidad - Solo para productos que controlan stock
             const stock = product.stock || 0;
             const minStock = product.minStock || 0;
-            let borderColor = 'border-gray-200';
+            let borderColor = 'border-slate-200';
             let bgColor = 'bg-white';
             let availabilityColor = '';
+            let dotColor = 'bg-slate-300';
             
             if (product.controlsStock) {
               if (stock === 0) {
-                // Sin stock - Rojo
-                borderColor = 'border-red-300';
-                bgColor = 'bg-red-50';
-                availabilityColor = 'text-red-600';
+                borderColor = 'border-slate-300';
+                bgColor = 'bg-slate-100';
+                availabilityColor = 'text-slate-500';
+                dotColor = 'bg-slate-400';
               } else if (stock <= minStock) {
-                // Stock bajo - Amarillo/Naranja
-                borderColor = 'border-yellow-300';
-                bgColor = 'bg-yellow-50';
-                availabilityColor = 'text-yellow-600';
+                borderColor = 'border-amber-200';
+                bgColor = 'bg-amber-50';
+                availabilityColor = 'text-amber-700';
+                dotColor = 'bg-amber-400';
               } else {
-                // Stock disponible - Verde
-                borderColor = 'border-green-300';
-                bgColor = 'bg-green-50';
-                availabilityColor = 'text-green-600';
+                borderColor = 'border-emerald-200';
+                bgColor = 'bg-emerald-50/60';
+                availabilityColor = 'text-emerald-700';
+                dotColor = 'bg-emerald-400';
               }
             }
             
@@ -605,11 +721,11 @@ const POSTab = () => {
               <button
                 key={product.id}
                 onClick={() => addToCart(product)}
-                className={`p-4 border-2 ${borderColor} ${bgColor} rounded-lg hover:shadow-md transition-all text-left flex flex-col relative`}
+                className={`relative flex flex-col rounded-[22px] border ${borderColor} ${bgColor} p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg`}
               >
                 {/* Indicador de disponibilidad - Solo para productos que controlan stock */}
                 {product.controlsStock && (
-                  <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${stock === 0 ? 'bg-red-500' : stock <= minStock ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                  <div className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${dotColor}`}></div>
                 )}
                 
                 {product.imageUrl ? (
@@ -622,20 +738,20 @@ const POSTab = () => {
                     }}
                   />
                 ) : (
-                  <div className="w-full h-24 bg-gray-100 rounded mb-2 border border-gray-200 flex items-center justify-center">
+                  <div className="mb-2 flex h-24 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-100">
                     <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   </div>
                 )}
-                <div className="font-semibold text-sm text-[#000000]">{product.code}</div>
-                <div className="text-xs text-[#1f2937] mt-1 line-clamp-2">{product.name}</div>
-                <div className="text-sm font-bold text-[#1D79C4] mt-2">
+                <div className="text-sm font-semibold text-slate-950">{product.code}</div>
+                <div className="mt-1 line-clamp-2 text-xs text-slate-500">{product.name}</div>
+                <div className="mt-3 text-sm font-semibold text-slate-900">
                   RD$ {Number(product.salePrice).toLocaleString()}
                 </div>
                 {/* Indicador de stock - Solo para productos que controlan stock */}
                 {product.controlsStock && (
-                  <div className={`text-xs font-semibold mt-1 ${availabilityColor}`}>
+                  <div className={`mt-1 text-xs font-semibold ${availabilityColor}`}>
                     {stock === 0 ? 'Sin stock' : stock <= minStock ? `Stock bajo (${stock})` : `Disponible (${stock})`}
                   </div>
                 )}
@@ -646,8 +762,13 @@ const POSTab = () => {
         </div>
 
         {/* Carrito */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-bold text-[#000000] mb-4">Carrito</h2>
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.35)]">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Pedido</p>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">Carrito</h2>
+          </div>
+        </div>
 
         <div className="mb-4">
           <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">
@@ -719,7 +840,7 @@ const POSTab = () => {
         {paymentMethod === 'CASH' && (
           <div className="mb-4">
             <label className="block text-xs font-semibold text-[#1f2937] mb-1.5">
-              Monto Recibido <span className="text-red-500">*</span>
+              Monto Recibido <span className="text-rose-500">*</span>
             </label>
             <input
               type="number"
@@ -742,12 +863,12 @@ const POSTab = () => {
               required
             />
             {amountReceived > 0 && amountReceived < finalTotal && (
-              <p className="text-xs text-red-600 mt-1">
+              <p className="mt-1 text-xs text-rose-700">
                 El monto recibido debe ser mayor o igual al total (RD$ {finalTotal.toLocaleString()})
               </p>
             )}
             {amountReceived >= finalTotal && amountReceived > finalTotal && (
-              <p className="text-xs text-green-600 mt-1">
+              <p className="mt-1 text-xs text-emerald-700">
                 Vuelto: RD$ {(amountReceived - finalTotal).toLocaleString()}
               </p>
             )}
@@ -797,7 +918,7 @@ const POSTab = () => {
                     </div>
                     <button
                       onClick={() => updateQuantity(item.productId, 0)}
-                      className="text-red-600 hover:text-red-800 text-lg font-bold"
+                      className="text-lg font-bold text-rose-600 transition hover:text-rose-800"
                     >
                       ×
                     </button>
@@ -858,13 +979,13 @@ const POSTab = () => {
             <span className="font-semibold text-[#000000]">RD$ {(cart.reduce((sum, item) => sum + item.subtotal, 0)).toLocaleString()}</span>
           </div>
           {totalDiscount > 0 && (
-            <div className="flex justify-between text-sm text-red-600">
+            <div className="flex justify-between text-sm text-rose-700">
               <span>Descuentos por ítem:</span>
               <span>-RD$ {totalDiscount.toLocaleString()}</span>
             </div>
           )}
           {generalDiscount > 0 && (
-            <div className="flex justify-between text-sm text-red-600">
+            <div className="flex justify-between text-sm text-rose-700">
               <span>Descuento General:</span>
               <span>-RD$ {generalDiscount.toLocaleString()}</span>
             </div>
@@ -889,7 +1010,7 @@ const POSTab = () => {
             (paymentMethod === 'CASH' && !cashStatus) ||
             (paymentMethod === 'CASH' && (!amountReceived || amountReceived < finalTotal))
           }
-          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          className="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? 'Procesando...' : 'Procesar Venta'}
         </button>
@@ -900,5 +1021,3 @@ const POSTab = () => {
 };
 
 export default POSTab;
-
-

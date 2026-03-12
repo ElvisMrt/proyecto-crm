@@ -84,12 +84,12 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
 
   if (!currentCash) {
     return (
-      <div className="bg-white rounded-lg shadow p-12 text-center">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-4">
-          <HiLockClosed className="w-10 h-10 text-red-600" />
+      <div className="rounded-[24px] border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
+          <HiLockClosed className="w-10 h-10 text-slate-600 dark:text-slate-300" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">No Hay Caja Abierta</h2>
-        <p className="text-gray-600">
+        <h2 className="mb-2 text-2xl font-bold text-slate-900 dark:text-white">No hay caja abierta</h2>
+        <p className="text-slate-600 dark:text-slate-400">
           Debe abrir la caja primero para poder cerrarla
         </p>
       </div>
@@ -100,48 +100,45 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
   const difference = calculateDifference();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Formulario */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-          <HiLockClosed className="w-5 h-5 mr-2 text-gray-400" />
-          Cerrar Caja
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_340px]">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="mb-4 flex items-center text-lg font-semibold text-slate-900 dark:text-white">
+          <HiLockClosed className="mr-2 h-5 w-5 text-slate-400" />
+          Cerrar caja
         </h2>
 
-        {/* Resumen Automático */}
-        <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Resumen de la Jornada</h3>
+        <div className="mb-6 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/70">
+          <h3 className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">Resumen de la jornada</h3>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Monto Inicial:</span>
-              <span className="text-sm font-medium">{formatCurrency(currentCash.initialAmount || 0)}</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400">Monto inicial</span>
+              <span className="text-sm font-medium text-slate-900 dark:text-white">{formatCurrency(currentCash.initialAmount || 0)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Total Ingresos:</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400">Total ingresos</span>
               <span className="text-sm font-medium text-green-600">
                 {formatCurrency(currentCash.summary?.totalIncome || 0)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Total Egresos:</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400">Total egresos</span>
               <span className="text-sm font-medium text-red-600">
                 {formatCurrency(currentCash.summary?.totalExpenses || 0)}
               </span>
             </div>
-            <div className="border-t border-gray-300 pt-2 mt-2">
+            <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-800">
               <div className="flex justify-between">
-                <span className="text-sm font-medium text-gray-900">Balance Esperado:</span>
-                <span className="text-sm font-bold text-lg">{formatCurrency(expectedBalance)}</span>
+                <span className="text-sm font-medium text-slate-900 dark:text-white">Balance esperado</span>
+                <span className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(expectedBalance)}</span>
               </div>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Monto Contado */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-              <HiCurrencyDollar className="w-4 h-4 mr-1 text-gray-400" />
+            <label className="mb-1 flex items-center text-sm font-medium text-slate-700 dark:text-slate-300">
+              <HiCurrencyDollar className="mr-1 h-4 w-4 text-slate-400" />
               Monto Contado Físicamente (RD$) *
             </label>
             <input
@@ -151,23 +148,22 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
               value={form.countedAmount}
               onChange={(e) => setForm({ ...form, countedAmount: parseFloat(e.target.value) || 0 })}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-lg"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-lg text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
               placeholder="0.00"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Ingrese el monto de efectivo que cuenta físicamente en caja
             </p>
           </div>
 
-          {/* Diferencia */}
           {form.countedAmount > 0 && (
-            <div className={`rounded-lg p-4 ${
+            <div className={`rounded-[24px] border p-4 ${
               difference === 0 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-red-50 border border-red-200'
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20' 
+                : 'border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/20'
             }`}>
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700 flex items-center">
+                <span className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-200">
                   {difference === 0 ? (
                     <HiCheckCircle className="w-5 h-5 mr-2 text-green-600" />
                   ) : (
@@ -182,35 +178,33 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
                 </span>
               </div>
               {difference !== 0 && (
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                   {difference > 0 ? 'Sobrante' : 'Faltante'}
                 </p>
               )}
             </div>
           )}
 
-          {/* Observaciones */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
               Observaciones
             </label>
             <textarea
               value={form.observations}
               onChange={(e) => setForm({ ...form, observations: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
               placeholder="Notas sobre el cierre, diferencias, etc. (opcional)"
             />
           </div>
 
-          {/* Botón Submit */}
           <button
             type="submit"
             disabled={loading}
-            className={`w-full font-medium py-3 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`w-full rounded-xl px-4 py-3 font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
               difference === 0
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : 'bg-orange-600 hover:bg-orange-700 text-white'
+                ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+                : 'bg-amber-600 text-white'
             }`}
           >
             {loading ? 'Cerrando...' : difference === 0 ? 'Cerrar Caja (Cuadrada)' : 'Cerrar Caja (Con Diferencia)'}
@@ -218,36 +212,34 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
         </form>
       </div>
 
-      {/* Información */}
       <div className="space-y-4">
-        <div className="bg-blue-50 rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <HiInformationCircle className="w-5 h-5 mr-2 text-blue-600" />
+        <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <h3 className="mb-4 flex items-center text-lg font-semibold text-slate-900 dark:text-white">
+            <HiInformationCircle className="mr-2 h-5 w-5 text-slate-500 dark:text-slate-400" />
             Información
           </h3>
-          <ul className="space-y-3 text-sm text-gray-700">
+          <ul className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
             <li className="flex items-start">
-              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
+              <HiCheckCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
               <span>Una caja cerrada no se puede modificar</span>
             </li>
             <li className="flex items-start">
-              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
+              <HiCheckCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
               <span>Las diferencias quedan registradas para auditoría</span>
             </li>
             <li className="flex items-start">
-              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
+              <HiCheckCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
               <span>Requiere permiso de cierre</span>
             </li>
             <li className="flex items-start">
-              <HiCheckCircle className="w-5 h-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
+              <HiCheckCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
               <span>Cuente físicamente el efectivo antes de cerrar</span>
             </li>
           </ul>
         </div>
 
-        {/* Detalle de Movimientos */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen por Tipo</h3>
+        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+          <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Resumen por tipo</h3>
           <div className="space-y-2">
             {currentCash.summary?.byType && Object.entries(currentCash.summary.byType).map(([type, amount]: [string, any]) => {
               if (amount === 0) return null;
@@ -260,8 +252,8 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
               };
               return (
                 <div key={type} className="flex justify-between text-sm">
-                  <span className="text-gray-600">{labels[type] || type}:</span>
-                  <span className="font-medium">{formatCurrency(amount)}</span>
+                  <span className="text-slate-600 dark:text-slate-400">{labels[type] || type}:</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{formatCurrency(amount)}</span>
                 </div>
               );
             })}
@@ -273,5 +265,4 @@ const CloseCashTab = ({ currentCash, onCashClosed }: CloseCashTabProps) => {
 };
 
 export default CloseCashTab;
-
 

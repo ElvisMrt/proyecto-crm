@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { masterPrisma } from '../middleware/tenant.middleware';
 import { saasAdminMiddleware } from '../middleware/tenant.middleware';
 import TenantProvisioningService from '../services/tenantProvisioning.service';
@@ -10,6 +11,32 @@ import { sendTenantWelcomeEmail } from '../services/email.service';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
+
+const toPublicAssetUrl = (req: any, value?: string | null) => {
+  if (!value) return value;
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.pathname.startsWith('/uploads/')) {
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0] : req.protocol;
+        return `${protocol}://${req.get('host')}${parsed.pathname}`;
+      }
+      return value;
+    } catch {
+      return value;
+    }
+  }
+
+  const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+  if (!normalizedPath.startsWith('/uploads/')) {
+    return value;
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0] : req.protocol;
+  return `${protocol}://${req.get('host')}${normalizedPath}`;
+};
 
 // Instanciar servicios
 const provisioningService = new TenantProvisioningService(masterPrisma);
@@ -127,7 +154,30 @@ router.get('/tenants/:id', saasAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
+    const tenant = await masterPrisma.tenant.findUnique({
+      where: { id },
+      include: {
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+        invoices: {
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+        },
+        activities: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        _count: {
+          select: {
+            invoices: true,
+            activities: true,
+            subscriptions: true,
+          },
+        },
+      },
+    });
     if (!tenant) {
       return res.status(404).json({
         error: { code: 'TENANT_NOT_FOUND', message: 'Tenant no encontrado' }
@@ -165,9 +215,16 @@ router.get('/tenants/:id', saasAdminMiddleware, async (req, res) => {
         settings: typeof tenant.settings === 'string' ? JSON.parse(tenant.settings) : tenant.settings,
         limits: typeof tenant.limits === 'string' ? JSON.parse(tenant.limits) : tenant.limits,
         tenantUsers,
+        subscriptions: tenant.subscriptions,
+        invoices: tenant.invoices.map((invoice) => ({
+          ...invoice,
+          metadata: typeof invoice.metadata === 'string' ? JSON.parse(invoice.metadata) : invoice.metadata,
+        })),
+        activities: tenant.activities.map((activity) => ({
+          ...activity,
+          metadata: typeof activity.metadata === 'string' ? JSON.parse(activity.metadata) : activity.metadata,
+        })),
         users: [], // compatibilidad
-        invoices: [],
-        activities: [],
       },
     });
   } catch (error) {
@@ -208,6 +265,64 @@ router.put('/tenants/:id/users/:userId', saasAdminMiddleware, async (req, res) =
   } catch (error) {
     console.error('Update tenant user error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error actualizando usuario' } });
+  }
+});
+
+// POST /saas/tenants/:id/users - Crear usuario en la DB del tenant
+router.post('/tenants/:id/users', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, password, branchId, isActive } = req.body;
+    const normalizedRole = role === 'MANAGER' ? 'SUPERVISOR' : role;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: 'name, email y password son requeridos' },
+      });
+    }
+
+    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
+    if (!tenant) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Tenant no encontrado' } });
+    }
+
+    const tenantPrisma = new PrismaClient({ datasources: { db: { url: tenant.databaseUrl } } });
+    try {
+      const existingUser = await tenantPrisma.user.findUnique({ where: { email } });
+      if (existingUser) {
+        return res.status(400).json({
+          error: { code: 'EMAIL_EXISTS', message: 'Ya existe un usuario con ese email en el tenant' },
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await tenantPrisma.user.create({
+        data: {
+          name,
+          email,
+          password: hashedPassword,
+          role: normalizedRole || 'OPERATOR',
+          isActive: isActive !== false,
+          ...(branchId ? { branchId } : {}),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          branchId: true,
+          createdAt: true,
+        },
+      });
+
+      res.status(201).json({ success: true, data: user });
+    } finally {
+      await tenantPrisma.$disconnect();
+    }
+  } catch (error) {
+    console.error('Create tenant user error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error creando usuario del tenant' } });
   }
 });
 
@@ -433,6 +548,56 @@ router.put('/tenants/:id', saasAdminMiddleware, async (req, res) => {
   }
 });
 
+// POST /saas/tenants/:id/reprovision - Reintentar provisioning
+router.post('/tenants/:id/reprovision', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenant = await masterPrisma.tenant.findUnique({ where: { id } });
+
+    if (!tenant) {
+      return res.status(404).json({
+        error: { code: 'TENANT_NOT_FOUND', message: 'Tenant no encontrado' },
+      });
+    }
+
+    const tenantAdmin = await masterPrisma.masterUser.findFirst({
+      where: { tenantId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const temporaryPassword = req.body?.adminPassword || `Temp${crypto.randomBytes(4).toString('hex')}`;
+    const adminName = req.body?.adminName || tenantAdmin?.name || 'Administrador';
+    const adminEmail = req.body?.adminEmail || tenantAdmin?.email || tenant.email;
+
+    const result = await provisioningService.provisionTenant(id, {
+      name: adminName,
+      email: adminEmail,
+      password: temporaryPassword,
+      companyName: tenant.name,
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        error: { code: 'PROVISIONING_ERROR', message: result.message },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Provisioning ejecutado correctamente',
+      data: {
+        adminEmail,
+        temporaryPassword: req.body?.adminPassword ? undefined : temporaryPassword,
+      },
+    });
+  } catch (error) {
+    console.error('Reprovision tenant error:', error);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Error reprovisionando tenant' },
+    });
+  }
+});
+
 // DELETE /saas/tenants/:id - Eliminar tenant
 router.delete('/tenants/:id', saasAdminMiddleware, async (req, res) => {
   try {
@@ -504,10 +669,30 @@ router.get('/stats', saasAdminMiddleware, async (req, res) => {
 // GET /saas/invoices - Listar facturas de todos los tenants
 router.get('/invoices', saasAdminMiddleware, async (req, res) => {
   try {
-    // Por ahora devolver array vacío hasta que se configure correctamente el schema
+    const invoices = await masterPrisma.tenantInvoice.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        tenant: {
+          select: {
+            name: true,
+            slug: true,
+            plan: true,
+            status: true,
+          },
+        },
+      },
+    });
+
     res.json({
       success: true,
-      data: [],
+      data: invoices.map((invoice) => ({
+        ...invoice,
+        tenantName: invoice.tenant.name,
+        tenantSlug: invoice.tenant.slug,
+        tenantPlan: invoice.tenant.plan,
+        tenantStatus: invoice.tenant.status,
+        metadata: typeof invoice.metadata === 'string' ? JSON.parse(invoice.metadata) : invoice.metadata,
+      })),
     });
   } catch (error) {
     console.error('Get invoices error:', error);
@@ -674,6 +859,47 @@ router.get('/tenants/:id/backups', saasAdminMiddleware, async (req, res) => {
   }
 });
 
+// POST /saas/tenants/:id/backups/restore - Restaurar backup del tenant
+router.post('/tenants/:id/backups/restore', saasAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { filename } = req.body;
+
+    if (!filename) {
+      return res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: 'filename es requerido' },
+      });
+    }
+
+    const tenant = await masterPrisma.tenant.findUnique({
+      where: { id },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        error: { code: 'TENANT_NOT_FOUND', message: 'Tenant no encontrado' },
+      });
+    }
+
+    const result = await backupService.restoreBackup(filename, tenant.databaseName);
+    if (!result.success) {
+      return res.status(500).json({
+        error: { code: 'BACKUP_RESTORE_ERROR', message: result.error || 'Error restaurando backup' },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Backup restaurado exitosamente',
+    });
+  } catch (error) {
+    console.error('Restore backup error:', error);
+    res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'Error restaurando backup' },
+    });
+  }
+});
+
 // POST /saas/backup-all - Crear backup de todos los tenants
 router.post('/backup-all', saasAdminMiddleware, async (req, res) => {
   try {
@@ -708,7 +934,13 @@ router.get('/website-products', saasAdminMiddleware, async (req, res) => {
       where,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
-    res.json({ success: true, data: products });
+    res.json({
+      success: true,
+      data: products.map((product) => ({
+        ...product,
+        imageUrl: toPublicAssetUrl(req, product.imageUrl),
+      })),
+    });
   } catch (error) {
     console.error('List website products error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al listar productos' } });
@@ -736,7 +968,13 @@ router.post('/website-products', saasAdminMiddleware, async (req, res) => {
         note: note || null,
       },
     });
-    res.status(201).json({ success: true, data: product });
+    res.status(201).json({
+      success: true,
+      data: {
+        ...product,
+        imageUrl: toPublicAssetUrl(req, product.imageUrl),
+      },
+    });
   } catch (error) {
     console.error('Create website product error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al crear producto' } });
@@ -763,7 +1001,13 @@ router.put('/website-products/:id', saasAdminMiddleware, async (req, res) => {
         ...(note !== undefined && { note }),
       },
     });
-    res.json({ success: true, data: product });
+    res.json({
+      success: true,
+      data: {
+        ...product,
+        imageUrl: toPublicAssetUrl(req, product.imageUrl),
+      },
+    });
   } catch (error) {
     console.error('Update website product error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Error al actualizar producto' } });

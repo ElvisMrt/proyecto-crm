@@ -137,23 +137,19 @@ const TasksTab = forwardRef<TasksTabRef, TasksTabProps>(({ onTaskChanged }, ref)
       if (filters.dateFilter === 'today') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
         params.startDate = today.toISOString().split('T')[0];
-        params.endDate = tomorrow.toISOString().split('T')[0];
+        params.endDate = today.toISOString().split('T')[0];
       } else if (filters.dateFilter === 'tomorrow') {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(0, 0, 0, 0);
-        const dayAfter = new Date(tomorrow);
-        dayAfter.setDate(dayAfter.getDate() + 1);
         params.startDate = tomorrow.toISOString().split('T')[0];
-        params.endDate = dayAfter.toISOString().split('T')[0];
+        params.endDate = tomorrow.toISOString().split('T')[0];
       } else if (filters.dateFilter === 'week') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const weekLater = new Date(today);
-        weekLater.setDate(weekLater.getDate() + 7);
+        weekLater.setDate(weekLater.getDate() + 6);
         params.startDate = today.toISOString().split('T')[0];
         params.endDate = weekLater.toISOString().split('T')[0];
       }

@@ -39,9 +39,8 @@ export async function getSuppliersStats(req: TenantRequest, res: Response) {
 
 // GET /suppliers - Listar proveedores
 export async function getSuppliers(req: TenantRequest, res: Response) {
-  const pool = new Pool({ connectionString: req.tenant?.databaseUrl });
-  
   try {
+    const pool = new Pool({ connectionString: req.tenant?.databaseUrl });
     const { search, isActive, category } = req.query;
 
     if (!req.tenant?.databaseUrl) {
@@ -99,6 +98,7 @@ export async function getSuppliers(req: TenantRequest, res: Response) {
     const suppliers = result.rows;
 
     // Calcular totales financieros por proveedor
+    const now = new Date();
     const suppliersWithFinancials = await Promise.all(
       suppliers.map(async (supplier: any) => {
         const invoicesResult = await pool.query(`
@@ -111,7 +111,12 @@ export async function getSuppliers(req: TenantRequest, res: Response) {
         const totalPurchased = invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0);
         const totalPaid = invoices.reduce((sum: number, inv: any) => sum + Number(inv.paid), 0);
         const totalBalance = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
-        const overdueInvoices = invoices.filter((inv: any) => inv.status === 'OVERDUE').length;
+        const overdueInvoices = invoices.filter((inv: any) => Number(inv.balance) > 0 && inv.status !== 'CANCELLED').filter((inv: any) => {
+          if (!inv.dueDate) {
+            return false;
+          }
+          return new Date(inv.dueDate) < now;
+        }).length;
 
         return {
           ...supplier,
@@ -134,13 +139,12 @@ export async function getSuppliers(req: TenantRequest, res: Response) {
       success: true,
       data: suppliersWithFinancials
     });
+    await pool.end();
   } catch (error) {
     console.error('Get suppliers error:', error);
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'Error al obtener proveedores' }
     });
-  } finally {
-    await pool.end();
   }
 }
 
@@ -185,12 +189,13 @@ export async function getSupplierById(req: TenantRequest, res: Response) {
       where: { supplierId: id }
     });
 
+    const now = new Date();
     const financials = {
       totalPurchased: invoices.reduce((sum: number, inv: any) => sum + Number(inv.total), 0),
       totalPaid: invoices.reduce((sum: number, inv: any) => sum + Number(inv.paid), 0),
       totalBalance: invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0),
-      pendingInvoices: invoices.filter(inv => inv.status === 'PENDING').length,
-      overdueInvoices: invoices.filter(inv => inv.status === 'OVERDUE').length
+      pendingInvoices: invoices.filter(inv => Number(inv.balance) > 0 && inv.status !== 'CANCELLED' && inv.dueDate >= now).length,
+      overdueInvoices: invoices.filter(inv => Number(inv.balance) > 0 && inv.status !== 'CANCELLED' && inv.dueDate < now).length
     };
 
     res.json({
@@ -441,15 +446,15 @@ export async function getSupplierStats(req: TenantRequest, res: Response) {
       select: { total: true, paid: true, balance: true, status: true, dueDate: true }
     });
 
+    const now = new Date();
     const totalDebt = invoices.reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
     const overdueDebt = invoices
-      .filter(inv => inv.status === 'OVERDUE')
+      .filter(inv => Number(inv.balance) > 0 && inv.status !== 'CANCELLED' && inv.dueDate < now)
       .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
-    const now = new Date();
     const next30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const upcomingDue = invoices
-      .filter(inv => inv.status === 'PENDING' && inv.dueDate <= next30Days && inv.dueDate >= now)
+      .filter(inv => Number(inv.balance) > 0 && inv.status !== 'CANCELLED' && inv.dueDate <= next30Days && inv.dueDate >= now)
       .reduce((sum: number, inv: any) => sum + Number(inv.balance), 0);
 
     const recentPayments = await prisma.supplierPayment.findMany({

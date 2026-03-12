@@ -189,6 +189,15 @@ export const getBranches = async (req: AuthRequest, res: Response) => {
   try {
     const prisma = req.tenantPrisma || getTenantPrisma(process.env.DATABASE_URL!);
     const branches = await prisma.branch.findMany({
+      include: {
+        manager: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -213,6 +222,15 @@ export const getBranch = async (req: AuthRequest, res: Response) => {
 
     const branch = await prisma.branch.findUnique({
       where: { id },
+      include: {
+        manager: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!branch) {
@@ -246,8 +264,17 @@ export const createBranch = async (req: AuthRequest, res: Response) => {
 
     const branch = await prisma.branch.create({
       data: {
-        ...data,
         code,
+        name: data.name,
+        address: data.address,
+        phone: data.phone,
+        email: data.email,
+        isActive: data.isActive,
+        ...(data.managerId ? {
+          manager: {
+            connect: { id: data.managerId },
+          },
+        } : {}),
       },
     });
 
@@ -732,6 +759,4 @@ export const getPermissions = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-
-
 

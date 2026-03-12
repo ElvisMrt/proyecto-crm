@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}/api/v1` : 'http://localhost:3001/api/v1');
+import { HiArrowRight, HiOfficeBuilding, HiPlus, HiSearch } from 'react-icons/hi';
+import { saasApi } from '../services/api';
 
 interface Tenant {
   id: string;
@@ -12,26 +10,53 @@ interface Tenant {
   subdomain: string;
   email: string;
   status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'PENDING';
-  plan: 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE';
+  plan: 'BASIC' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
   createdAt: string;
+  updatedAt?: string;
+  trialEndsAt?: string | null;
+  lastActiveAt?: string | null;
   databaseName: string;
 }
+
+const emptyForm = {
+  name: '',
+  slug: '',
+  email: '',
+  adminEmail: '',
+  adminPassword: '',
+  plan: 'BASIC',
+};
+
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('es-DO') : 'Sin actividad';
+
+const getOperationalStatus = (tenant: Tenant) => {
+  if (tenant.status === 'SUSPENDED') return { label: 'Suspendido', className: 'bg-rose-50 text-rose-700' };
+  if (tenant.status === 'CANCELLED') return { label: 'Cancelado', className: 'bg-slate-100 text-slate-500' };
+  if (tenant.status === 'PENDING') return { label: 'Provisioning', className: 'bg-amber-50 text-amber-700' };
+  if (tenant.trialEndsAt && new Date(tenant.trialEndsAt) > new Date()) return { label: 'Trial', className: 'bg-sky-50 text-sky-700' };
+  return { label: 'Activo', className: 'bg-emerald-50 text-emerald-700' };
+};
+
+const getPlanLabel = (plan: string) => {
+  const labels: Record<string, string> = {
+    BASIC: 'Basico',
+    STARTER: 'Starter',
+    PROFESSIONAL: 'Profesional',
+    ENTERPRISE: 'Enterprise',
+  };
+  return labels[plan] || plan;
+};
 
 const SaaSTenants: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    slug: '',
-    email: '',
-    adminEmail: '',
-    adminPassword: '',
-    plan: 'BASIC'
-  });
-
-  const getToken = () => localStorage.getItem('saasToken');
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'CANCELLED'>('ALL');
+  const [formData, setFormData] = useState(emptyForm);
 
   useEffect(() => {
     fetchTenants();
@@ -39,10 +64,10 @@ const SaaSTenants: React.FC = () => {
 
   const fetchTenants = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/saas/tenants`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      setLoading(true);
+      const response = await saasApi.get('/saas/tenants');
       setTenants(response.data.data || []);
+      setError('');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Error cargando tenants');
     } finally {
@@ -53,203 +78,280 @@ const SaaSTenants: React.FC = () => {
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_BASE_URL}/saas/tenants`, formData, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      setSaving(true);
+      await saasApi.post('/saas/tenants', formData);
       setShowModal(false);
-      setFormData({ name: '', slug: '', email: '', adminEmail: '', adminPassword: '', plan: 'BASIC' });
+      setFormData(emptyForm);
       fetchTenants();
     } catch (err: any) {
-      alert(err.response?.data?.error?.message || 'Error creando tenant');
+      setError(err.response?.data?.error?.message || 'Error creando tenant');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACTIVE': return 'bg-green-100 text-green-800';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'SUSPENDED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const filteredTenants = useMemo(() => {
+    return tenants.filter((tenant) => {
+      const matchesSearch =
+        tenant.name.toLowerCase().includes(search.toLowerCase()) ||
+        tenant.email.toLowerCase().includes(search.toLowerCase()) ||
+        tenant.subdomain.toLowerCase().includes(search.toLowerCase());
 
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'BASIC': return 'bg-blue-100 text-blue-800';
-      case 'PROFESSIONAL': return 'bg-purple-100 text-purple-800';
-      case 'ENTERPRISE': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+      const matchesStatus = statusFilter === 'ALL' || tenant.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [tenants, search, statusFilter]);
 
-  if (loading) return <div className="p-8">Cargando...</div>;
+  const stats = useMemo(() => {
+    return {
+      total: tenants.length,
+      active: tenants.filter((tenant) => tenant.status === 'ACTIVE').length,
+      pending: tenants.filter((tenant) => tenant.status === 'PENDING').length,
+      suspended: tenants.filter((tenant) => tenant.status === 'SUSPENDED').length,
+    };
+  }, [tenants]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-slate-700" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Gestión de Tenants</h1>
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Tenants</p>
+          <h1 className="text-2xl font-bold text-slate-950">Gestion operativa</h1>
+          <p className="mt-1 text-sm text-slate-500">Provisioning, estado, actividad y acceso de cada empresa.</p>
+        </div>
         <button
+          type="button"
           onClick={() => setShowModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
         >
-          + Nuevo Tenant
+          <HiPlus className="h-4 w-4" />
+          Nuevo tenant
         </button>
-      </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {[
+          { label: 'Totales', value: stats.total },
+          { label: 'Activos', value: stats.active },
+          { label: 'Provisioning', value: stats.pending },
+          { label: 'Suspendidos', value: stats.suspended },
+        ].map((item) => (
+          <div key={item.label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-950">{item.value}</p>
+          </div>
+        ))}
+      </section>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-4">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {error}
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subdominio</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Creado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {tenants.map((tenant) => (
-              <tr key={tenant.id}>
-                <td className="px-6 py-4">
-                  <div className="font-medium text-gray-900">{tenant.name}</div>
-                  <div className="text-sm text-gray-500">{tenant.email}</div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
-                  {tenant.subdomain}.tudominio.com
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(tenant.status)}`}>
-                    {tenant.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPlanColor(tenant.plan)}`}>
-                    {tenant.plan}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  {new Date(tenant.createdAt).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4">
-                  <Link 
-                    to={`/tenants/${tenant.id}`}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                  >
-                    Ver detalles
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {tenants.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No hay tenants registrados
+      <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Bandeja de tenants</h2>
+              <p className="text-sm text-slate-500">Usa esta vista para detectar tenants pendientes, suspendidos o sin actividad.</p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative min-w-[240px]">
+                <HiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por empresa, correo o subdominio"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              >
+                <option value="ALL">Todos los estados</option>
+                <option value="ACTIVE">Activos</option>
+                <option value="PENDING">Provisioning</option>
+                <option value="SUSPENDED">Suspendidos</option>
+                <option value="CANCELLED">Cancelados</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {filteredTenants.length === 0 ? (
+          <div className="px-6 py-16 text-center text-slate-500">
+            No hay tenants que coincidan con el filtro actual.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Empresa</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Plan</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Provisioning</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Ultima actividad</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Creado</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredTenants.map((tenant) => {
+                  const status = getOperationalStatus(tenant);
+                  return (
+                    <tr key={tenant.id} className="transition hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                            <HiOfficeBuilding className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-950">{tenant.name}</p>
+                            <p className="text-sm text-slate-500">{tenant.subdomain}.neypier.com</p>
+                            <p className="text-xs text-slate-400">{tenant.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                          {getPlanLabel(tenant.plan)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {tenant.status === 'PENDING' ? 'Pendiente' : 'Listo'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {formatDate(tenant.lastActiveAt)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {formatDate(tenant.createdAt)}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link
+                          to={`/tenants/${tenant.id}`}
+                          className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 transition hover:text-slate-950"
+                        >
+                          Ver detalle
+                          <HiArrowRight className="h-4 w-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Modal Crear Tenant */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Crear Nuevo Tenant</h2>
-            <form onSubmit={handleCreateTenant} className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.2)]">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Crear tenant</h2>
+              <p className="mt-1 text-sm text-slate-500">Provisiona empresa, subdominio y admin inicial.</p>
+            </div>
+            <form onSubmit={handleCreateTenant} className="space-y-4 px-6 py-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre de la Empresa
-                </label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Nombre de la empresa</label>
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Slug (identificador único)
-                </label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Slug</label>
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   placeholder="mi-empresa"
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email de la Empresa
-                </label>
-                <input
-                  type="email"
-                  required
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Email empresa</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Plan</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={formData.plan}
+                    onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+                  >
+                    <option value="BASIC">Basico</option>
+                    <option value="STARTER">Starter</option>
+                    <option value="PROFESSIONAL">Profesional</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email del Administrador
-                </label>
-                <input
-                  type="email"
-                  required
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={formData.adminEmail}
-                  onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Admin email</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={formData.adminEmail}
+                    onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Admin password</label>
+                  <input
+                    type="password"
+                    required
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    value={formData.adminPassword}
+                    onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contraseña del Administrador
-                </label>
-                <input
-                  type="password"
-                  required
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={formData.adminPassword}
-                  onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Plan
-                </label>
-                <select
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={formData.plan}
-                  onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-                >
-                  <option value="BASIC">Básico</option>
-                  <option value="PROFESSIONAL">Profesional</option>
-                  <option value="ENTERPRISE">Enterprise</option>
-                </select>
-              </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
                 >
-                  Crear Tenant
+                  {saving ? 'Creando...' : 'Crear tenant'}
                 </button>
               </div>
             </form>

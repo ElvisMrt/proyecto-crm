@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { receivablesApi, branchesApi } from '../services/api';
 import AccountStatusTab from '../components/receivables/AccountStatusTab';
 import PaymentRegisterTab from '../components/receivables/PaymentRegisterTab';
@@ -26,6 +27,7 @@ interface NavigationState {
 }
 
 const Receivables = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('overdue');
   const [summary, setSummary] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -39,6 +41,31 @@ const Receivables = () => {
   }, []);
 
   useEffect(() => {
+    const tab = searchParams.get('tab') as TabType | null;
+    const clientId = searchParams.get('clientId') || undefined;
+    const invoiceIdsParam = searchParams.get('invoiceIds');
+    const singleInvoiceId = searchParams.get('invoiceId');
+    const invoiceIds = invoiceIdsParam
+      ? invoiceIdsParam.split(',').filter(Boolean)
+      : singleInvoiceId
+        ? [singleInvoiceId]
+        : undefined;
+
+    if (tab) {
+      setActiveTab(tab);
+    }
+
+    if (tab || clientId || invoiceIds?.length) {
+      setNavigationState({
+        targetTab: tab || 'payments',
+        clientId,
+        invoiceIds,
+        invoiceId: singleInvoiceId || undefined,
+      });
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     fetchSummary();
   }, [selectedBranchId]);
 
@@ -46,7 +73,6 @@ const Receivables = () => {
   useEffect(() => {
     if (navigationState) {
       setActiveTab(navigationState.targetTab);
-      setNavigationState(null); // Clear after navigation
     }
   }, [navigationState]);
 
@@ -120,87 +146,81 @@ const Receivables = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white/85 px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-[0_18px_50px_rgba(2,6,23,0.45)] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cuentas por Cobrar</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestión de cobros y deudores</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">Cartera</p>
+          <h1 className="text-xl font-bold text-slate-950 dark:text-white sm:text-2xl">Cuentas por Cobrar</h1>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">Cobros, estados de cuenta y seguimiento de vencidos</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">Sucursal activa</p>
-          <p className="text-sm font-medium text-gray-900">
-            {branches.find(b => b.id === selectedBranchId)?.name || 'Todas'}
-          </p>
+        <div className="flex flex-col gap-1 sm:items-end">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            Sucursal
+          </label>
+          <select
+            value={selectedBranchId}
+            onChange={(e) => setSelectedBranchId(e.target.value)}
+            className="text-sm w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-700 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-800 sm:min-w-[220px]"
+          >
+            <option value="">Todas las sucursales</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Selector de Sucursal */}
-      <div className="mb-6">
-        <select
-          value={selectedBranchId}
-          onChange={(e) => setSelectedBranchId(e.target.value)}
-          className="text-sm px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-        >
-          <option value="">Todas las sucursales</option>
-          {branches.map((branch) => (
-            <option key={branch.id} value={branch.id}>
-              {branch.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Dashboard Grid con KPIs y Deudores */}
+      {/* Dashboard Grid con KPIs */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="bg-blue-100 rounded-lg p-2">
-                <HiCurrencyDollar className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="rounded-2xl bg-slate-100 p-1.5 text-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:p-2">
+                <HiCurrencyDollar className="w-4 h-4 sm:w-6 sm:h-6" />
               </div>
-              <span className="text-xs font-medium text-gray-500">Por Cobrar</span>
+              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">Por cobrar</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalReceivable || 0)}</p>
+            <p className="truncate text-base font-bold text-slate-950 dark:text-white sm:text-2xl">{formatCurrency(summary.totalReceivable || 0)}</p>
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="bg-red-100 rounded-lg p-2">
-                <HiExclamationCircle className="w-6 h-6 text-red-600" />
+          <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="rounded-2xl bg-rose-50 p-1.5 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 sm:p-2">
+                <HiExclamationCircle className="w-4 h-4 sm:w-6 sm:h-6" />
               </div>
-              <span className="text-xs font-medium text-gray-500">Vencido</span>
+              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">Vencido</span>
             </div>
-            <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalOverdue || 0)}</p>
+            <p className="truncate text-base font-bold text-rose-700 sm:text-2xl">{formatCurrency(summary.totalOverdue || 0)}</p>
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="bg-orange-100 rounded-lg p-2">
-                <HiClock className="w-6 h-6 text-orange-600" />
+          <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="rounded-2xl bg-amber-50 p-1.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 sm:p-2">
+                <HiClock className="w-4 h-4 sm:w-6 sm:h-6" />
               </div>
-              <span className="text-xs font-medium text-gray-500">Morosos</span>
+              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">Morosos</span>
             </div>
-            <p className="text-2xl font-bold text-orange-600">{summary.delinquentClients || 0}</p>
-            <p className="text-sm text-gray-500">clientes</p>
+            <p className="text-base font-bold text-amber-700 sm:text-2xl">{summary.delinquentClients || 0}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">clientes</p>
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="bg-purple-100 rounded-lg p-2">
-                <HiChartBar className="w-6 h-6 text-purple-600" />
+          <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="rounded-2xl bg-slate-100 p-1.5 text-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:p-2">
+                <HiChartBar className="w-4 h-4 sm:w-6 sm:h-6" />
               </div>
-              <span className="text-xs font-medium text-gray-500">0-30 Días</span>
+              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">0-30 días</span>
             </div>
-            <p className="text-2xl font-bold text-purple-600">{formatCurrency(summary.byAge?.['0-30'] || 0)}</p>
+            <p className="truncate text-base font-bold text-slate-950 dark:text-white sm:text-2xl">{formatCurrency(summary.byAge?.['0-30'] || 0)}</p>
           </div>
         </div>
       )}
 
-      {/* Top Deudores */}
-      {topDebtors && topDebtors.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-200">
+      {activeTab === 'summary' && topDebtors && topDebtors.length > 0 && (
+        <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="border-b border-slate-200 px-6 py-4">
             <div className="flex items-center">
-              <HiExclamationCircle className="w-5 h-5 text-red-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">Top Deudores</h3>
+              <HiExclamationCircle className="mr-2 h-5 w-5 text-rose-700" />
+              <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Top deudores</h3>
             </div>
           </div>
           <div className="overflow-y-auto max-h-96">
@@ -209,16 +229,16 @@ const Receivables = () => {
                 ? (debtor.overdueBalance / debtor.totalBalance) * 100 
                 : 0;
               const getRankColor = (pos: number) => {
-                if (pos === 0) return 'bg-red-500';
-                if (pos === 1) return 'bg-orange-500';
-                if (pos === 2) return 'bg-yellow-500';
-                return 'bg-gray-400';
+                if (pos === 0) return 'bg-slate-950';
+                if (pos === 1) return 'bg-slate-700';
+                if (pos === 2) return 'bg-slate-500';
+                return 'bg-slate-300';
               };
               
               return (
                 <div 
                   key={debtor.clientId} 
-                  className="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer"
+                  className="cursor-pointer border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
                   onClick={() => {
                     setNavigationState({ targetTab: 'status', clientId: debtor.clientId });
                   }}
@@ -228,19 +248,19 @@ const Receivables = () => {
                       <span className="text-white text-sm font-bold">{index + 1}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{debtor.clientName}</p>
+                      <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">{debtor.clientName}</p>
                       <div className="mt-2 space-y-1">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Total:</span>
-                          <span className="font-semibold text-gray-900">{formatCurrency(debtor.totalBalance)}</span>
+                          <span className="text-slate-500 dark:text-slate-400">Total:</span>
+                          <span className="font-semibold text-slate-950 dark:text-white">{formatCurrency(debtor.totalBalance)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Vencido:</span>
-                          <span className="font-semibold text-red-600">{formatCurrency(debtor.overdueBalance)}</span>
+                          <span className="text-slate-500 dark:text-slate-400">Vencido:</span>
+                          <span className="font-semibold text-rose-700">{formatCurrency(debtor.overdueBalance)}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div className="mt-2 h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800">
                           <div 
-                            className="h-full bg-red-500 rounded-full"
+                            className="h-full rounded-full bg-slate-900"
                             style={{ width: `${overduePercentage}%` }}
                           />
                         </div>
@@ -252,10 +272,10 @@ const Receivables = () => {
             })}
           </div>
           {topDebtors.length > 10 && (
-            <div className="px-6 py-3 bg-gray-50 text-center border-t border-gray-200">
+            <div className="border-t border-slate-200 bg-slate-50 px-6 py-3 text-center dark:border-slate-800 dark:bg-slate-900/80">
               <button
                 onClick={() => setActiveTab('overdue')}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="text-sm font-medium text-slate-700 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
               >
                 Ver todos ({topDebtors.length}) →
               </button>
@@ -265,24 +285,26 @@ const Receivables = () => {
       )}
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <nav className="flex space-x-4 sm:space-x-8 px-3 sm:px-6 overflow-x-auto scrollbar-hide">
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <nav className="flex overflow-x-auto border-b border-slate-200 px-2 sm:px-6 scrollbar-hide dark:border-slate-800">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`
-                py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
+                flex-shrink-0 py-3 sm:py-4 px-2 sm:px-0 sm:mr-8 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap transition-colors
                 ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-slate-950 text-slate-950 dark:border-white dark:text-white'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-100'
                 }
               `}
+              title={tab.label}
             >
-              <span className="inline-flex items-center gap-2">
-                <tab.icon className="w-5 h-5" />
-                <span>{tab.label}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <tab.icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden text-[11px]">{tab.label.split(' ')[0]}</span>
               </span>
             </button>
           ))}
@@ -297,6 +319,15 @@ const Receivables = () => {
               onNavigateToInvoice={(invoiceId) => {
                 // Navigate to Sales module to view invoice
                 window.location.href = `/sales/invoices/${invoiceId}`;
+              }}
+              onNavigateToPayment={(clientId, invoiceIds) => {
+                setActiveTab('payments');
+                setNavigationState({ targetTab: 'payments', clientId, invoiceIds });
+                setSearchParams({
+                  tab: 'payments',
+                  clientId,
+                  invoiceIds: invoiceIds.join(','),
+                });
               }}
             />
           )}

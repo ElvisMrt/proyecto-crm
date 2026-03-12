@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { HiEye, HiEyeOff, HiLockClosed, HiMail } from 'react-icons/hi';
 import axios from 'axios';
-import { HiMail, HiLockClosed, HiEye, HiEyeOff } from 'react-icons/hi';
-import logoSrc from '../utils/Logos.svg';
+import logoSrc from '../utils/3.svg';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ||
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
   (typeof window !== 'undefined'
     ? `${window.location.protocol}//${window.location.host}/api/v1`
     : 'http://localhost:3001/api/v1');
@@ -26,22 +27,11 @@ export default function SaaSLogin() {
   const validateEmail = (value: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (value && !emailRegex.test(value)) {
-      setEmailError('Ingresa un email válido');
+      setEmailError('Ingresa un email valido');
       return false;
     }
     setEmailError('');
     return true;
-  };
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setEmail(value);
-    if (emailError) validateEmail(value);
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value);
-    if (passwordError) setPasswordError('');
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -54,39 +44,38 @@ export default function SaaSLogin() {
       return;
     }
 
-    if (!validateEmail(email)) {
-      return;
-    }
+    if (!validateEmail(email)) return;
 
     if (!password) {
-      setPasswordError('Ingresa tu contraseña');
+      setPasswordError('Ingresa tu contrasena');
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/saas/login`, {
-        email: email.trim().toLowerCase(),
-        password
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
+      const response = await axios.post(
+        `${API_BASE_URL}/saas/login`,
+        {
+          email: email.trim().toLowerCase(),
+          password,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
         }
-      });
+      );
 
       const data = response.data;
-
       if (data.success) {
+        localStorage.setItem('app_mode_override', 'saas');
         localStorage.setItem('saasToken', data.token);
         localStorage.setItem('saasUser', JSON.stringify(data.user));
         navigate('/dashboard');
       } else {
-        setPasswordError(data.error?.message || 'Error al iniciar sesión');
+        setPasswordError(data.error?.message || 'Error al iniciar sesion');
       }
     } catch (err: any) {
-      console.error('Login error:', err);
-      const errorMsg = err.response?.data?.error?.message || 'Credenciales inválidas';
+      const errorMsg = err.response?.data?.error?.message || 'Credenciales invalidas';
       setPasswordError(errorMsg);
     } finally {
       setLoading(false);
@@ -94,126 +83,131 @@ export default function SaaSLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-gray-50 via-blue-50 to-gray-100">
-      {/* Animated Background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob" style={{ backgroundColor: '#1D79C4' }}></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-2000" style={{ backgroundColor: '#1f2937' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-4000" style={{ backgroundColor: '#1D79C4' }}></div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-md px-4 sm:px-6">
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8 sm:p-10">
-          {/* Logo + Header */}
-          <div className="bg-[#1D79C4] -mx-8 sm:-mx-10 -mt-8 sm:-mt-10 px-8 py-6 mb-8 text-center rounded-t-2xl">
-            <img src={logoSrc} alt="Neypier" className="h-12 w-auto mx-auto mb-2 brightness-0 invert" />
-            <h1 className="text-xl font-bold text-white">Administrador SaaS</h1>
-            <p className="text-sm text-blue-100">Gestión de empresas y sistema</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Email Field */}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 py-10 text-slate-900 sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl items-center">
+        <div className="grid w-full gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm lg:flex lg:flex-col lg:justify-between">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <HiMail className={`h-5 w-5 ${emailError ? 'text-red-500' : 'text-gray-400'}`} />
+              <div className="inline-flex items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <img src={logoSrc} alt="Neypier" className="h-10 w-auto" />
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Acceso maestro</p>
+                  <p className="text-sm font-semibold text-slate-950">SaaS Admin</p>
                 </div>
-                <input
-                  ref={emailInputRef}
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={handleEmailChange}
-                  onBlur={() => email && validateEmail(email)}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                    emailError
-                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:ring-[#1D79C4]'
-                  }`}
-                  placeholder="tu@correo.com"
-                />
               </div>
-              {emailError && (
-                <p className="mt-1.5 text-sm text-red-600 flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {emailError}
+
+              <div className="mt-10 max-w-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Panel central</p>
+                <h1 className="mt-2 text-4xl font-bold leading-tight text-slate-950">
+                  Opera tenants, billing y website desde una sola consola.
+                </h1>
+                <p className="mt-4 text-sm leading-6 text-slate-500">
+                  Este acceso es exclusivo para administracion SaaS. Desde aqui controlas provisionamiento,
+                  facturacion, productos publicos y acciones operativas sobre cada empresa.
                 </p>
-              )}
+              </div>
             </div>
 
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Contraseña
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <HiLockClosed className={`h-5 w-5 ${passwordError ? 'text-red-500' : 'text-gray-400'}`} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { label: 'Tenants', note: 'Provisioning y estado' },
+                { label: 'Billing', note: 'Facturas y cobros' },
+                { label: 'Website', note: 'Catalogo publico' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.note}</p>
                 </div>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={handlePasswordChange}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                    passwordError
-                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:ring-[#1D79C4]'
-                  }`}
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <HiEyeOff className="h-5 w-5" /> : <HiEye className="h-5 w-5" />}
-                </button>
-              </div>
-              {passwordError && (
-                <p className="mt-1.5 text-sm text-red-600 flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {passwordError}
-                </p>
-              )}
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-8">
+            <div className="mb-8">
+              <img src={logoSrc} alt="Neypier" className="mb-5 h-11 w-auto" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Autenticacion</p>
+              <h2 className="mt-2 text-2xl font-bold text-slate-950">Iniciar sesion</h2>
+              <p className="mt-1 text-sm text-slate-500">Usa tu cuenta de super administrador para entrar al panel maestro.</p>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full text-white py-3 px-4 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-              style={{ backgroundColor: '#1D79C4' }}
-              onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = '#1565a8')}
-              onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = '#1D79C4')}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Iniciando sesión...
-                </span>
-              ) : (
-                'Iniciar Sesión'
-              )}
-            </button>
-          </form>
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Email
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <HiMail className={`h-5 w-5 ${emailError ? 'text-rose-500' : 'text-slate-400'}`} />
+                  </div>
+                  <input
+                    ref={emailInputRef}
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) validateEmail(e.target.value);
+                    }}
+                    onBlur={() => email && validateEmail(email)}
+                    className={`block w-full rounded-2xl border py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition ${
+                      emailError
+                        ? 'border-rose-300 bg-rose-50/50 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                        : 'border-slate-200 bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
+                    }`}
+                    placeholder="tu@correo.com"
+                  />
+                </div>
+                {emailError ? <p className="mt-1.5 text-sm text-rose-600">{emailError}</p> : null}
+              </div>
 
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Contrasena
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <HiLockClosed className={`h-5 w-5 ${passwordError ? 'text-rose-500' : 'text-slate-400'}`} />
+                  </div>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    className={`block w-full rounded-2xl border py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition ${
+                      passwordError
+                        ? 'border-rose-300 bg-rose-50/50 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                        : 'border-slate-200 bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
+                    }`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition hover:text-slate-700"
+                  >
+                    {showPassword ? <HiEyeOff className="h-5 w-5" /> : <HiEye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {passwordError ? <p className="mt-1.5 text-sm text-rose-600">{passwordError}</p> : null}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? 'Iniciando sesion...' : 'Entrar al panel'}
+              </button>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              Sistema CRM Multi-Tenant © {new Date().getFullYear()}
+            </p>
+          </section>
         </div>
-
-        {/* Footer */}
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Sistema CRM Multi-Tenant © {new Date().getFullYear()}
-        </p>
       </div>
     </div>
   );

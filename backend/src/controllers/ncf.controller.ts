@@ -3,6 +3,20 @@ import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { getTenantPrisma } from '../middleware/tenant.middleware';
 
+const getSequenceMetrics = (startRange: number, endRange: number, currentNumber: number) => {
+  const totalNumbers = Math.max(0, endRange - startRange + 1);
+  const usedNumbers = Math.max(0, currentNumber - startRange + 1);
+  const remaining = Math.max(0, totalNumbers - usedNumbers);
+  const percentageUsed = totalNumbers > 0
+    ? Math.round((usedNumbers / totalNumbers) * 100)
+    : 0;
+
+  return {
+    remaining,
+    percentageUsed,
+  };
+};
+
 
 // Schema para crear secuencia NCF
 const createNcfSequenceSchema = z.object({
@@ -79,8 +93,7 @@ export const getNcfSequences = async (req: AuthRequest, res: Response) => {
         validFrom: seq.validFrom,
         validUntil: seq.validUntil,
         branch: seq.branch,
-        remaining: seq.endRange - seq.currentNumber,
-        percentageUsed: Math.round((seq.currentNumber / seq.endRange) * 100),
+        ...getSequenceMetrics(seq.startRange, seq.endRange, seq.currentNumber),
         createdAt: seq.createdAt,
         updatedAt: seq.updatedAt,
       })),
@@ -131,8 +144,7 @@ export const getNcfSequence = async (req: AuthRequest, res: Response) => {
 
     res.json({
       ...sequence,
-      remaining: sequence.endRange - sequence.currentNumber,
-      percentageUsed: Math.round((sequence.currentNumber / sequence.endRange) * 100),
+      ...getSequenceMetrics(sequence.startRange, sequence.endRange, sequence.currentNumber),
     });
   } catch (error) {
     console.error('Get NCF sequence error:', error);
@@ -231,8 +243,7 @@ export const createNcfSequence = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json({
       ...sequence,
-      remaining: sequence.endRange - sequence.currentNumber,
-      percentageUsed: Math.round((sequence.currentNumber / sequence.endRange) * 100),
+      ...getSequenceMetrics(sequence.startRange, sequence.endRange, sequence.currentNumber),
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -333,8 +344,7 @@ export const updateNcfSequence = async (req: AuthRequest, res: Response) => {
 
     res.json({
       ...sequence,
-      remaining: sequence.endRange - sequence.currentNumber,
-      percentageUsed: Math.round((sequence.currentNumber / sequence.endRange) * 100),
+      ...getSequenceMetrics(sequence.startRange, sequence.endRange, sequence.currentNumber),
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -530,5 +540,4 @@ export const getNcfStats = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-
 

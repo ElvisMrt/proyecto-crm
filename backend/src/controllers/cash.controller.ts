@@ -45,6 +45,7 @@ const closeCashSchemaAlt = z.object({
 });
 
 const createMovementSchema = z.object({
+  cashRegisterId: z.string().uuid().optional(),
   type: z.enum(['MANUAL_ENTRY', 'MANUAL_EXIT']),
   concept: z.string().min(1),
   amount: z.number().positive(),
@@ -91,6 +92,15 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
       cashRegisters.map(async (cashRegister: any) => {
         const movements = await prisma.cashMovement.findMany({
           where: { cashRegisterId: cashRegister.id },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: { movementDate: 'desc' },
         });
 
         const totalIncome = movements
@@ -99,9 +109,16 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
 
         const totalExpenses = movements
           .filter((m: any) => m.type === 'MANUAL_EXIT')
-          .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
+          .reduce((sum: number, m: any) => sum + Math.abs(Number(m.amount)), 0);
 
         const currentBalance = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
+        const byType = movements.reduce((acc: Record<string, number>, movement: any) => {
+          const amount = movement.type === 'MANUAL_EXIT'
+            ? Math.abs(Number(movement.amount))
+            : Number(movement.amount);
+          acc[movement.type] = (acc[movement.type] || 0) + amount;
+          return acc;
+        }, {});
 
         return {
           id: cashRegister.id,
@@ -109,9 +126,26 @@ export const getCurrentCash = async (req: AuthRequest, res: Response) => {
           status: cashRegister.status,
           initialAmount: Number(cashRegister.initialAmount),
           currentBalance,
+          totalIncome,
+          totalExpenses,
           openedAt: cashRegister.openedAt,
           openedBy: cashRegister.openedByUser,
           observations: cashRegister.observations,
+          movements: movements.map((movement: any) => ({
+            id: movement.id,
+            type: movement.type,
+            concept: movement.concept,
+            amount: Number(movement.amount),
+            method: movement.method,
+            movementDate: movement.movementDate,
+            observations: movement.observations,
+            user: movement.user,
+          })),
+          summary: {
+            totalIncome,
+            totalExpenses,
+            byType,
+          },
         };
       })
     );
@@ -294,7 +328,7 @@ export const closeCash = async (req: AuthRequest, res: Response) => {
 
     const totalExpenses = cashRegister.movements
       .filter((m: any) => m.type === 'MANUAL_EXIT')
-      .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
+      .reduce((sum: number, m: any) => sum + Math.abs(Number(m.amount)), 0);
 
     const expectedAmount = Number(cashRegister.initialAmount) + totalIncome - totalExpenses;
     const difference = Number(data.finalAmount) - expectedAmount;
@@ -440,18 +474,26 @@ export const createMovement = async (req: AuthRequest, res: Response) => {
 
     const data = createMovementSchema.parse(req.body);
 
-    // Build where clause - filter by user's branch if they have one (except admins)
-    const where: any = {
-      status: CashStatus.OPEN,
-    };
-    if (req.user.branchId && req.user.role !== 'ADMINISTRATOR') {
+    if (!data.cashRegisterId && req.user.role === 'ADMINISTRATOR') {
+      const openCashCount = await prisma.cashRegister.count({ where: { status: CashStatus.OPEN } });
+      if (openCashCount > 1) {
+        return res.status(400).json({
+          error: {
+            code: 'CASH_REGISTER_REQUIRED',
+            message: 'Debe seleccionar una caja específica para registrar el movimiento',
+          },
+        });
+      }
+    }
+
+    const where: any = { status: CashStatus.OPEN };
+    if (data.cashRegisterId) {
+      where.id = data.cashRegisterId;
+    } else if (req.user.branchId) {
       where.branchId = req.user.branchId;
     }
 
-    // Get open cash register for the user's branch (or any if admin)
-    const cashRegister = await prisma.cashRegister.findFirst({
-      where,
-    });
+    const cashRegister = await prisma.cashRegister.findFirst({ where });
 
     if (!cashRegister) {
       return res.status(400).json({
@@ -462,7 +504,20 @@ export const createMovement = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const amount = data.type === 'MANUAL_EXIT' ? -data.amount : data.amount;
+    if (
+      req.user.role !== 'ADMINISTRATOR' &&
+      req.user.branchId &&
+      cashRegister.branchId !== req.user.branchId
+    ) {
+      return res.status(403).json({
+        error: {
+          code: 'BRANCH_ACCESS_DENIED',
+          message: 'No tiene permisos para registrar movimientos en esta caja',
+        },
+      });
+    }
+
+    const amount = data.amount;
 
     const movement = await prisma.cashMovement.create({
       data: {
@@ -673,7 +728,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
 
       const totalExpenses = cr.movements
         .filter((m: any) => m.type === 'MANUAL_EXIT')
-        .reduce((sum: number, m: any) => sum + Number(m.amount), 0);
+        .reduce((sum: number, m: any) => sum + Math.abs(Number(m.amount)), 0);
 
       return {
         id: cr.id,
@@ -688,6 +743,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
         closedBy: cr.closedByUser,
         totalIncome,
         totalExpenses,
+        balance: Number(cr.initialAmount) + totalIncome - totalExpenses,
       };
     });
 

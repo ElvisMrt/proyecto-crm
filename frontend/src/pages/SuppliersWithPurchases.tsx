@@ -332,7 +332,7 @@ export default function SuppliersWithPurchases() {
   const handleEditPurchase = (purchase: Purchase) => {
     setEditingPurchase(purchase);
     setPurchaseFormData({
-      supplierId: purchase.id,
+      supplierId: expandedSupplierId || '',
       purchaseDate: purchase.purchaseDate.split('T')[0],
       deliveryDate: purchase.deliveryDate ? purchase.deliveryDate.split('T')[0] : '',
       subtotal: purchase.total.toString(),
@@ -923,7 +923,7 @@ export default function SuppliersWithPurchases() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-gray-50 min-h-screen">
+    <div className="space-y-5 p-4 md:p-6">
       {/* Header Minimalista */}
       <nav className="flex items-center gap-3 mb-4">
         <div className="flex-1 relative">
@@ -933,26 +933,26 @@ export default function SuppliersWithPurchases() {
             placeholder="Buscar proveedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-2xl border border-slate-200 py-2.5 pl-10 pr-4 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
         </div>
         <button
           onClick={handleCreateSupplier}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2.5 text-white transition hover:bg-slate-800"
         >
           <HiPlus className="w-5 h-5" />
           Nuevo Proveedor
         </button>
         <button
           onClick={handleExportSuppliers}
-          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 whitespace-nowrap rounded-2xl bg-emerald-600 px-4 py-2.5 text-white transition hover:bg-emerald-700"
         >
           <HiDocumentText className="w-5 h-5" />
           Exportar CSV
         </button>
         <button
           onClick={handleExportSuppliersPDF}
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-700 px-4 py-2.5 text-white transition hover:bg-slate-800"
         >
           <HiDocumentText className="w-5 h-5" />
           Exportar PDF
@@ -1206,7 +1206,7 @@ export default function SuppliersWithPurchases() {
                         <p className="text-sm">No hay compras registradas</p>
                         <button
                           onClick={() => handleCreatePurchase(supplier.id)}
-                          className="mt-3 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          className="mt-3 text-sm font-medium text-slate-700 hover:text-slate-950"
                         >
                           Crear primera compra
                         </button>

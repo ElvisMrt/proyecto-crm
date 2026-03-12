@@ -24,7 +24,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     // Ventas del día (solo emitidas, excluyendo anuladas)
     const salesToday = await prisma.invoice.aggregate({
       where: {
-        status: InvoiceStatus.ISSUED,
+        status: { not: InvoiceStatus.CANCELLED },
         issueDate: {
           gte: today,
           lt: tomorrow,
@@ -39,7 +39,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     // Ventas de ayer para comparación
     const salesYesterday = await prisma.invoice.aggregate({
       where: {
-        status: InvoiceStatus.ISSUED,
+        status: { not: InvoiceStatus.CANCELLED },
         issueDate: {
           gte: yesterday,
           lt: today,
@@ -60,7 +60,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     // Ventas del mes
     const salesMonth = await prisma.invoice.aggregate({
       where: {
-        status: InvoiceStatus.ISSUED,
+        status: { not: InvoiceStatus.CANCELLED },
         issueDate: {
           gte: startOfMonth,
           lte: endOfMonth,
@@ -98,7 +98,8 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     const payables = await prisma.supplierInvoice.aggregate({
       where: {
         balance: { gt: 0 },
-        status: { in: ['PENDING', 'PARTIAL'] }
+        status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+        ...(branchId ? { branchId } : {}),
       },
       _sum: {
         balance: true
@@ -110,9 +111,33 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
       where: {
         balance: { gt: 0 },
         dueDate: { lt: today },
-        status: { in: ['PENDING', 'PARTIAL'] }
+        status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+        ...(branchId ? { branchId } : {}),
       }
     });
+
+    const invoiceStatsBaseWhere: any = {
+      ...branchFilter,
+      status: { not: InvoiceStatus.CANCELLED },
+    };
+
+    const [totalInvoicesCount, paidInvoicesCount, pendingInvoicesCount] = await Promise.all([
+      prisma.invoice.count({
+        where: invoiceStatsBaseWhere,
+      }),
+      prisma.invoice.count({
+        where: {
+          ...invoiceStatsBaseWhere,
+          balance: 0,
+        },
+      }),
+      prisma.invoice.count({
+        where: {
+          ...invoiceStatsBaseWhere,
+          balance: { gt: 0 },
+        },
+      }),
+    ]);
 
     // Facturas vencidas (dueDate < hoy y saldo > 0)
     const overdueInvoices = await prisma.invoice.findMany({
@@ -134,7 +159,7 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     const overdueCount = overdueInvoices.length;
 
     // Caja actual (por sucursal si se especifica)
-    const currentCash = await prisma.cashRegister.findFirst({
+    const currentCashRegisters = await prisma.cashRegister.findMany({
       where: {
         status: CashStatus.OPEN,
         ...(branchId ? { branchId } : {}),
@@ -158,16 +183,18 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     });
 
     let currentBalance = 0;
-    if (currentCash) {
-      currentBalance = Number(currentCash.initialAmount);
-      currentCash.movements.forEach((movement: any) => {
+    currentCashRegisters.forEach((cashRegister: any) => {
+      currentBalance += Number(cashRegister.initialAmount);
+      cashRegister.movements.forEach((movement: any) => {
         if (['SALE', 'PAYMENT', 'MANUAL_ENTRY'].includes(movement.type)) {
           currentBalance += Number(movement.amount);
         } else {
           currentBalance -= Number(movement.amount);
         }
       });
-    }
+    });
+
+    const latestOpenCashRegister = currentCashRegisters[0] || null;
 
     // Stock bajo (qtyOnHand <= minStock) - Solo productos que controlan stock
     const lowStock = await prisma.stock.findMany({
@@ -248,15 +275,22 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
         total: Number(receivables._sum.balance || 0),
         overdue: overdueCount,
       },
+      invoices: {
+        total: totalInvoicesCount,
+        paid: paidInvoicesCount,
+        pending: pendingInvoicesCount,
+      },
       payables: {
         total: Number(payables._sum.balance || 0),
         overdue: overduePayables,
       },
       cash: {
         currentBalance,
-        status: currentCash?.status || CashStatus.CLOSED,
-        branchId: currentCash?.branchId || null,
-        branchName: currentCash?.branch?.name || null,
+        status: latestOpenCashRegister?.status || CashStatus.CLOSED,
+        branchId: branchId || latestOpenCashRegister?.branchId || null,
+        branchName: branchId
+          ? null
+          : (currentCashRegisters.length === 1 ? latestOpenCashRegister?.branch?.name || null : 'MULTI_BRANCH'),
       },
       stock: {
         lowStockCount: lowStock.length,
@@ -290,7 +324,7 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
     const branchId = req.query.branchId as string | undefined;
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    startDate.setDate(startDate.getDate() - (days - 1));
     startDate.setHours(0, 0, 0, 0);
 
     const branchFilter = branchId ? { branchId } : {};
@@ -298,7 +332,7 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
     const sales = await prisma.invoice.groupBy({
       by: ['issueDate'],
       where: {
-        status: InvoiceStatus.ISSUED,
+        status: { not: InvoiceStatus.CANCELLED },
         issueDate: {
           gte: startDate,
         },
@@ -362,6 +396,7 @@ export const getRecentActivity = async (req: AuthRequest, res: Response) => {
       take: Math.ceil(limit * 0.5), // 50% facturas
       where: {
         ...branchFilter,
+        status: { not: InvoiceStatus.CANCELLED },
       },
       orderBy: {
         createdAt: 'desc',
@@ -495,4 +530,3 @@ export const getRecentActivity = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import { inventoryApi, branchesApi } from '../../services/api';
-import { HiOfficeBuilding, HiFolder, HiSearch, HiChartBar } from 'react-icons/hi';
+import { HiOfficeBuilding, HiFolder, HiSearch } from 'react-icons/hi';
 
-const StockTab = () => {
+interface StockTabProps {
+  focusedProductId?: string;
+}
+
+const StockTab = ({ focusedProductId = '' }: StockTabProps) => {
   const [stocks, setStocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
+    productId: '',
     branchId: '',
     categoryId: '',
     search: '',
@@ -30,6 +35,18 @@ const StockTab = () => {
   useEffect(() => {
     fetchStock();
   }, [filters.page, filters.branchId, filters.categoryId, filters.lowStock]);
+
+  useEffect(() => {
+    if (!focusedProductId) {
+      return;
+    }
+
+    setFilters((prev) => ({
+      ...prev,
+      productId: focusedProductId,
+      page: 1,
+    }));
+  }, [focusedProductId]);
 
   const fetchBranches = async () => {
     try {
@@ -56,6 +73,7 @@ const StockTab = () => {
         page: filters.page,
         limit: filters.limit,
       };
+      if (filters.productId) params.productId = filters.productId;
       if (filters.branchId) params.branchId = filters.branchId;
       if (filters.categoryId) params.categoryId = filters.categoryId;
       if (filters.search) params.search = filters.search;
@@ -71,16 +89,10 @@ const StockTab = () => {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'NEGATIVE':
+        return { label: 'Stock Negativo', className: 'bg-red-200 text-red-900' };
       case 'OUT':
         return { label: 'Sin Stock', className: 'bg-red-100 text-red-800' };
       case 'LOW':
@@ -256,6 +268,4 @@ const StockTab = () => {
 };
 
 export default StockTab;
-
-
 

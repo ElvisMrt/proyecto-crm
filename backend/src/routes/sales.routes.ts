@@ -5,6 +5,7 @@ import {
   createInvoice,
   updateInvoice,
   duplicateInvoice,
+  financeInvoice,
   cancelInvoice,
   deleteInvoice,
   getQuotes,
@@ -36,6 +37,7 @@ router.post('/invoices', requirePermission(PERMISSIONS.SALES_CREATE), createInvo
 router.put('/invoices/:id', requirePermission(PERMISSIONS.SALES_CREATE), updateInvoice);
 router.delete('/invoices/:id', requirePermission(PERMISSIONS.SALES_CREATE), deleteInvoice);
 router.post('/invoices/:id/duplicate', requirePermission(PERMISSIONS.SALES_CREATE), duplicateInvoice);
+router.post('/invoices/:id/finance', requirePermission(PERMISSIONS.SALES_CREATE), financeInvoice);
 router.post('/invoices/:id/cancel', requirePermission(PERMISSIONS.SALES_CANCEL), cancelInvoice);
 
 // Cotizaciones
@@ -59,4 +61,3 @@ router.get('/cancelled', requirePermission(PERMISSIONS.SALES_READ), getCancelled
 router.get('/cancelled/count', requirePermission(PERMISSIONS.SALES_READ), getCancelledInvoicesCount);
 
 export default router;
-

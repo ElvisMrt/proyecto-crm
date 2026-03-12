@@ -48,10 +48,30 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
     if (startDate || endDate) {
       where.appointmentDate = {};
       if (startDate) {
-        where.appointmentDate.gte = new Date(startDate as string);
+        const rawStartDate = startDate as string;
+        where.appointmentDate.gte = /^\d{4}-\d{2}-\d{2}$/.test(rawStartDate)
+          ? new Date(`${rawStartDate}T00:00:00`)
+          : new Date(rawStartDate);
       }
       if (endDate) {
-        where.appointmentDate.lte = new Date(endDate as string);
+        const rawEndDate = endDate as string;
+        const parsedEndDate = /^\d{4}-\d{2}-\d{2}$/.test(rawEndDate)
+          ? new Date(`${rawEndDate}T23:59:59.999`)
+          : new Date(rawEndDate);
+        const normalizedEndDate = new Date(parsedEndDate);
+
+        // Si el cliente envía solo la fecha o una fecha en medianoche, incluir el día completo.
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(rawEndDate) &&
+          normalizedEndDate.getHours() === 0 &&
+          normalizedEndDate.getMinutes() === 0 &&
+          normalizedEndDate.getSeconds() === 0 &&
+          normalizedEndDate.getMilliseconds() === 0
+        ) {
+          normalizedEndDate.setHours(23, 59, 59, 999);
+        }
+
+        where.appointmentDate.lte = normalizedEndDate;
       }
     }
 
@@ -239,33 +259,45 @@ export const createPublicAppointment = async (req: Request, res: Response) => {
       },
     });
 
-    // Enviar notificación interna
-    try {
-      // Obtener email del admin o usar uno por defecto
-      const adminEmail = process.env.ADMIN_EMAIL || 'admin@empresa.com';
-      
-      await sendNewAppointmentNotification({
-        to: adminEmail,
-        appointment: {
-          clientName: appointment.clientName,
-          clientEmail: appointment.clientEmail,
-          clientPhone: appointment.clientPhone,
-          appointmentDate: appointment.appointmentDate,
-          notes: appointment.notes,
-          branchName: appointment.branch?.name || null
-        }
-      });
-    } catch (emailError) {
-      console.error('Error sending notification:', emailError);
-    }
+    const hasEmailConfig = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
 
-    // Enviar confirmación al cliente si tiene email
-    if (appointment.clientEmail) {
+    if (hasEmailConfig) {
+      // Enviar notificación interna
       try {
-        await sendClientConfirmation(appointment);
+        const adminEmail = process.env.ADMIN_EMAIL || 'admin@empresa.com';
+        
+        await sendNewAppointmentNotification({
+          to: adminEmail,
+          appointment: {
+            clientName: appointment.clientName,
+            clientEmail: appointment.clientEmail,
+            clientPhone: appointment.clientPhone,
+            appointmentDate: appointment.appointmentDate,
+            notes: appointment.notes,
+            branchName: appointment.branch?.name || null
+          }
+        });
       } catch (emailError) {
-        console.error('Error sending client confirmation:', emailError);
+        console.error('Error sending notification:', emailError);
       }
+
+      // Enviar confirmación al cliente si tiene email
+      if (appointment.clientEmail) {
+        try {
+          await sendClientConfirmation({
+            to: appointment.clientEmail,
+            appointment: {
+              clientName: appointment.clientName,
+              appointmentDate: appointment.appointmentDate,
+              branchName: appointment.branch?.name || null,
+            },
+          });
+        } catch (emailError) {
+          console.error('Error sending client confirmation:', emailError);
+        }
+      }
+    } else {
+      console.warn('SMTP no configurado; se omiten emails de cita pública');
     }
 
     res.status(201).json({

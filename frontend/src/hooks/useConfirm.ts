@@ -60,27 +60,29 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }) => {
     <ConfirmContext.Provider value={{ showConfirm, hideConfirm, confirmState }}>
       {children}
       {confirmState && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <h3 className="mb-2 text-lg font-semibold text-slate-950 dark:text-slate-100">
               {confirmState.title}
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="mb-6 text-sm leading-6 text-slate-600 dark:text-slate-400">
               {confirmState.message}
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleCancel}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 {confirmState.cancelText}
               </button>
               <button
                 onClick={handleConfirm}
-                className={`px-4 py-2 text-white rounded-lg transition-colors ${
-                  confirmState.type === 'danger' ? 'bg-red-600 hover:bg-red-700' :
-                  confirmState.type === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' :
-                  'bg-blue-600 hover:bg-blue-700'
+                className={`rounded-2xl px-4 py-2 text-sm font-medium text-white transition-colors ${
+                  confirmState.type === 'danger'
+                    ? 'bg-rose-700 hover:bg-rose-800'
+                    : confirmState.type === 'warning'
+                      ? 'bg-amber-700 hover:bg-amber-800'
+                      : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >
                 {confirmState.confirmText}

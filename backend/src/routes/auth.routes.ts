@@ -8,15 +8,14 @@ const router = Router();
 // Login con detección de tenant (por header o subdominio)
 router.post('/login', tenantMiddleware, login);
 
-router.post('/logout', tenantMiddleware, authenticate, logout);
-router.get('/me', tenantMiddleware, authenticate, me);
+router.post('/logout', authenticate, logout);
+router.get('/me', authenticate, me);
 
 // Recuperación de contraseña
 router.post('/forgot-password', tenantMiddleware, forgotPassword);
 router.post('/reset-password', tenantMiddleware, resetPassword);
 
 export default router;
-
 
 
 

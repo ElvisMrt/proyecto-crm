@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import logoSrc from '../utils/Logos.svg';
+import { HiEye, HiEyeOff, HiLockClosed, HiMail } from 'react-icons/hi';
+import { useAuth } from '../contexts/AuthContext';
+import logoSrc from '../utils/3.svg';
+import { getTenantSubdomain } from '../services/tenant.service';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
@@ -18,14 +21,44 @@ const Login = () => {
     emailInputRef.current?.focus();
   }, []);
 
+  const validateEmail = (value: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (value && !emailRegex.test(value)) {
+      setEmailError('Ingresa un email valido');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    if (!email || !password) { setError('Completa todos los campos'); return; }
+    setEmailError('');
+    setPasswordError('');
+
+    if (!email) {
+      setEmailError('Ingresa tu email');
+      return;
+    }
+
+    if (!validateEmail(email)) return;
+
+    if (!password) {
+      setPasswordError('Ingresa tu contrasena');
+      return;
+    }
+
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
-      window.location.href = '/dashboard';
+      localStorage.setItem('app_mode_override', 'crm');
+      const tenant = getTenantSubdomain();
+      const params = new URLSearchParams();
+      params.set('mode', 'crm');
+      if (tenant) {
+        params.set('tenant', tenant);
+      }
+      window.location.href = `/dashboard?${params.toString()}`;
     } catch (err: any) {
       const code = err.response?.data?.error?.code;
       if (code === 'MAINTENANCE_MODE' || code === 'TENANT_SUSPENDED' || code === 'TENANT_CANCELLED') {
@@ -34,141 +67,144 @@ const Login = () => {
         navigate('/status');
         return;
       }
-      setError(err.response?.data?.error?.message || 'Credenciales incorrectas');
+      setPasswordError(err.response?.data?.error?.message || 'Credenciales incorrectas');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4 py-8">
-
-      {/* Card */}
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-
-        {/* Header azul */}
-        <div className="bg-[#1D79C4] px-8 py-7 text-center">
-          <img src={logoSrc} alt="CRM" className="h-12 w-auto mx-auto mb-3 brightness-0 invert" />
-          <p className="text-blue-100 text-sm font-medium tracking-wide">Sistema de Gestión CRM</p>
-        </div>
-
-        {/* Form */}
-        <div className="px-8 py-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Iniciar Sesión</h2>
-
-          {error && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-5">
-              <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 py-10 text-slate-900 sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl items-center">
+        <div className="grid w-full gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm lg:flex lg:flex-col lg:justify-between">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Correo electrónico
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </span>
-                <input
-                  ref={emailInputRef}
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                  disabled={loading}
-                  placeholder="tu@correo.com"
-                  className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1D79C4] focus:ring-2 focus:ring-blue-100 transition-all disabled:bg-gray-50 disabled:opacity-60"
-                />
+              <div className="inline-flex items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <img src={logoSrc} alt="Neypier CRM" className="h-10 w-auto" />
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Acceso operativo</p>
+                  <p className="text-sm font-semibold text-slate-950">CRM Tenant</p>
+                </div>
+              </div>
+
+              <div className="mt-10 max-w-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Panel de trabajo</p>
+                <h1 className="mt-2 text-4xl font-bold leading-tight text-slate-950">
+                  Opera ventas, caja, CxC, inventario y reportes desde una sola vista.
+                </h1>
+                <p className="mt-4 text-sm leading-6 text-slate-500">
+                  Este acceso pertenece al CRM operativo de tu empresa. Desde aqui gestionas la operación diaria,
+                  clientes, cobros, citas, compras y configuracion del negocio.
+                </p>
               </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Contraseña
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  disabled={loading}
-                  placeholder="••••••••"
-                  className="w-full pl-11 pr-12 py-3 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1D79C4] focus:ring-2 focus:ring-blue-100 transition-all disabled:bg-gray-50 disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {showPassword ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { label: 'Ventas', note: 'POS, facturas y cobros' },
+                { label: 'Caja', note: 'Apertura, movimientos y cierre' },
+                { label: 'Reportes', note: 'Lectura operativa y financiera' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.note}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-8">
+            <div className="mb-8">
+              <img src={logoSrc} alt="Neypier CRM" className="mb-5 h-11 w-auto" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Autenticacion</p>
+              <h2 className="mt-2 text-2xl font-bold text-slate-950">Iniciar sesion</h2>
+              <p className="mt-1 text-sm text-slate-500">Usa tu cuenta del tenant para entrar al CRM operativo.</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Correo electronico</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <HiMail className={`h-5 w-5 ${emailError ? 'text-rose-500' : 'text-slate-400'}`} />
+                  </div>
+                  <input
+                    ref={emailInputRef}
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) validateEmail(e.target.value);
+                    }}
+                    onBlur={() => email && validateEmail(email)}
+                    disabled={loading}
+                    placeholder="tu@correo.com"
+                    className={`w-full rounded-2xl border py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50 ${
+                      emailError
+                        ? 'border-rose-300 bg-rose-50/50 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                        : 'border-slate-200 bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
+                    }`}
+                  />
+                </div>
+                {emailError ? <p className="mt-1.5 text-sm text-rose-600">{emailError}</p> : null}
               </div>
-            </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-[#1D79C4] hover:bg-[#1565a8] active:bg-[#104e8b] text-white font-semibold rounded-xl text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200 mt-2"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Iniciando sesión...
-                </>
-              ) : (
-                <>
-                  Iniciar Sesión
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </>
-              )}
-            </button>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Contrasena</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <HiLockClosed className={`h-5 w-5 ${passwordError ? 'text-rose-500' : 'text-slate-400'}`} />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    disabled={loading}
+                    placeholder="••••••••"
+                    className={`w-full rounded-2xl border py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50 ${
+                      passwordError
+                        ? 'border-rose-300 bg-rose-50/50 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                        : 'border-slate-200 bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition hover:text-slate-700"
+                  >
+                    {showPassword ? <HiEyeOff className="h-5 w-5" /> : <HiEye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {passwordError ? <p className="mt-1.5 text-sm text-rose-600">{passwordError}</p> : null}
+              </div>
 
-            {/* Forgot password */}
-            <div className="text-center">
-              <a href="/forgot-password" className="text-sm text-[#1D79C4] hover:text-[#1565a8] hover:underline transition-colors font-medium">
-                ¿Olvidaste tu contraseña?
-              </a>
-            </div>
-          </form>
+              <button
+                type="submit"
+                disabled={loading || !email || !password}
+                className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? 'Iniciando sesion...' : 'Entrar al CRM'}
+              </button>
+
+              <div className="text-center">
+                <a href="/forgot-password?mode=crm" className="text-sm font-medium text-slate-500 transition hover:text-slate-900 hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              Sistema CRM Multi-Tenant © {new Date().getFullYear()}
+            </p>
+          </section>
         </div>
       </div>
-
-      <p className="text-slate-500 text-xs mt-6 text-center">
-        © {new Date().getFullYear()} CRM Neypier · Todos los derechos reservados
-      </p>
     </div>
   );
 };

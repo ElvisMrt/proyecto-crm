@@ -82,16 +82,16 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-12 text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Cargando resumen...</p>
+      <div className="rounded-[24px] border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-slate-700 dark:border-slate-300"></div>
+        <p className="mt-4 text-slate-600 dark:text-slate-400">Cargando resumen...</p>
       </div>
     );
   }
 
   if (!summary) {
     return (
-      <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
         No hay datos disponibles
       </div>
     );
@@ -104,126 +104,125 @@ const SummaryTab = ({ summary: initialSummary, branchId }: SummaryTabProps) => {
   return (
     <div className="space-y-6">
       {/* Resumen General */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total por Cobrar</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total por cobrar</p>
+              <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
                 {formatCurrency(summary.totalReceivable)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {summary.totalInvoices} factura{summary.totalInvoices !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <HiCurrencyDollar className="w-6 h-6 text-blue-600" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
+              <HiCurrencyDollar className="w-6 h-6 text-slate-600 dark:text-slate-300" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Vencido</p>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total vencido</p>
               <p className="text-3xl font-bold text-red-600 mt-2">
                 {formatCurrency(summary.totalOverdue)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {overduePercentage}% del total
               </p>
             </div>
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <HiExclamationCircle className="w-6 h-6 text-red-600" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-950/40">
+              <HiExclamationCircle className="w-6 h-6 text-red-600 dark:text-rose-300" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Clientes Morosos</p>
-              <p className="text-3xl font-bold text-purple-600 mt-2">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Clientes morosos</p>
+              <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
                 {summary.delinquentClients}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 de {summary.totalClientsWithReceivables} clientes
               </p>
             </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-              <HiUsers className="w-6 h-6 text-purple-600" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
+              <HiUsers className="w-6 h-6 text-slate-600 dark:text-slate-300" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Antigüedad de Saldos */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Antigüedad de Saldos Vencidos</h2>
+      <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="mb-4 text-xl font-bold text-slate-950 dark:text-white">Antigüedad de saldos vencidos</h2>
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
+          <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/70">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
-                <HiCalendar className="w-5 h-5 text-orange-600" />
+              <div className="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <HiCalendar className="w-5 h-5 text-slate-600 dark:text-slate-300" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">0-30 Días</p>
-                <p className="text-sm text-gray-600">Facturas vencidas recientes</p>
+                <p className="font-medium text-slate-900 dark:text-white">0-30 días</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Facturas vencidas recientes</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
                 {formatCurrency(summary.byAge['0-30'])}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg">
+          <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/70">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                <HiClock className="w-5 h-5 text-red-600" />
+              <div className="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <HiClock className="w-5 h-5 text-slate-600 dark:text-slate-300" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">31-60 Días</p>
-                <p className="text-sm text-gray-600">Facturas con mora moderada</p>
+                <p className="font-medium text-slate-900 dark:text-white">31-60 días</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Facturas con mora moderada</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
                 {formatCurrency(summary.byAge['31-60'])}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-100 rounded-lg">
+          <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/70">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-red-200 rounded-full flex items-center justify-center mr-3">
-                <HiExclamationCircle className="w-5 h-5 text-red-700" />
+              <div className="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-950/40">
+                <HiExclamationCircle className="w-5 h-5 text-rose-700 dark:text-rose-300" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">61-90 Días</p>
-                <p className="text-sm text-gray-600">Facturas con mora alta</p>
+                <p className="font-medium text-slate-900 dark:text-white">61-90 días</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Facturas con mora alta</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
                 {formatCurrency(summary.byAge['61-90'])}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-200 rounded-lg">
+          <div className="flex items-center justify-between rounded-2xl bg-rose-50 p-4 dark:bg-rose-950/20">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-red-300 rounded-full flex items-center justify-center mr-3">
-                <HiExclamationCircle className="w-5 h-5 text-red-800" />
+              <div className="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/40">
+                <HiExclamationCircle className="w-5 h-5 text-rose-800 dark:text-rose-300" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">Más de 90 Días</p>
-                <p className="text-sm text-gray-600">Facturas con mora crítica</p>
+                <p className="font-medium text-slate-900 dark:text-white">Más de 90 días</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Facturas con mora crítica</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
                 {formatCurrency(summary.byAge['90+'])}
               </p>
             </div>
@@ -466,6 +465,5 @@ const PieChart = ({ data }: { data: { '0-30': number; '31-60': number; '61-90': 
 };
 
 export default SummaryTab;
-
 
 
